@@ -1,0 +1,547 @@
+'use client';
+
+import { Navigation } from '@/components/navigation';
+import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { jobsAPI, APIError } from '@/lib/api-client';
+import { useUser } from '@/contexts/UserContext';
+
+interface Job {
+  id: string;
+  jobNo: string;
+  customer: { name: string } | string;
+  sizeName?: string;
+  quantity?: number;
+  customerTotal: number;
+  bradfordPrintMargin?: number;
+  bradfordPaperMargin?: number;
+  bradfordTotalMargin?: number;
+  status: string;
+  createdAt: string;
+}
+
+const statusColumns = [
+  { id: 'PENDING', name: 'Pending', color: 'bg-gray-100' },
+  { id: 'IN_PRODUCTION', name: 'In Production', color: 'bg-blue-100' },
+  { id: 'READY_FOR_PROOF', name: 'Ready for Proof', color: 'bg-purple-100' },
+  { id: 'PROOF_APPROVED', name: 'Proof Approved', color: 'bg-green-100' },
+  { id: 'COMPLETED', name: 'Completed', color: 'bg-gray-200' },
+];
+
+export default function JobsPage() {
+  const { user, isCustomer, isBradfordAdmin } = useUser();
+
+  // Internal team members see all margin data (Admin, Bradford/Steve, Impact Direct, JD)
+  const isInternalTeam = user && ['BROKER_ADMIN', 'BRADFORD_ADMIN', 'MANAGER'].includes(user.role);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [draggedJob, setDraggedJob] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showNewJobModal, setShowNewJobModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedSize, setSelectedSize] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [pricingPreview, setPricingPreview] = useState<any>(null);
+
+  useEffect(() => {
+    if (user) {
+      loadJobs();
+    }
+  }, [user]);
+
+  const loadJobs = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // Build filter params based on user role
+      const params: any = {};
+
+      if (isCustomer) {
+        // Customers see only their own jobs
+        params.customerId = user.companyId;
+      } else if (isBradfordAdmin) {
+        // Bradford sees jobs where they have POs
+        params.companyId = user.companyId;
+        params.userRole = user.role;
+      }
+      // Impact Direct (BROKER_ADMIN/MANAGER) sees all jobs - no filters needed
+
+      const result = await jobsAPI.list(params);
+      setJobs(result.jobs);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to load jobs:', err);
+      setError('Failed to load jobs. Make sure the API is running on port 3001.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDragStart = (jobId: string) => {
+    setDraggedJob(jobId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedJob(null);
+    setDragOverColumn(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, columnId: string) => {
+    e.preventDefault();
+    setDragOverColumn(columnId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverColumn(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
+    e.preventDefault();
+    if (draggedJob) {
+      // Optimistically update UI
+      setJobs(prevJobs =>
+        prevJobs.map(job =>
+          job.id === draggedJob ? { ...job, status: newStatus } : job
+        )
+      );
+
+      // Update on server
+      try {
+        await jobsAPI.updateStatus(draggedJob, newStatus);
+      } catch (err) {
+        console.error('Failed to update job status:', err);
+        // Reload to get the correct state
+        await loadJobs();
+      }
+    }
+    setDraggedJob(null);
+    setDragOverColumn(null);
+  };
+
+  const getCustomerName = (customer: Job['customer']): string => {
+    if (typeof customer === 'string') return customer;
+    return customer?.name || 'Unknown';
+  };
+
+  // Calculate pricing when size or quantity changes
+  useEffect(() => {
+    if (selectedSize && quantity) {
+      const qty = parseInt(quantity);
+      if (qty > 0) {
+        calculatePricing(selectedSize, qty);
+      }
+    } else {
+      setPricingPreview(null);
+    }
+  }, [selectedSize, quantity]);
+
+  const calculatePricing = async (sizeId: string, qty: number) => {
+    // Import pricing calculator from shared package
+    const PRODUCT_SIZES: any = {
+      'SM_7_25_16_375': {
+        name: '7 1/4 x 16 3/8',
+        customerCPM: 67.56,
+        bradfordTotalCPM: 60.425,
+        bradfordPrintMarginCPM: 7.135,
+        bradfordPaperMarginCPM: 3.0925,
+        jdTotalCPM: 34.74,
+        paperWeightPer1000: 22.9,
+      },
+      'SM_8_5_17_5': {
+        name: '8 1/2 x 17 1/2',
+        customerCPM: 81.00,
+        bradfordTotalCPM: 71.92,
+        bradfordPrintMarginCPM: 9.08,
+        bradfordPaperMarginCPM: 4.072,
+        jdTotalCPM: 38.41,
+        paperWeightPer1000: 30.16,
+      },
+      'SM_9_75_22_125': {
+        name: '9 3/4 x 22 1/8',
+        customerCPM: 106.91,
+        bradfordTotalCPM: 99.50,
+        bradfordPrintMarginCPM: 7.41,
+        bradfordPaperMarginCPM: 7.1485,
+        jdTotalCPM: 49.18,
+        paperWeightPer1000: 52.98,
+      },
+      'SM_9_75_26': {
+        name: '9 3/4 x 26',
+        customerCPM: 112.60,
+        bradfordTotalCPM: 105.19,
+        bradfordPrintMarginCPM: 7.41,
+        bradfordPaperMarginCPM: 11.961,
+        jdTotalCPM: 49.18,
+        paperWeightPer1000: 54.28,
+      },
+    };
+
+    const size = PRODUCT_SIZES[sizeId];
+    if (!size) return;
+
+    const quantityInThousands = qty / 1000;
+
+    setPricingPreview({
+      sizeName: size.name,
+      quantity: qty,
+      customerTotal: (size.customerCPM * quantityInThousands).toFixed(2),
+      bradfordTotal: (size.bradfordTotalCPM * quantityInThousands).toFixed(2),
+      bradfordPrintMargin: (size.bradfordPrintMarginCPM * quantityInThousands).toFixed(2),
+      bradfordPaperMargin: (size.bradfordPaperMarginCPM * quantityInThousands).toFixed(2),
+      jdTotal: (size.jdTotalCPM * quantityInThousands).toFixed(2),
+      paperWeight: (size.paperWeightPer1000 * quantityInThousands).toFixed(0),
+    });
+  };
+
+  const handleCreateJob = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const formData = new FormData(e.currentTarget);
+    const customerId = formData.get('customerId') as string;
+    const description = formData.get('description') as string;
+    const sizeId = formData.get('sizeId') as string;
+    const qty = parseInt(formData.get('quantity') as string);
+
+    try {
+      await jobsAPI.createDirect({
+        customerId,
+        sizeId,
+        quantity: qty,
+        description,
+      });
+
+      setShowNewJobModal(false);
+      setSelectedSize('');
+      setQuantity('');
+      setPricingPreview(null);
+      await loadJobs();
+      setError(null);
+    } catch (err) {
+      console.error('Failed to create job:', err);
+      setError('Failed to create job. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navigation />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Jobs</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              Track jobs through the production workflow
+            </p>
+          </div>
+          <button
+            onClick={() => setShowNewJobModal(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            + New Job
+          </button>
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 text-red-800">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <span className="font-semibold">Error:</span> {error}
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading jobs...</p>
+          </div>
+        ) : (
+          <>
+        {/* Kanban Board */}
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {statusColumns.map((column) => {
+            const columnJobs = jobs.filter(job => job.status === column.id);
+            const isDragOver = dragOverColumn === column.id;
+
+            return (
+              <div
+                key={column.id}
+                className="flex-shrink-0 w-80"
+                onDragOver={(e) => handleDragOver(e, column.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, column.id)}
+              >
+                <div className={`${column.color} rounded-lg p-3 mb-3`}>
+                  <h3 className="font-semibold text-gray-900 flex justify-between items-center">
+                    {column.name}
+                    <span className="text-sm bg-white rounded-full px-2 py-1">{columnJobs.length}</span>
+                  </h3>
+                </div>
+
+                <div className={`space-y-3 min-h-[200px] rounded-lg p-2 transition-colors ${
+                  isDragOver ? 'bg-blue-50 border-2 border-blue-300 border-dashed' : ''
+                }`}>
+                  {columnJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      draggable
+                      onDragStart={() => handleDragStart(job.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`bg-white p-4 rounded-lg shadow hover:shadow-md transition-all border border-gray-200 cursor-move ${
+                        draggedJob === job.id ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <Link
+                        href={`/jobs/${job.id}`}
+                        className="block"
+                        onClick={(e) => {
+                          if (draggedJob) e.preventDefault();
+                        }}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-semibold text-blue-600">{job.jobNo}</span>
+                          <span className="text-sm text-gray-600">${Number(job.customerTotal).toFixed(2)}</span>
+                        </div>
+                        <p className="text-sm text-gray-900 mb-1">{getCustomerName(job.customer)}</p>
+                        <p className="text-xs text-gray-500">{new Date(job.createdAt).toLocaleDateString()}</p>
+                      </Link>
+                    </div>
+                  ))}
+
+                  {columnJobs.length === 0 && (
+                    <div className="text-center py-8 text-gray-400 text-sm">
+                      {isDragOver ? 'Drop here' : 'No jobs'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* All Jobs Table */}
+        <div className="mt-8 bg-white shadow rounded-lg">
+          <div className="px-6 py-5 border-b border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">All Jobs</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job No</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                  {isInternalTeam && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin Breakdown</th>
+                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {jobs.map((job) => (
+                  <tr key={job.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                      <Link href={`/jobs/${job.id}`}>{job.jobNo}</Link>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getCustomerName(job.customer)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{job.sizeName || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{job.quantity ? job.quantity.toLocaleString() : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${Number(job.customerTotal).toFixed(2)}</td>
+                    {isInternalTeam && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {job.bradfordTotalMargin ? (
+                          <div className="text-gray-700">
+                            <div className="font-semibold text-green-700">${Number(job.bradfordTotalMargin).toFixed(2)}</div>
+                            <div className="text-xs text-gray-500">
+                              Print: ${Number(job.bradfordPrintMargin || 0).toFixed(2)} | Paper: ${Number(job.bradfordPaperMargin || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ) : '-'}
+                      </td>
+                    )}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {job.status.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(job.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <Link href={`/jobs/${job.id}`} className="text-blue-600 hover:text-blue-900">
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </>
+        )}
+
+        {/* New Job Modal */}
+        {showNewJobModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Create New Job</h2>
+                <button
+                  onClick={() => setShowNewJobModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateJob} className="p-6 space-y-6">
+                {/* Customer Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Customer *
+                  </label>
+                  <select
+                    name="customerId"
+                    required
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select customer...</option>
+                    <option value="jjsa">JJSA</option>
+                    <option value="ballantine">Ballantine</option>
+                  </select>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description *
+                  </label>
+                  <input
+                    type="text"
+                    name="description"
+                    required
+                    placeholder="e.g., Holiday Mailer, Spring Campaign"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Size and Quantity */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Product Size *
+                    </label>
+                    <select
+                      name="sizeId"
+                      required
+                      value={selectedSize}
+                      onChange={(e) => setSelectedSize(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select size...</option>
+                      <option value="SM_7_25_16_375">7 1/4 x 16 3/8 (Self Mailer)</option>
+                      <option value="SM_8_5_17_5">8 1/2 x 17 1/2 (Self Mailer)</option>
+                      <option value="SM_9_75_22_125">9 3/4 x 22 1/8 (Self Mailer)</option>
+                      <option value="SM_9_75_26">9 3/4 x 26 (Self Mailer)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Quantity *
+                    </label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      required
+                      min="1"
+                      step="1000"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      placeholder="e.g., 50000"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Typically in increments of 1,000</p>
+                  </div>
+                </div>
+
+                {/* Pricing Preview */}
+                {pricingPreview && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-blue-900 mb-3">Pricing Preview</h3>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-gray-600">Customer Total:</p>
+                        <p className="font-semibold text-gray-900">${pricingPreview.customerTotal}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Impact Direct Margin:</p>
+                        <p className="font-semibold text-green-700">${(parseFloat(pricingPreview.customerTotal) - parseFloat(pricingPreview.bradfordTotal)).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Bradford Total:</p>
+                        <p className="font-semibold text-gray-900">${pricingPreview.bradfordTotal}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Bradford Print Margin:</p>
+                        <p className="font-semibold text-green-700">${pricingPreview.bradfordPrintMargin}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Bradford Paper Margin:</p>
+                        <p className="font-semibold text-green-700">${pricingPreview.bradfordPaperMargin}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">JD Total:</p>
+                        <p className="font-semibold text-gray-900">${pricingPreview.jdTotal}</p>
+                      </div>
+                      <div className="col-span-2 pt-2 border-t border-blue-200">
+                        <p className="text-gray-600">Paper Weight:</p>
+                        <p className="font-semibold text-gray-900">{pricingPreview.paperWeight} lbs (Coated Matte 7pt)</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewJobModal(false)}
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? 'Creating...' : 'Create Job'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
