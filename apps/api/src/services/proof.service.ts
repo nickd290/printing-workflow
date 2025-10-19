@@ -1,6 +1,7 @@
 import { prisma, ProofStatus, JobStatus } from '@printing-workflow/db';
 import { queueEmail } from '../lib/queue.js';
 import { emailTemplates } from '../lib/email.js';
+import { createInvoiceForJob } from './invoice.service.js';
 
 export async function uploadProof(data: { jobId: string; fileId: string }) {
   const job = await prisma.job.findUnique({
@@ -121,6 +122,41 @@ export async function approveProof(data: {
       body: template.html,
     },
   });
+
+  // AUTO-GENERATE INVOICE: When proof is approved, automatically generate invoice
+  try {
+    console.log(`🎯 Auto-generating invoice for job ${proof.job.jobNo} after proof approval...`);
+    const invoice = await createInvoiceForJob({ jobId: proof.jobId });
+    console.log(`✅ Auto-generated invoice ${invoice.invoiceNo} for job ${proof.job.jobNo}`);
+
+    // Auto-send invoice email
+    const invoiceTemplate = emailTemplates.invoiceSent(
+      invoice.invoiceNo,
+      proof.job.jobNo,
+      Number(invoice.amount)
+    );
+
+    await queueEmail({
+      to: proof.job.customer.email || '',
+      subject: invoiceTemplate.subject,
+      html: invoiceTemplate.html,
+    });
+
+    await prisma.notification.create({
+      data: {
+        type: 'INVOICE_SENT',
+        jobId: proof.jobId,
+        recipient: proof.job.customer.email || '',
+        subject: invoiceTemplate.subject,
+        body: invoiceTemplate.html,
+      },
+    });
+
+    console.log(`📧 Invoice email queued for ${proof.job.customer.email}`);
+  } catch (error) {
+    console.error('Failed to auto-generate invoice:', error);
+    // Don't fail the whole approval if invoice generation fails
+  }
 
   return { proof, approval };
 }

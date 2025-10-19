@@ -27,6 +27,10 @@ export const env = createEnv({
     NEXTAUTH_URL: z.string().url(),
     NEXTAUTH_SECRET: z.string().min(32),
 
+    // API Authentication
+    API_SECRET_KEY: z.string().min(32).optional(),
+    WEBHOOK_SECRET: z.string().min(32).optional(),
+
     OPENAI_API_KEY: z.string().optional(),
   },
   runtimeEnv: process.env,

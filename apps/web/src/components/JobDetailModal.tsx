@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { jobsAPI, filesAPI, proofsAPI, invoicesAPI } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface JobDetailModalProps {
   jobId: string;
@@ -74,10 +75,28 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     try {
       await invoicesAPI.generate(jobId);
       await loadJob();
-      alert('Invoice generated!');
+      toast.success('Invoice generated successfully!');
     } catch (err) {
       console.error('Failed to generate invoice:', err);
-      alert('Failed to generate invoice');
+      toast.error('Failed to generate invoice');
+    }
+  };
+
+  const handleEmailProof = async (proofId: string, customerEmail: string) => {
+    try {
+      toast.loading('Sending proof email...', { id: 'email-proof' });
+      const response = await fetch('http://localhost:3001/api/notifications/send-proof-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proofId, customerEmail }),
+      });
+
+      if (!response.ok) throw new Error('Failed to send email');
+
+      toast.success('Proof email sent to customer!', { id: 'email-proof' });
+    } catch (error) {
+      console.error('Failed to send proof email:', error);
+      toast.error('Failed to send proof email', { id: 'email-proof' });
     }
   };
 
@@ -136,6 +155,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Toaster position="top-right" />
       <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
@@ -374,12 +394,25 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                                 {isPending ? 'Pending' : isApproved ? 'Approved' : 'Revisions Requested'}
                               </span>
                             </div>
-                            <button
-                              onClick={() => downloadFile(proof.file.id, proof.file.fileName)}
-                              className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                            >
-                              Download
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {canUploadProof && isPending && (
+                                <button
+                                  onClick={() => handleEmailProof(proof.id, job.customer.email || 'customer@example.com')}
+                                  className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                  Email to Customer
+                                </button>
+                              )}
+                              <button
+                                onClick={() => downloadFile(proof.file.id, proof.file.fileName)}
+                                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                              >
+                                Download
+                              </button>
+                            </div>
                           </div>
                           {proof.adminComments && (
                             <p className="text-sm text-gray-600 mb-2 p-2 bg-gray-50 rounded">{proof.adminComments}</p>

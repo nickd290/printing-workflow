@@ -3,6 +3,7 @@
 import { Navigation } from '@/components/navigation';
 import { useState, useEffect } from 'react';
 import { revenueAPI } from '@/lib/api-client';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function RevenuePage() {
   const [metrics, setMetrics] = useState<any>(null);
@@ -27,16 +28,51 @@ export default function RevenuePage() {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      toast.loading('Exporting revenue data to CSV...', { id: 'export-revenue' });
+      const response = await fetch('http://localhost:3001/api/exports/revenue');
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `revenue-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Revenue data exported successfully!', { id: 'export-revenue' });
+    } catch (error) {
+      console.error('Failed to export revenue:', error);
+      toast.error('Failed to export revenue data', { id: 'export-revenue' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
+      <Toaster position="top-right" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Revenue Dashboard</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Track revenue, costs, and profit margins
-          </p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Revenue Dashboard</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              Track revenue, costs, and profit margins
+            </p>
+          </div>
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export to CSV
+          </button>
         </div>
 
         {/* Error Display */}

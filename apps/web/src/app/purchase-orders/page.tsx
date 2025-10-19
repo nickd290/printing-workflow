@@ -3,6 +3,7 @@
 import { Navigation } from '@/components/navigation';
 import { useState, useEffect } from 'react';
 import { purchaseOrdersAPI, jobsAPI, APIError } from '@/lib/api-client';
+import toast, { Toaster } from 'react-hot-toast';
 
 const mockPOs = [
   {
@@ -119,9 +120,33 @@ export default function PurchaseOrdersPage() {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      toast.loading('Exporting purchase orders to CSV...', { id: 'export-pos' });
+      const response = await fetch('http://localhost:3001/api/exports/purchase-orders');
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `purchase-orders-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Purchase orders exported successfully!', { id: 'export-pos' });
+    } catch (error) {
+      console.error('Failed to export purchase orders:', error);
+      toast.error('Failed to export purchase orders', { id: 'export-pos' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
+      <Toaster position="top-right" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8 flex justify-between items-center">
@@ -131,12 +156,23 @@ export default function PurchaseOrdersPage() {
               Track purchase orders and money flow between companies
             </p>
           </div>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
-            + Upload Bradford PO
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export to CSV
+            </button>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+            >
+              + Upload Bradford PO
+            </button>
+          </div>
         </div>
 
         {/* Error Display */}

@@ -489,6 +489,7 @@ enum NotificationType {
   PROOF_APPROVED
   SHIPMENT_SCHEDULED
   INVOICE_SENT
+  PO_CREATED
 }
 
 model Notification {
@@ -516,6 +517,7 @@ model Notification {
 enum WebhookSource {
   ZAPIER
   BRADFORD
+  EMAIL
 }
 
 model WebhookEvent {
@@ -529,4 +531,46 @@ model WebhookEvent {
 
   @@index([source])
   @@index([processed])
+}
+
+// ============================================================================
+// Paper Inventory
+// ============================================================================
+
+model PaperInventory {
+  id            String   @id @default(cuid())
+  rollType      String   // "20_7pt_matte", "18_7pt_matte", "15_7pt_matte", "20_9pt"
+  rollWidth     Int      // 20, 18, or 15 inches
+  paperPoint    Int      // 7 or 9 pt
+  paperType     String   // "matte" or "standard"
+  quantity      Int      // current stock count
+  weightPerRoll Decimal? // lbs per roll
+  reorderPoint  Int?     // alert threshold
+  companyId     String   // "bradford"
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions  PaperTransaction[]
+
+  @@index([companyId])
+  @@index([rollType])
+}
+
+model PaperTransaction {
+  id          String          @id @default(cuid())
+  inventoryId String
+  inventory   PaperInventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  type        String          // "ADD", "REMOVE", "ADJUST", "JOB_USAGE"
+  quantity    Int             // positive for add, negative for remove
+  jobId       String?         // if this was used for a job
+  notes       String?
+  userId      String?         // who made the change
+
+  createdAt   DateTime        @default(now())
+
+  @@index([inventoryId])
+  @@index([jobId])
+  @@index([createdAt])
 }

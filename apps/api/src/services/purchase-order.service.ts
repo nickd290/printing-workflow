@@ -1,5 +1,8 @@
 import { prisma, POStatus } from '@printing-workflow/db';
 import { calculatePOAmounts } from '../lib/utils.js';
+import { generateBradfordPOPdf } from './bradford-po.service.js';
+import { queueEmail } from '../lib/queue.js';
+import { emailTemplates } from '../lib/email.js';
 
 export async function createPurchaseOrder(data: {
   originCompanyId: string;
@@ -92,6 +95,57 @@ export async function createPOFromWebhook(data: {
     marginAmount: 0, // Bradford keeps the margin
     externalRef: `${data.componentId}-${data.estimateNumber}`,
   });
+
+  // Generate Bradford PO PDF and send to JD Graphic
+  try {
+    const { pdfBytes, fileName } = await generateBradfordPOPdf(po.id);
+
+    const poWithDetails = await getPOById(po.id);
+
+    if (poWithDetails && poWithDetails.job) {
+      const poNumber = po.externalRef?.split('-')[0] || `PO-${po.id.slice(0, 7)}`;
+
+      const template = emailTemplates.bradfordPOToJD(
+        data.componentId,
+        poWithDetails.job.jobNo,
+        poNumber,
+        parseFloat(po.vendorAmount.toString())
+      );
+
+      // Send email to both JD Graphic production and Nick
+      const jdEmails = ['production@jdgraphic.com', 'nick@jdgraphic.com'];
+
+      for (const email of jdEmails) {
+        await queueEmail({
+          to: email,
+          subject: template.subject,
+          html: template.html,
+          attachments: [
+            {
+              filename: fileName,
+              content: pdfBytes,
+            },
+          ],
+        });
+
+        // Create notification record
+        await prisma.notification.create({
+          data: {
+            type: 'PO_CREATED',
+            jobId: poWithDetails.job.id,
+            recipient: email,
+            subject: template.subject,
+            body: template.html,
+          },
+        });
+      }
+
+      console.log(`✅ Bradford PO PDF generated and emailed to JD Graphic (${jdEmails.join(', ')}): ${fileName}`);
+    }
+  } catch (error) {
+    console.error('Failed to generate/send Bradford PO PDF:', error);
+    // Don't fail the entire PO creation if PDF generation fails
+  }
 
   return po;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Navigation } from '@/components/navigation';
+import toast, { Toaster } from 'react-hot-toast';
 
 const mockInvoices = [
   {
@@ -40,9 +41,33 @@ const mockInvoices = [
 ];
 
 export default function InvoicesPage() {
+  const handleExportCSV = async () => {
+    try {
+      toast.loading('Exporting invoices to CSV...', { id: 'export-invoices' });
+      const response = await fetch('http://localhost:3001/api/exports/invoices');
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoices-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Invoices exported successfully!', { id: 'export-invoices' });
+    } catch (error) {
+      console.error('Failed to export invoices:', error);
+      toast.error('Failed to export invoices', { id: 'export-invoices' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
+      <Toaster position="top-right" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8 flex justify-between items-center">
@@ -52,9 +77,20 @@ export default function InvoicesPage() {
               Generate and track invoices with PDF delivery
             </p>
           </div>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-            + Generate Invoice
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export to CSV
+            </button>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+              + Generate Invoice
+            </button>
+          </div>
         </div>
 
         {/* Summary Cards */}

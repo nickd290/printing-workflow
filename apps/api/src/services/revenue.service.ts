@@ -29,6 +29,30 @@ export interface RevenueMetrics {
   };
 }
 
+export interface BradfordMetrics {
+  jobs: {
+    total: number;
+    byStatus: Record<string, number>;
+  };
+  revenue: {
+    totalRevenue: number; // Total Bradford received
+    totalMargin: number; // Bradford's margins
+    marginPercent: number;
+  };
+  purchaseOrders: {
+    total: number;
+    totalAmount: number;
+  };
+  invoices: {
+    total: number;
+    totalAmount: number;
+  };
+  paperUsage: {
+    totalWeight: number; // Total lbs of paper
+    jobCount: number; // Jobs with paper tracking
+  };
+}
+
 export async function getRevenueMetrics(): Promise<RevenueMetrics> {
   // Get all purchase orders
   const allPOs = await prisma.purchaseOrder.findMany({
@@ -174,6 +198,112 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
       totalCosts,
       grossProfit,
       profitMargin,
+    },
+  };
+}
+
+export async function getBradfordMetrics(): Promise<BradfordMetrics> {
+  // Get all jobs that involve Bradford (have Bradford POs)
+  const allJobs = await prisma.job.findMany({
+    include: {
+      purchaseOrders: {
+        include: {
+          originCompany: true,
+          targetCompany: true,
+        },
+      },
+    },
+  });
+
+  // Filter jobs that involve Bradford
+  const bradfordJobs = allJobs.filter((job) =>
+    job.purchaseOrders.some(
+      (po) =>
+        po.targetCompanyId === COMPANY_IDS.BRADFORD ||
+        po.originCompanyId === COMPANY_IDS.BRADFORD
+    )
+  );
+
+  // Count jobs by status
+  const jobsByStatus: Record<string, number> = {};
+  bradfordJobs.forEach((job) => {
+    jobsByStatus[job.status] = (jobsByStatus[job.status] || 0) + 1;
+  });
+
+  // Calculate Bradford revenue and margins
+  let totalRevenue = 0;
+  let totalMargin = 0;
+  bradfordJobs.forEach((job) => {
+    if (job.bradfordTotal) {
+      totalRevenue += parseFloat(job.bradfordTotal.toString());
+    }
+    if (job.bradfordTotalMargin) {
+      totalMargin += parseFloat(job.bradfordTotalMargin.toString());
+    }
+  });
+  const marginPercent = totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : 0;
+
+  // Get Bradford POs
+  const bradfordPOs = await prisma.purchaseOrder.findMany({
+    where: {
+      OR: [
+        { originCompanyId: COMPANY_IDS.BRADFORD },
+        { targetCompanyId: COMPANY_IDS.BRADFORD },
+      ],
+    },
+  });
+
+  const totalPOAmount = bradfordPOs.reduce(
+    (sum, po) => sum + parseFloat(po.vendorAmount.toString()),
+    0
+  );
+
+  // Get Bradford invoices
+  const bradfordInvoices = await prisma.invoice.findMany({
+    where: {
+      OR: [
+        { fromCompanyId: COMPANY_IDS.BRADFORD },
+        { toCompanyId: COMPANY_IDS.BRADFORD },
+      ],
+    },
+  });
+
+  const totalInvoiceAmount = bradfordInvoices.reduce(
+    (sum, inv) => sum + parseFloat(inv.amount.toString()),
+    0
+  );
+
+  // Calculate paper usage
+  let totalPaperWeight = 0;
+  let jobsWithPaper = 0;
+  bradfordJobs.forEach((job) => {
+    if (job.paperWeightTotal) {
+      totalPaperWeight += parseFloat(job.paperWeightTotal.toString());
+      jobsWithPaper++;
+    }
+  });
+
+  return {
+    jobs: {
+      total: bradfordJobs.length,
+      byStatus: jobsByStatus,
+    },
+    revenue: {
+      totalRevenue,
+      totalMargin,
+      marginPercent,
+    },
+    purchaseOrders: {
+      total: bradfordPOs.length,
+      totalAmount: totalPOAmount,
+    },
+    invoices: {
+      total: bradfordInvoices.length,
+      totalAmount: totalInvoiceAmount,
+    },
+    paperUsage: {
+      totalWeight: totalPaperWeight,
+      jobCount: jobsWithPaper,
     },
   };
 }

@@ -14,6 +14,10 @@ import { invoiceRoutes } from './routes/invoices.js';
 import { purchaseOrderRoutes } from './routes/purchase-orders.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { revenueRoutes } from './routes/revenue.js';
+import { paperInventoryRoutes } from './routes/paper-inventory.js';
+import notificationsRoutes from './routes/notifications.js';
+import exportsRoutes from './routes/exports.js';
+import customerRoutes from './routes/customer.js';
 
 const fastify = Fastify({
   logger: {
@@ -23,13 +27,16 @@ const fastify = Fastify({
 
 // Register plugins
 await fastify.register(cors, {
-  origin: [env.NEXTAUTH_URL, 'http://localhost:5174', 'http://localhost:8888'],
+  origin: [env.NEXTAUTH_URL, 'http://localhost:5175', 'http://localhost:8888'],
   credentials: true,
 });
 
 await fastify.register(multipart, {
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB
+    fileSize: 10 * 1024 * 1024, // 10MB max per file (reduced for security)
+    files: 5, // Max 5 files per request
+    fields: 20, // Max 20 form fields
+    parts: 25, // Max 25 parts total
   },
 });
 
@@ -48,6 +55,10 @@ await fastify.register(invoiceRoutes, { prefix: '/api/invoices' });
 await fastify.register(purchaseOrderRoutes, { prefix: '/api/purchase-orders' });
 await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(revenueRoutes, { prefix: '/api/revenue' });
+await fastify.register(paperInventoryRoutes, { prefix: '/api/paper-inventory' });
+await fastify.register(notificationsRoutes, { prefix: '/api/notifications' });
+await fastify.register(exportsRoutes, { prefix: '/api/exports' });
+await fastify.register(customerRoutes, { prefix: '/api/customer' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

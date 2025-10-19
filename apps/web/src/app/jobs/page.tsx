@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { jobsAPI, APIError } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface Job {
   id: string;
@@ -227,8 +228,33 @@ export default function JobsPage() {
       setSubmitting(false);
     }
   };
+
+  const handleExportCSV = async () => {
+    try {
+      toast.loading('Exporting jobs to CSV...', { id: 'export' });
+      const response = await fetch('http://localhost:3001/api/exports/jobs');
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jobs-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Jobs exported successfully!', { id: 'export' });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to export jobs', { id: 'export' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster position="top-right" />
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -239,12 +265,23 @@ export default function JobsPage() {
               Track jobs through the production workflow
             </p>
           </div>
-          <button
-            onClick={() => setShowNewJobModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
-            + New Job
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export to CSV
+            </button>
+            <button
+              onClick={() => setShowNewJobModal(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
+            >
+              + New Job
+            </button>
+          </div>
         </div>
 
         {/* Error Display */}

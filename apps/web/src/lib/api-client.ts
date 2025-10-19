@@ -400,6 +400,155 @@ export const revenueAPI = {
     const response = await fetch(`${API_URL}/api/revenue/metrics`);
     return handleResponse<any>(response);
   },
+
+  getBradfordMetrics: async () => {
+    const response = await fetch(`${API_URL}/api/revenue/bradford`);
+    return handleResponse<any>(response);
+  },
+};
+
+// ============================================================================
+// Paper Inventory API
+// ============================================================================
+
+export type PaperRollType = '20_7pt_matte' | '18_7pt_matte' | '15_7pt_matte' | '20_9pt';
+export type TransactionType = 'ADD' | 'REMOVE' | 'ADJUST' | 'JOB_USAGE';
+
+export interface PaperInventory {
+  id: string;
+  rollType: PaperRollType;
+  rollWidth: number;
+  paperPoint: number;
+  paperType: string;
+  quantity: number;
+  weightPerRoll?: number;
+  reorderPoint?: number;
+  companyId: string;
+  createdAt: string;
+  updatedAt: string;
+  transactions?: PaperTransaction[];
+}
+
+export interface PaperTransaction {
+  id: string;
+  inventoryId: string;
+  type: TransactionType;
+  quantity: number;
+  jobId?: string;
+  notes?: string;
+  userId?: string;
+  createdAt: string;
+}
+
+export interface AdjustInventoryBody {
+  rollType: PaperRollType;
+  quantity: number;
+  type: TransactionType;
+  companyId?: string;
+  jobId?: string;
+  notes?: string;
+  userId?: string;
+}
+
+export interface DeductForJobBody {
+  jobId: string;
+  rollType: PaperRollType;
+  quantity: number;
+  userId?: string;
+  notes?: string;
+}
+
+export interface UpdateInventorySettingsBody {
+  reorderPoint?: number;
+  weightPerRoll?: number;
+  companyId?: string;
+}
+
+export const paperInventoryAPI = {
+  getAll: async (companyId?: string) => {
+    const query = companyId ? `?companyId=${companyId}` : '';
+    const response = await fetch(`${API_URL}/api/paper-inventory${query}`);
+    return handleResponse<{ inventory: PaperInventory[] }>(response);
+  },
+
+  getSummary: async (companyId?: string) => {
+    const query = companyId ? `?companyId=${companyId}` : '';
+    const response = await fetch(`${API_URL}/api/paper-inventory/summary${query}`);
+    return handleResponse<{
+      inventory: PaperInventory[];
+      lowStockItems: PaperInventory[];
+      totalRolls: number;
+      totalWeight: number;
+      lowStockCount: number;
+    }>(response);
+  },
+
+  getLowStock: async (companyId?: string) => {
+    const query = companyId ? `?companyId=${companyId}` : '';
+    const response = await fetch(`${API_URL}/api/paper-inventory/low-stock${query}`);
+    return handleResponse<{ lowStockItems: PaperInventory[] }>(response);
+  },
+
+  getByRollType: async (rollType: PaperRollType, companyId?: string) => {
+    const query = companyId ? `?companyId=${companyId}` : '';
+    const response = await fetch(`${API_URL}/api/paper-inventory/${rollType}${query}`);
+    return handleResponse<PaperInventory>(response);
+  },
+
+  initialize: async (companyId?: string) => {
+    const response = await fetch(`${API_URL}/api/paper-inventory/initialize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId }),
+    });
+    return handleResponse<{ inventory: PaperInventory[]; message: string }>(response);
+  },
+
+  adjust: async (data: AdjustInventoryBody) => {
+    const response = await fetch(`${API_URL}/api/paper-inventory/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{
+      success: boolean;
+      inventory: PaperInventory;
+      transaction: PaperTransaction;
+    }>(response);
+  },
+
+  deductForJob: async (data: DeductForJobBody) => {
+    const response = await fetch(`${API_URL}/api/paper-inventory/deduct-for-job`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{
+      success: boolean;
+      inventory: PaperInventory;
+      transaction: PaperTransaction;
+    }>(response);
+  },
+
+  getTransactions: async (filters?: {
+    companyId?: string;
+    rollType?: PaperRollType;
+    jobId?: string;
+    limit?: number;
+  }) => {
+    const query = new URLSearchParams(filters as any).toString();
+    const response = await fetch(`${API_URL}/api/paper-inventory/transactions?${query}`);
+    return handleResponse<{ transactions: PaperTransaction[] }>(response);
+  },
+
+  updateSettings: async (rollType: PaperRollType, settings: UpdateInventorySettingsBody) => {
+    const response = await fetch(`${API_URL}/api/paper-inventory/${rollType}/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    return handleResponse<{ success: boolean; inventory: PaperInventory }>(response);
+  },
 };
 
 // ============================================================================

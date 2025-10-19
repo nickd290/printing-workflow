@@ -392,4 +392,38 @@ export const emailTemplates = {
       `PO created for job ${jobNo}`
     ),
   }),
+
+  // Bradford PO to JD Graphic
+  bradfordPOToJD: (componentId: string, jobNo: string, poNumber: string, vendorAmount: number) => ({
+    subject: `📋 New Purchase Order - ${componentId}`,
+    html: emailTemplate(
+      `
+        <h2>New Purchase Order Received</h2>
+        <p>Bradford has issued a new purchase order for production.</p>
+
+        <div class="info-box">
+          <p><strong>PO Number:</strong> ${poNumber}</p>
+          <p><strong>Component ID:</strong> ${componentId}</p>
+          <p><strong>Job Number:</strong> ${jobNo}</p>
+          <p><strong>PO Amount:</strong> $${vendorAmount.toFixed(2)}</p>
+        </div>
+
+        <p style="margin-top: 25px;">
+          The Bradford Print Order Form is attached to this email with complete job specifications.
+        </p>
+
+        <center>
+          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">View Job Details</a>
+        </center>
+
+        <div class="divider"></div>
+
+        <p style="color: #718096; font-size: 14px;">
+          <strong>Ship To:</strong> FOB JD Graphic<br>
+          Please review the attached print order form for complete specifications.
+        </p>
+      `,
+      `New PO ${poNumber} for ${componentId}`
+    ),
+  }),
 };
