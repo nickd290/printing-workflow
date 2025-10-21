@@ -9,7 +9,7 @@ export const env = createEnv({
     NEXTAUTH_URL: z.string().url(),
     NEXTAUTH_SECRET: z.string().min(32),
 
-    RESEND_API_KEY: z.string(),
+    RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().email(),
   },
   client: {
