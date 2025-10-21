@@ -5,6 +5,7 @@ import { useState } from 'react';
 interface Job {
   id: string;
   jobNo: string;
+  customerPONumber?: string;
   customer: { name: string; email: string } | string;
   status: string;
   createdAt: string;
@@ -62,7 +63,8 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
     const customerName = getCustomerName(job.customer).toLowerCase();
     const matchesSearch =
       job.jobNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customerName.includes(searchQuery.toLowerCase());
+      customerName.includes(searchQuery.toLowerCase()) ||
+      (job.customerPONumber?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     const matchesStatus = !statusFilter || job.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -126,7 +128,7 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Search by job number or customer..."
+              placeholder="Search by job number, customer, or PO#..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -169,6 +171,15 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th
+                onClick={() => handleSort('customerPONumber')}
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+              >
+                <div className="flex items-center gap-2">
+                  Customer PO#
+                  <SortIcon column="customerPONumber" />
+                </div>
+              </th>
               <th
                 onClick={() => handleSort('jobNo')}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
@@ -236,7 +247,10 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
                 className="hover:bg-gray-50 cursor-pointer transition-colors"
               >
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm font-medium text-blue-600">{job.jobNo}</span>
+                  <span className="text-sm font-bold text-blue-600">{job.customerPONumber || '—'}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-500">{job.jobNo}</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-900">{getCustomerName(job.customer)}</span>

@@ -1,6 +1,5 @@
 'use client';
 
-import { Navigation } from '@/components/navigation';
 import { BradfordSidebar } from '@/components/BradfordSidebar';
 import { JobsTable } from '@/components/JobsTable';
 import { JobDetailModal } from '@/components/JobDetailModal';
@@ -12,7 +11,7 @@ import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function DashboardPage() {
-  const { user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin } = useUser();
+  const { user, isCustomer, isBrokerAdmin, isBradfordAdmin } = useUser();
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +61,8 @@ export default function DashboardPage() {
   const filteredJobs = useMemo(() => {
     if (!user) return [];
 
-    // BROKER_ADMIN and MANAGER see all jobs
-    if (isBrokerAdmin || isManager) {
+    // BROKER_ADMIN sees all jobs
+    if (isBrokerAdmin) {
       return allJobs;
     }
 
@@ -85,7 +84,7 @@ export default function DashboardPage() {
     }
 
     return allJobs;
-  }, [allJobs, user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin]);
+  }, [allJobs, user, isCustomer, isBrokerAdmin, isBradfordAdmin]);
 
   const loadJobs = async () => {
     try {
@@ -187,11 +186,14 @@ export default function DashboardPage() {
       const emptyData = {
         description: '',
         paper: '',
-        size: '',
-        quantity: '',
+        flatSize: '',
+        foldedSize: '',
         colors: '',
         finishing: '',
-        customerTotal: '',
+        total: '',
+        poNumber: '',
+        deliveryDate: '',
+        samples: '',
       };
       setParsedData(emptyData);
       setFormData(emptyData);
@@ -206,12 +208,14 @@ export default function DashboardPage() {
 
     const formDataObj = new FormData(e.currentTarget);
     const customerId = isCustomer ? user?.companyId : (formDataObj.get('customerId') as string);
-    const customerTotal = parseFloat(formData.total);
+    const customPrice = parseFloat(formData.total) || 0;
 
     try {
       await jobsAPI.createDirect({
         customerId: customerId || '',
-        customerTotal,
+        sizeId: '', // Will be determined by API from specs
+        quantity: 0, // Will be determined by API from specs
+        customPrice,
         specs: {
           description: formData.description,
           paper: formData.paper,
@@ -307,14 +311,11 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen">
-      <Navigation />
       <Toaster position="top-right" />
 
       <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-[1600px]">
         {/* Render role-specific dashboards */}
         {isBrokerAdmin ? (
-          <ImpactDirectDashboard />
-        ) : isManager ? (
           <ImpactDirectDashboard />
         ) : (
           <>
@@ -381,8 +382,11 @@ export default function DashboardPage() {
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex-1">
                           <h3 className="text-lg font-bold text-white mb-1">
-                            {job.jobNo}
+                            {job.customerPONumber || job.jobNo}
                           </h3>
+                          <p className="text-xs text-slate-500 mb-1">
+                            Job: {job.jobNo}
+                          </p>
                           <p className="text-sm text-slate-400">
                             {job.specs?.description || 'No description'}
                           </p>

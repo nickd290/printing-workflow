@@ -118,16 +118,38 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
       inv.toCompanyId === COMPANY_IDS.IMPACT_DIRECT
   );
 
-  // Calculate totals
-  const totalRevenue = customerInvoices.reduce(
-    (sum, inv) => sum + parseFloat(inv.amount.toString()),
+  // Calculate revenue and costs from Job PO-based fields (not invoices)
+  // Get all jobs to calculate revenue from actual Job data
+  const allJobs = await prisma.job.findMany({
+    select: {
+      customerTotal: true,
+      impactMargin: true,
+      bradfordTotal: true,
+    },
+  });
+
+  const totalRevenue = allJobs.reduce(
+    (sum, job) => sum + parseFloat(job.customerTotal.toString()),
     0
   );
-  const totalCosts = bradfordInvoices.reduce(
-    (sum, inv) => sum + parseFloat(inv.amount.toString()),
+  const totalCosts = allJobs.reduce(
+    (sum, job) => {
+      if (job.bradfordTotal) {
+        return sum + parseFloat(job.bradfordTotal.toString());
+      }
+      return sum;
+    },
     0
   );
-  const grossProfit = totalRevenue - totalCosts;
+  const grossProfit = allJobs.reduce(
+    (sum, job) => {
+      if (job.impactMargin) {
+        return sum + parseFloat(job.impactMargin.toString());
+      }
+      return sum;
+    },
+    0
+  );
   const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
 
   return {
@@ -304,6 +326,141 @@ export async function getBradfordMetrics(): Promise<BradfordMetrics> {
     paperUsage: {
       totalWeight: totalPaperWeight,
       jobCount: jobsWithPaper,
+    },
+  };
+}
+
+/**
+ * Get PO flow metrics showing the chain from Customer → Impact → Bradford → JD
+ */
+export interface POFlowMetrics {
+  stages: {
+    customerToImpact: {
+      count: number;
+      totalAmount: number;
+      byStatus: Record<POStatus, number>;
+    };
+    impactToBradford: {
+      count: number;
+      totalAmount: number;
+      marginAmount: number;
+      byStatus: Record<POStatus, number>;
+    };
+    bradfordToJD: {
+      count: number;
+      totalAmount: number;
+      marginAmount: number;
+      byStatus: Record<POStatus, number>;
+    };
+  };
+  summary: {
+    totalPOs: number;
+    totalRevenue: number; // From customers
+    totalCosts: number; // To Bradford
+    impactMargin: number;
+    bradfordMargin: number;
+  };
+}
+
+export async function getPOFlowMetrics(): Promise<POFlowMetrics> {
+  // Get all purchase orders with relationships
+  const allPOs = await prisma.purchaseOrder.findMany({
+    include: {
+      originCompany: true,
+      targetCompany: true,
+      job: true,
+    },
+  });
+
+  // Get all jobs to calculate customer POs
+  const allJobs = await prisma.job.findMany({
+    select: {
+      id: true,
+      customerTotal: true,
+      customerId: true,
+      status: true,
+    },
+  });
+
+  // Stage 1: Customer → Impact Direct (represented by jobs with customer totals)
+  const customerToImpactCount = allJobs.length;
+  const customerToImpactTotal = allJobs.reduce((sum, job) => {
+    return sum + parseFloat(job.customerTotal?.toString() || '0');
+  }, 0);
+
+  // Create status breakdown for customer POs (use job status as proxy)
+  const customerToImpactByStatus: Record<string, number> = {};
+  allJobs.forEach((job) => {
+    const status = job.status || 'PENDING';
+    customerToImpactByStatus[status] = (customerToImpactByStatus[status] || 0) + 1;
+  });
+
+  // Stage 2: Impact Direct → Bradford
+  const impactToBradfordPOs = allPOs.filter(
+    (po) =>
+      po.originCompanyId === COMPANY_IDS.IMPACT_DIRECT &&
+      po.targetCompanyId === COMPANY_IDS.BRADFORD
+  );
+
+  const impactToBradfordTotal = impactToBradfordPOs.reduce((sum, po) => {
+    return sum + parseFloat(po.vendorAmount?.toString() || '0');
+  }, 0);
+
+  const impactToBradfordMargin = impactToBradfordPOs.reduce((sum, po) => {
+    return sum + parseFloat(po.marginAmount?.toString() || '0');
+  }, 0);
+
+  const impactToBradfordByStatus: Record<string, number> = {};
+  impactToBradfordPOs.forEach((po) => {
+    impactToBradfordByStatus[po.status] = (impactToBradfordByStatus[po.status] || 0) + 1;
+  });
+
+  // Stage 3: Bradford → JD Graphic
+  const bradfordToJDPOs = allPOs.filter(
+    (po) =>
+      po.originCompanyId === COMPANY_IDS.BRADFORD &&
+      po.targetCompanyId === COMPANY_IDS.JD_GRAPHIC
+  );
+
+  const bradfordToJDTotal = bradfordToJDPOs.reduce((sum, po) => {
+    return sum + parseFloat(po.vendorAmount?.toString() || '0');
+  }, 0);
+
+  const bradfordToJDMargin = bradfordToJDPOs.reduce((sum, po) => {
+    return sum + parseFloat(po.marginAmount?.toString() || '0');
+  }, 0);
+
+  const bradfordToJDByStatus: Record<string, number> = {};
+  bradfordToJDPOs.forEach((po) => {
+    bradfordToJDByStatus[po.status] = (bradfordToJDByStatus[po.status] || 0) + 1;
+  });
+
+  return {
+    stages: {
+      customerToImpact: {
+        count: customerToImpactCount,
+        totalAmount: customerToImpactTotal,
+        byStatus: customerToImpactByStatus as Record<POStatus, number>,
+      },
+      impactToBradford: {
+        count: impactToBradfordPOs.length,
+        totalAmount: impactToBradfordTotal,
+        marginAmount: impactToBradfordMargin,
+        byStatus: impactToBradfordByStatus as Record<POStatus, number>,
+      },
+      bradfordToJD: {
+        count: bradfordToJDPOs.length,
+        totalAmount: bradfordToJDTotal,
+        marginAmount: bradfordToJDMargin,
+        byStatus: bradfordToJDByStatus as Record<POStatus, number>,
+      },
+    },
+    summary: {
+      totalPOs: allPOs.length,
+      totalRevenue: customerToImpactTotal,
+      totalCosts: impactToBradfordTotal,
+      impactMargin: impactToBradfordMargin,
+      bradfordMargin: bradfordToJDMargin,
     },
   };
 }

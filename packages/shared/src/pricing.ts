@@ -95,6 +95,42 @@ export const PRODUCT_SIZES: Record<string, ProductSize> = {
     bradfordTotalMarginCPM: 19.371, // Total Bradford profit (7.41 + 11.961)
     bradfordTotalCPM: 105.19, // What Bradford receives from Impact
   },
+  'PC_6_9': {
+    id: 'PC_6_9',
+    name: '6 x 9',
+    description: 'Postcard - 9pt Cover Stock',
+    paperType: '9pt Gloss Cover / 9pt Matte Cover',
+    paperWeightLbsPer1000: 20,
+    paperCostPerLb: 0.675,
+    paperCostCPM: 13.5, // Actual paper cost (20 × 0.675)
+    paperChargedCPM: 15.55, // What Bradford charges
+    paperMarginCPM: 2.05, // Paper profit (15.55 - 13.5)
+    printCPM: 10.00, // JD Graphic's payment
+    customerCPM: 35.00,
+    impactMarginCPM: 4.725,
+    bradfordPrintMarginCPM: 4.725, // Bradford's print profit
+    bradfordPaperMarginCPM: 2.05, // Bradford's paper profit
+    bradfordTotalMarginCPM: 6.775, // Total Bradford profit (4.725 + 2.05)
+    bradfordTotalCPM: 30.275, // What Bradford receives from Impact
+  },
+  'PC_6_11': {
+    id: 'PC_6_11',
+    name: '6 x 11',
+    description: 'Postcard - 9pt Cover Stock',
+    paperType: '9pt Gloss Cover / 9pt Matte Cover',
+    paperWeightLbsPer1000: 24,
+    paperCostPerLb: 0.675,
+    paperCostCPM: 16.2, // Actual paper cost (24 × 0.675)
+    paperChargedCPM: 18.89, // What Bradford charges
+    paperMarginCPM: 2.69, // Paper profit (18.89 - 16.2)
+    printCPM: 12.00, // JD Graphic's payment
+    customerCPM: 39.00,
+    impactMarginCPM: 4.055,
+    bradfordPrintMarginCPM: 4.055, // Bradford's print profit
+    bradfordPaperMarginCPM: 2.69, // Bradford's paper profit
+    bradfordTotalMarginCPM: 6.745, // Total Bradford profit (4.055 + 2.69)
+    bradfordTotalCPM: 34.945, // What Bradford receives from Impact
+  },
 };
 
 /**
@@ -245,4 +281,125 @@ export function getAvailableSizes() {
     description: size.description,
     customerCPM: size.customerCPM,
   }));
+}
+
+/**
+ * Custom pricing calculation with flexible customer pricing
+ * Allows custom customer price while keeping Bradford cost fixed
+ * Automatically calculates 50/50 margin split
+ */
+export interface CustomJobPricing extends JobPricing {
+  isCustomPricing: boolean;
+  isLoss: boolean; // True if custom price < Bradford cost
+  lossAmount: number; // Amount of loss if below cost
+  standardCustomerPrice: number; // Original standard price
+}
+
+export function calculateCustomPricing(
+  sizeId: string,
+  quantity: number,
+  customCustomerPrice?: number
+): CustomJobPricing {
+  const size = PRODUCT_SIZES[sizeId];
+  if (!size) {
+    throw new Error(`Invalid size ID: ${sizeId}`);
+  }
+
+  const quantityInThousands = quantity / 1000;
+  const standardPricing = calculateJobPricing(sizeId, quantity);
+
+  // If no custom price provided, return standard pricing
+  if (customCustomerPrice === undefined || customCustomerPrice === null) {
+    return {
+      ...standardPricing,
+      isCustomPricing: false,
+      isLoss: false,
+      lossAmount: 0,
+      standardCustomerPrice: standardPricing.customerTotal,
+    };
+  }
+
+  // Bradford's fixed cost = JD print cost + Bradford's paper charge
+  // This includes Bradford's paper markup but NOT their share of the margin
+  const bradfordBaseCostCPM = size.printCPM + size.paperChargedCPM;
+  const bradfordBaseCostTotal = bradfordBaseCostCPM * quantityInThousands;
+
+  // Calculate new margin based on custom customer price
+  const totalMargin = customCustomerPrice - bradfordBaseCostTotal;
+  const isLoss = totalMargin < 0;
+  const lossAmount = isLoss ? Math.abs(totalMargin) : 0;
+
+  // 50/50 split of margin
+  const impactMargin = totalMargin / 2;
+  const bradfordMargin = totalMargin / 2;
+
+  // What Impact pays Bradford = Bradford base cost + Bradford's margin share
+  const bradfordTotal = bradfordBaseCostTotal + bradfordMargin;
+
+  // Calculate CPM values
+  const customerCPM = customCustomerPrice / quantityInThousands;
+  const impactMarginCPM = impactMargin / quantityInThousands;
+  const bradfordMarginCPM = bradfordMargin / quantityInThousands;
+  const bradfordTotalCPM = bradfordTotal / quantityInThousands;
+
+  return {
+    sizeId: size.id,
+    sizeName: size.name,
+    quantity,
+    quantityInThousands,
+
+    // CPM rates (custom)
+    customerCPM,
+    impactMarginCPM,
+    bradfordTotalCPM,
+    bradfordPrintMarginCPM: bradfordMarginCPM, // Bradford's share of margin
+    bradfordPaperMarginCPM: size.paperMarginCPM, // Paper markup stays same
+    bradfordTotalMarginCPM: bradfordMarginCPM + size.paperMarginCPM, // Total Bradford profit
+    printCPM: size.printCPM,
+    paperCostCPM: size.paperCostCPM,
+    paperChargedCPM: size.paperChargedCPM,
+
+    // Total amounts (custom)
+    customerTotal: customCustomerPrice,
+    impactMargin,
+    bradfordTotal,
+    bradfordPrintMargin: bradfordMargin, // Bradford's share of margin
+    bradfordPaperMargin: size.paperMarginCPM * quantityInThousands, // Paper markup
+    bradfordTotalMargin: bradfordMargin + (size.paperMarginCPM * quantityInThousands), // Total
+    jdTotal: size.printCPM * quantityInThousands,
+    paperCostTotal: size.paperCostCPM * quantityInThousands,
+    paperChargedTotal: size.paperChargedCPM * quantityInThousands,
+
+    // Paper details
+    paperType: size.paperType,
+    paperWeightTotal: size.paperWeightLbsPer1000 * quantityInThousands,
+    paperWeightPer1000: size.paperWeightLbsPer1000,
+
+    // Custom pricing metadata
+    isCustomPricing: true,
+    isLoss,
+    lossAmount,
+    standardCustomerPrice: standardPricing.customerTotal,
+  };
+}
+
+/**
+ * Get Bradford's base cost (without margin split)
+ * This is the fixed cost that doesn't change with custom pricing
+ */
+export function getBradfordBaseCost(sizeId: string): {
+  cpm: number;
+  description: string;
+} {
+  const size = PRODUCT_SIZES[sizeId];
+  if (!size) {
+    throw new Error(`Invalid size ID: ${sizeId}`);
+  }
+
+  const bradfordBaseCostCPM = size.printCPM + size.paperChargedCPM;
+
+  return {
+    cpm: bradfordBaseCostCPM,
+    description: `JD Print ($${size.printCPM}) + Bradford Paper ($${size.paperChargedCPM})`,
+  };
 }

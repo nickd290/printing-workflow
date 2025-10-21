@@ -6,7 +6,7 @@ import { revenueAPI, jobsAPI, purchaseOrdersAPI, invoicesAPI } from '@/lib/api-c
 import { useUser } from '@/contexts/UserContext';
 
 export default function FinancialsPage() {
-  const { user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin } = useUser();
+  const { user, isCustomer, isBrokerAdmin, isBradfordAdmin } = useUser();
   const [metrics, setMetrics] = useState<any>(null);
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [allPurchaseOrders, setAllPurchaseOrders] = useState<any[]>([]);
@@ -22,7 +22,7 @@ export default function FinancialsPage() {
   // Filter data based on user role
   const filteredJobs = useMemo(() => {
     if (!user) return [];
-    if (isBrokerAdmin || isManager) return allJobs;
+    if (isBrokerAdmin) return allJobs;
     if (isCustomer) {
       return allJobs.filter((job) => {
         const customerId = typeof job.customer === 'string' ? job.customer : job.customer?.id;
@@ -37,11 +37,11 @@ export default function FinancialsPage() {
       );
     }
     return allJobs;
-  }, [allJobs, user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin]);
+  }, [allJobs, user, isCustomer, isBrokerAdmin, isBradfordAdmin]);
 
   const filteredPurchaseOrders = useMemo(() => {
     if (!user) return [];
-    if (isBrokerAdmin || isManager) return allPurchaseOrders;
+    if (isBrokerAdmin) return allPurchaseOrders;
     if (isCustomer) {
       // Customers don't see POs
       return [];
@@ -52,11 +52,11 @@ export default function FinancialsPage() {
       );
     }
     return allPurchaseOrders;
-  }, [allPurchaseOrders, user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin]);
+  }, [allPurchaseOrders, user, isCustomer, isBrokerAdmin, isBradfordAdmin]);
 
   const filteredInvoices = useMemo(() => {
     if (!user) return [];
-    if (isBrokerAdmin || isManager) return allInvoices;
+    if (isBrokerAdmin) return allInvoices;
     if (isCustomer) {
       // Customers see only invoices to them
       return allInvoices.filter((inv) => inv.toCompany?.id === user.companyId);
@@ -68,7 +68,7 @@ export default function FinancialsPage() {
       );
     }
     return allInvoices;
-  }, [allInvoices, user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin]);
+  }, [allInvoices, user, isCustomer, isBrokerAdmin, isBradfordAdmin]);
 
   const loadAllData = async () => {
     try {

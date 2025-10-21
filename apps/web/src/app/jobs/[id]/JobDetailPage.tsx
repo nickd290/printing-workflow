@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { Navigation } from '@/components/navigation';
+import { FileManagementSection } from '@/components/jobs/FileManagementSection';
 
 // Types
 interface Job {
@@ -58,6 +60,8 @@ interface PurchaseOrder {
   targetCompany: { name: string };
   vendorAmount: number;
   status: string;
+  poNumber?: string;
+  referencePONumber?: string;
   createdAt: string;
 }
 
@@ -157,7 +161,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
   const handlePOUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || file.type !== 'application/pdf') {
-      alert('Please upload a PDF file');
+      toast.error('Please upload a PDF file');
       return;
     }
 
@@ -175,10 +179,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
       if (!response.ok) throw new Error('Upload failed');
       await loadJob();
-      alert('PO uploaded successfully!');
+      toast.success('PO uploaded successfully!');
     } catch (err) {
       console.error('Failed to upload PO:', err);
-      alert('Failed to upload PO.');
+      toast.error('Failed to upload PO');
     } finally {
       setUploadingPO(false);
     }
@@ -204,10 +208,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
         if (!response.ok) throw new Error('Upload failed');
       }
       await loadJob();
-      alert(`${files.length} file(s) uploaded successfully!`);
+      toast.success(`${files.length} file(s) uploaded successfully!`);
     } catch (err) {
       console.error('Failed to upload artwork:', err);
-      alert('Failed to upload artwork.');
+      toast.error('Failed to upload artwork');
     } finally {
       setUploadingArtwork(false);
       e.target.value = '';
@@ -216,7 +220,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
   const handleProofUpload = async () => {
     if (!proofFile) {
-      alert('Please select a proof file');
+      toast.error('Please select a proof file');
       return;
     }
 
@@ -240,10 +244,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
       setProofFile(null);
       setProofNotes('');
       setProofComments('');
-      alert('Proof uploaded! Email sent to customer.');
+      toast.success('Proof uploaded! Email sent to customer.');
     } catch (err) {
       console.error('Failed to upload proof:', err);
-      alert('Failed to upload proof.');
+      toast.error('Failed to upload proof');
     } finally {
       setUploadingProof(false);
     }
@@ -261,10 +265,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
       if (!response.ok) throw new Error('Approval failed');
       await loadJob();
-      alert('Proof approved!');
+      toast.success('Proof approved!');
     } catch (err) {
       console.error('Failed to approve proof:', err);
-      alert('Failed to approve proof.');
+      toast.error('Failed to approve proof');
     }
   };
 
@@ -281,10 +285,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
       if (!response.ok) throw new Error('Request failed');
       await loadJob();
-      alert('Revision request sent.');
+      toast.success('Revision request sent');
     } catch (err) {
       console.error('Failed to request changes:', err);
-      alert('Failed to request changes.');
+      toast.error('Failed to request changes');
     }
   };
 
@@ -301,10 +305,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
       if (!response.ok) throw new Error('Update failed');
       await loadJob();
-      alert('Delivery information updated!');
+      toast.success('Delivery information updated!');
     } catch (err) {
       console.error('Failed to update delivery:', err);
-      alert('Failed to update delivery information.');
+      toast.error('Failed to update delivery information');
     }
   };
 
@@ -333,11 +337,40 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
       setSampleRecipients([{ name: '', email: '', address: '' }]);
       setSampleCarrier('');
       setSampleTracking('');
-      alert('Sample shipment(s) added!');
+      toast.success('Sample shipment(s) added!');
     } catch (err) {
       console.error('Failed to add sample shipment:', err);
-      alert('Failed to add sample shipment.');
+      toast.error('Failed to add sample shipment');
     }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!confirm(`Change job status to ${newStatus.replace(/_/g, ' ')}?`)) return;
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update status');
+      await loadJob();
+      toast.success(`Job status updated to ${newStatus.replace(/_/g, ' ')}`);
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      toast.error('Failed to update job status');
+    }
+  };
+
+  const getNextStatus = (currentStatus: string): string | null => {
+    const statusFlow: Record<string, string> = {
+      'PENDING': 'IN_PRODUCTION',
+      'IN_PRODUCTION': 'READY_FOR_PROOF',
+      'READY_FOR_PROOF': 'PROOF_APPROVED',
+      'PROOF_APPROVED': 'COMPLETED',
+    };
+    return statusFlow[currentStatus] || null;
   };
 
   const downloadFile = async (fileId: string, fileName: string) => {
@@ -354,9 +387,10 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      toast.success('File downloaded successfully');
     } catch (err) {
       console.error('Failed to download file:', err);
-      alert('Failed to download file.');
+      toast.error('Failed to download file');
     }
   };
 
@@ -378,8 +412,12 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
     switch (status.toLowerCase()) {
       case 'pending':
         return 'bg-amber-500/10 text-amber-700 ring-amber-500/20';
-      case 'in_progress':
+      case 'in_production':
         return 'bg-blue-500/10 text-blue-700 ring-blue-500/20';
+      case 'ready_for_proof':
+        return 'bg-purple-500/10 text-purple-700 ring-purple-500/20';
+      case 'proof_approved':
+        return 'bg-indigo-500/10 text-indigo-700 ring-indigo-500/20';
       case 'completed':
         return 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/20';
       case 'cancelled':
@@ -457,6 +495,17 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ring-1 ring-inset ${getStatusColor(job.status)}`}>
                   {job.status.replace(/_/g, ' ')}
                 </span>
+                {isAdmin && getNextStatus(job.status) && job.status !== 'COMPLETED' && job.status !== 'CANCELLED' && (
+                  <button
+                    onClick={() => handleStatusChange(getNextStatus(job.status)!)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                    Move to {getNextStatus(job.status)!.replace(/_/g, ' ')}
+                  </button>
+                )}
               </div>
               <p className="text-slate-600">
                 {customerName} • {new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -468,6 +517,127 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
             </div>
           </div>
         </div>
+
+        {/* PO# Chain Visualization */}
+        {job.customerPONumber && (
+          <div className="mb-8 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-200 overflow-hidden">
+            <div className="border-b border-blue-200 bg-white/50 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Purchase Order Chain
+              </h2>
+            </div>
+
+            <div className="p-6">
+              <div className="flex flex-col md:flex-row gap-4 items-center">
+                {/* Customer PO */}
+                <div className="flex-1 w-full md:w-auto">
+                  <div className="bg-white rounded-lg border-2 border-blue-400 shadow-sm p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Customer PO#</span>
+                    </div>
+                    <p className="text-lg font-bold text-slate-900 mb-1">{job.customerPONumber}</p>
+                    <p className="text-xs text-slate-500">Master Reference</p>
+                  </div>
+                </div>
+
+                {/* Arrow */}
+                <div className="flex-shrink-0 text-blue-400 rotate-90 md:rotate-0">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+
+                {/* Impact → Bradford PO */}
+                <div className="flex-1 w-full md:w-auto">
+                  {job.purchaseOrders && job.purchaseOrders.find(po => po.originCompany.name.includes('Impact') && po.targetCompany.name.includes('Bradford')) ? (
+                    <div className="bg-white rounded-lg border-2 border-indigo-400 shadow-sm p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Impact → Bradford</span>
+                      </div>
+                      <p className="text-lg font-bold text-slate-900 mb-1">
+                        {job.purchaseOrders.find(po => po.originCompany.name.includes('Impact') && po.targetCompany.name.includes('Bradford'))?.poNumber || 'N/A'}
+                      </p>
+                      <p className="text-xs text-slate-500">Auto-generated</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white/50 rounded-lg border-2 border-dashed border-slate-300 p-4">
+                      <p className="text-sm text-slate-500 text-center">No Impact→Bradford PO yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Arrow */}
+                <div className="flex-shrink-0 text-blue-400 rotate-90 md:rotate-0">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+
+                {/* Bradford → JD PO */}
+                <div className="flex-1 w-full md:w-auto">
+                  {job.purchaseOrders && job.purchaseOrders.find(po => po.originCompany.name.includes('Bradford') && po.targetCompany.name.includes('JD')) ? (
+                    <div className="bg-white rounded-lg border-2 border-purple-400 shadow-sm p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Bradford → JD</span>
+                      </div>
+                      <p className="text-lg font-bold text-slate-900 mb-1">
+                        {job.purchaseOrders.find(po => po.originCompany.name.includes('Bradford') && po.targetCompany.name.includes('JD'))?.poNumber || 'N/A'}
+                      </p>
+                      <p className="text-xs text-slate-500">From uploaded PDF</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white/50 rounded-lg border-2 border-dashed border-slate-300 p-4">
+                      <p className="text-sm text-slate-500 text-center">Awaiting Bradford PO upload</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Reference note */}
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <p className="text-xs text-slate-600 text-center">
+                  All purchase orders reference Customer PO# <span className="font-semibold text-blue-700">{job.customerPONumber}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Customer File Upload Section */}
+        {!isAdmin && (
+          <div className="mb-8">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="border-b border-slate-200 px-6 py-4">
+                <h2 className="text-lg font-semibold text-slate-900">Job Files & Submission</h2>
+                <p className="text-sm text-slate-600 mt-1">Upload required files and submit your job for production</p>
+              </div>
+              <div className="p-6">
+                <FileManagementSection
+                  jobId={jobId}
+                  onFilesUpdated={loadJob}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modern Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

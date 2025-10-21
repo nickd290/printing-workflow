@@ -157,6 +157,19 @@ export async function generateInvoicePdf(invoiceId: string) {
 
   if (invoice.job) {
     page.drawText(`Job #: ${invoice.job.jobNo}`, { x: 50, y, size: 10, font });
+    y -= 15;
+
+    // Add customer PO# if available
+    if (invoice.job.customerPONumber) {
+      page.drawText(`Re: Your PO# ${invoice.job.customerPONumber}`, {
+        x: 50,
+        y,
+        size: 10,
+        font: boldFont,
+        color: rgb(0, 0, 0.6), // Slight blue tint
+      });
+      y -= 5; // Small extra spacing after PO#
+    }
   }
 
   y -= 40;
@@ -352,4 +365,135 @@ export async function triggerBradfordInvoiceChain(jobId: string) {
   );
 
   return bradfordInvoice;
+}
+
+/**
+ * Create invoice manually (not automatically from job)
+ * Allows internal users to create invoices directly
+ */
+export async function createInvoiceManual(data: {
+  jobId?: string;
+  toCompanyId: string;
+  fromCompanyId: string;
+  amount: number;
+  status?: InvoiceStatus;
+  dueAt?: Date;
+  issuedAt?: Date;
+}) {
+  const invoiceNo = await generateInvoiceNumber();
+
+  // If no due date provided, default to 30 days from now
+  const dueAt = data.dueAt || (() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date;
+  })();
+
+  const invoice = await prisma.invoice.create({
+    data: {
+      jobId: data.jobId,
+      toCompanyId: data.toCompanyId,
+      fromCompanyId: data.fromCompanyId,
+      invoiceNo,
+      amount: data.amount,
+      status: data.status || InvoiceStatus.DRAFT,
+      dueAt,
+      issuedAt: data.issuedAt,
+    },
+    include: {
+      job: {
+        include: {
+          customer: true,
+        },
+      },
+      toCompany: true,
+      fromCompany: true,
+      pdfFile: true,
+    },
+  });
+
+  return invoice;
+}
+
+/**
+ * Update invoice
+ * Allows editing amounts, status, dates
+ */
+export async function updateInvoice(
+  invoiceId: string,
+  data: {
+    amount?: number;
+    status?: InvoiceStatus;
+    dueAt?: Date;
+    issuedAt?: Date;
+    paidAt?: Date;
+  }
+) {
+  const invoice = await prisma.invoice.update({
+    where: { id: invoiceId },
+    data,
+    include: {
+      job: {
+        include: {
+          customer: true,
+        },
+      },
+      toCompany: true,
+      fromCompany: true,
+      pdfFile: true,
+    },
+  });
+
+  return invoice;
+}
+
+/**
+ * Upload PDF for invoice
+ * Allows replacing or adding a PDF file to an invoice
+ */
+export async function uploadInvoicePdf(
+  invoiceId: string,
+  pdfBuffer: Buffer,
+  fileName: string
+) {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: { job: true },
+  });
+
+  if (!invoice) {
+    throw new Error('Invoice not found');
+  }
+
+  // Create file record
+  const file = await createFile({
+    jobId: invoice.jobId || undefined,
+    kind: 'INVOICE',
+    file: pdfBuffer,
+    fileName,
+    mimeType: 'application/pdf',
+  });
+
+  // Update invoice with new PDF reference
+  const updatedInvoice = await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: {
+      pdfFileId: file.id,
+      // If status was DRAFT, move to SENT when PDF is uploaded
+      status: invoice.status === InvoiceStatus.DRAFT ? InvoiceStatus.SENT : invoice.status,
+      issuedAt: invoice.issuedAt || new Date(),
+    },
+    include: {
+      job: {
+        include: {
+          customer: true,
+        },
+      },
+      toCompany: true,
+      fromCompany: true,
+      pdfFile: true,
+    },
+  });
+
+  return updatedInvoice;
 }

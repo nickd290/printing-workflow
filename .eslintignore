@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+*.config.js
+*.config.ts
+packages/db/node_modules/.prisma/

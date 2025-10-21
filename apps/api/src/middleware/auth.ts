@@ -151,8 +151,8 @@ export async function requireCompanyAccess(
     return;
   }
 
-  // BROKER_ADMIN and MANAGER have access to all companies
-  if (['BROKER_ADMIN', 'MANAGER'].includes(request.user.role)) {
+  // BROKER_ADMIN has access to all companies
+  if (request.user.role === 'BROKER_ADMIN') {
     return;
   }
 

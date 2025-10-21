@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+.next/
+.turbo/
+out/
+
+# Coverage
+coverage/
+
+# Prisma generated files
+packages/db/node_modules/.prisma/
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.db-journal
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Uploads
+uploads/
+
+# Data
+data/

@@ -6,6 +6,9 @@ import { useState, useEffect } from 'react';
 import { jobsAPI, APIError } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
+import { GroupedJobsTable } from '@/components/GroupedJobsTable';
+import { PricingCalculator } from '@/components/PricingCalculator';
+import type { CustomJobPricing } from '@printing-workflow/shared';
 
 interface Job {
   id: string;
@@ -33,7 +36,11 @@ export default function JobsPage() {
   const { user, isCustomer, isBradfordAdmin } = useUser();
 
   // Internal team members see all margin data (Admin, Bradford/Steve, Impact Direct, JD)
-  const isInternalTeam = user && ['BROKER_ADMIN', 'BRADFORD_ADMIN', 'MANAGER'].includes(user.role);
+  const isInternalTeam = user && ['BROKER_ADMIN', 'BRADFORD_ADMIN'].includes(user.role);
+
+  // Bradford and Impact Direct users can see grouped view
+  const canSeeGroupedView = user && (isBradfordAdmin || user.role === 'BROKER_ADMIN');
+
   const [jobs, setJobs] = useState<Job[]>([]);
   const [draggedJob, setDraggedJob] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -41,9 +48,8 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedSize, setSelectedSize] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [pricingPreview, setPricingPreview] = useState<any>(null);
+  const [customPricing, setCustomPricing] = useState<CustomJobPricing | null>(null);
+  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'grouped'>('kanban');
 
   useEffect(() => {
     if (user) {
@@ -127,102 +133,51 @@ export default function JobsPage() {
     return customer?.name || 'Unknown';
   };
 
-  // Calculate pricing when size or quantity changes
-  useEffect(() => {
-    if (selectedSize && quantity) {
-      const qty = parseInt(quantity);
-      if (qty > 0) {
-        calculatePricing(selectedSize, qty);
-      }
-    } else {
-      setPricingPreview(null);
-    }
-  }, [selectedSize, quantity]);
-
-  const calculatePricing = async (sizeId: string, qty: number) => {
-    // Import pricing calculator from shared package
-    const PRODUCT_SIZES: any = {
-      'SM_7_25_16_375': {
-        name: '7 1/4 x 16 3/8',
-        customerCPM: 67.56,
-        bradfordTotalCPM: 60.425,
-        bradfordPrintMarginCPM: 7.135,
-        bradfordPaperMarginCPM: 3.0925,
-        jdTotalCPM: 34.74,
-        paperWeightPer1000: 22.9,
-      },
-      'SM_8_5_17_5': {
-        name: '8 1/2 x 17 1/2',
-        customerCPM: 81.00,
-        bradfordTotalCPM: 71.92,
-        bradfordPrintMarginCPM: 9.08,
-        bradfordPaperMarginCPM: 4.072,
-        jdTotalCPM: 38.41,
-        paperWeightPer1000: 30.16,
-      },
-      'SM_9_75_22_125': {
-        name: '9 3/4 x 22 1/8',
-        customerCPM: 106.91,
-        bradfordTotalCPM: 99.50,
-        bradfordPrintMarginCPM: 7.41,
-        bradfordPaperMarginCPM: 7.1485,
-        jdTotalCPM: 49.18,
-        paperWeightPer1000: 52.98,
-      },
-      'SM_9_75_26': {
-        name: '9 3/4 x 26',
-        customerCPM: 112.60,
-        bradfordTotalCPM: 105.19,
-        bradfordPrintMarginCPM: 7.41,
-        bradfordPaperMarginCPM: 11.961,
-        jdTotalCPM: 49.18,
-        paperWeightPer1000: 54.28,
-      },
-    };
-
-    const size = PRODUCT_SIZES[sizeId];
-    if (!size) return;
-
-    const quantityInThousands = qty / 1000;
-
-    setPricingPreview({
-      sizeName: size.name,
-      quantity: qty,
-      customerTotal: (size.customerCPM * quantityInThousands).toFixed(2),
-      bradfordTotal: (size.bradfordTotalCPM * quantityInThousands).toFixed(2),
-      bradfordPrintMargin: (size.bradfordPrintMarginCPM * quantityInThousands).toFixed(2),
-      bradfordPaperMargin: (size.bradfordPaperMarginCPM * quantityInThousands).toFixed(2),
-      jdTotal: (size.jdTotalCPM * quantityInThousands).toFixed(2),
-      paperWeight: (size.paperWeightPer1000 * quantityInThousands).toFixed(0),
-    });
-  };
 
   const handleCreateJob = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // Validate that pricing calculator has calculated pricing
+    if (!customPricing) {
+      toast.error('Please select a size and quantity to calculate pricing');
+      return;
+    }
+
+    // Show warning if pricing is below cost (loss scenario)
+    if (customPricing.isLoss) {
+      const confirmed = window.confirm(
+        `WARNING: This pricing is below cost and will result in a loss of $${customPricing.lossAmount.toFixed(2)}.\n\n` +
+        `This job will require manager approval before it can proceed.\n\n` +
+        `Do you want to create this job anyway?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     const formData = new FormData(e.currentTarget);
     const customerId = formData.get('customerId') as string;
     const description = formData.get('description') as string;
-    const sizeId = formData.get('sizeId') as string;
-    const qty = parseInt(formData.get('quantity') as string);
 
     try {
       await jobsAPI.createDirect({
         customerId,
-        sizeId,
-        quantity: qty,
+        sizeId: customPricing.sizeId,
+        quantity: customPricing.quantity,
         description,
+        customPrice: customPricing.isCustomPricing ? customPricing.customerTotal : undefined,
       });
 
+      toast.success('Job created successfully!');
       setShowNewJobModal(false);
-      setSelectedSize('');
-      setQuantity('');
-      setPricingPreview(null);
+      setCustomPricing(null);
       await loadJobs();
       setError(null);
     } catch (err) {
       console.error('Failed to create job:', err);
+      toast.error('Failed to create job. Please try again.');
       setError('Failed to create job. Please try again.');
     } finally {
       setSubmitting(false);
@@ -266,6 +221,40 @@ export default function JobsPage() {
             </p>
           </div>
           <div className="flex gap-3">
+            {canSeeGroupedView && (
+              <div className="flex bg-gray-100 rounded-md p-1">
+                <button
+                  onClick={() => setViewMode('kanban')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded ${
+                    viewMode === 'kanban'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Kanban
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded ${
+                    viewMode === 'table'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setViewMode('grouped')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded ${
+                    viewMode === 'grouped'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Grouped
+                </button>
+              </div>
+            )}
             <button
               onClick={handleExportCSV}
               className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium"
@@ -275,12 +264,24 @@ export default function JobsPage() {
               </svg>
               Export to CSV
             </button>
-            <button
-              onClick={() => setShowNewJobModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
-            >
-              + New Job
-            </button>
+            {isCustomer ? (
+              <Link
+                href="/jobs/create"
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Create Job
+              </Link>
+            ) : (
+              <button
+                onClick={() => setShowNewJobModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
+              >
+                + New Job
+              </button>
+            )}
           </div>
         </div>
 
@@ -304,7 +305,13 @@ export default function JobsPage() {
           </div>
         ) : (
           <>
+        {/* Grouped View */}
+        {viewMode === 'grouped' && (
+          <GroupedJobsTable jobs={jobs} isInternalTeam={!!isInternalTeam} />
+        )}
+
         {/* Kanban Board */}
+        {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {statusColumns.map((column) => {
             const columnJobs = jobs.filter(job => job.status === column.id);
@@ -365,8 +372,10 @@ export default function JobsPage() {
             );
           })}
         </div>
+        )}
 
         {/* All Jobs Table */}
+        {viewMode === 'table' && (
         <div className="mt-8 bg-white shadow rounded-lg">
           <div className="px-6 py-5 border-b border-gray-200">
             <h2 className="text-lg font-medium text-gray-900">All Jobs</h2>
@@ -429,6 +438,7 @@ export default function JobsPage() {
             </table>
           </div>
         </div>
+        )}
         </>
         )}
 
@@ -479,82 +489,11 @@ export default function JobsPage() {
                   />
                 </div>
 
-                {/* Size and Quantity */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Product Size *
-                    </label>
-                    <select
-                      name="sizeId"
-                      required
-                      value={selectedSize}
-                      onChange={(e) => setSelectedSize(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select size...</option>
-                      <option value="SM_7_25_16_375">7 1/4 x 16 3/8 (Self Mailer)</option>
-                      <option value="SM_8_5_17_5">8 1/2 x 17 1/2 (Self Mailer)</option>
-                      <option value="SM_9_75_22_125">9 3/4 x 22 1/8 (Self Mailer)</option>
-                      <option value="SM_9_75_26">9 3/4 x 26 (Self Mailer)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Quantity *
-                    </label>
-                    <input
-                      type="number"
-                      name="quantity"
-                      required
-                      min="1"
-                      step="1000"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                      placeholder="e.g., 50000"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">Typically in increments of 1,000</p>
-                  </div>
-                </div>
-
-                {/* Pricing Preview */}
-                {pricingPreview && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-3">Pricing Preview</h3>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-gray-600">Customer Total:</p>
-                        <p className="font-semibold text-gray-900">${pricingPreview.customerTotal}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Impact Direct Margin:</p>
-                        <p className="font-semibold text-green-700">${(parseFloat(pricingPreview.customerTotal) - parseFloat(pricingPreview.bradfordTotal)).toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Bradford Total:</p>
-                        <p className="font-semibold text-gray-900">${pricingPreview.bradfordTotal}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Bradford Print Margin:</p>
-                        <p className="font-semibold text-green-700">${pricingPreview.bradfordPrintMargin}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Bradford Paper Margin:</p>
-                        <p className="font-semibold text-green-700">${pricingPreview.bradfordPaperMargin}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">JD Total:</p>
-                        <p className="font-semibold text-gray-900">${pricingPreview.jdTotal}</p>
-                      </div>
-                      <div className="col-span-2 pt-2 border-t border-blue-200">
-                        <p className="text-gray-600">Paper Weight:</p>
-                        <p className="font-semibold text-gray-900">{pricingPreview.paperWeight} lbs (Coated Matte 7pt)</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {/* Pricing Calculator with Size, Quantity, and Custom Pricing */}
+                <PricingCalculator
+                  onPricingChange={setCustomPricing}
+                  initialQuantity={10000}
+                />
 
                 {/* Actions */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

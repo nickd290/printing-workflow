@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -15,13 +15,13 @@ enum Role {
   CUSTOMER
   BROKER_ADMIN
   BRADFORD_ADMIN
-  MANAGER
 }
 
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
   emailVerified DateTime?
+  password      String?   // Hashed password (bcrypt) - null for OAuth-only users
   name          String?
   role          Role      @default(CUSTOMER)
   companyId     String?
@@ -178,6 +178,10 @@ model Job {
 
   status     JobStatus @default(PENDING)
 
+  // Job details
+  title          String?
+  description    String?
+
   // Job specifications (from quote or direct order)
   specs      Json
 
@@ -215,11 +219,24 @@ model Job {
 
   // Production & Delivery
   deliveryDate   DateTime?
+  mailDate       DateTime?
+  inHomesDate    DateTime?
   packingSlipNotes String?
 
   // Customer PO tracking
   customerPONumber String?
   customerPOFile   String? // Path to uploaded PO file
+
+  // Approval workflow for custom pricing
+  requiresApproval Boolean  @default(false) // True if custom price is below cost
+  approvedBy       String?  // User ID who approved
+  approvedAt       DateTime? // When it was approved
+
+  // File requirements and production readiness
+  requiredArtworkCount  Int?      // Number of artwork files required (from AI or manual)
+  requiredDataFileCount Int?      // Number of data files required (from AI or manual)
+  isReadyForProduction  Boolean   @default(false) // Auto-calculated when all files uploaded
+  submittedForProductionAt DateTime? // When customer submitted job for production
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -266,8 +283,9 @@ model File {
   uploadedBy String? // User ID
   createdAt  DateTime @default(now())
 
-  proofs     Proof[]
-  invoices   Invoice[]
+  proofs           Proof[]
+  invoices         Invoice[]
+  purchaseOrders   PurchaseOrder[] @relation("PurchaseOrderPDF")
 
   @@index([jobId])
   @@index([kind])
@@ -352,8 +370,16 @@ model PurchaseOrder {
   vendorAmount    Decimal   // Amount to vendor
   marginAmount    Decimal   // Margin kept by origin company
 
+  // PO Number tracking
+  poNumber          String?   // This PO's number (Impact's PO# or Bradford's PO#)
+  referencePONumber String?   // Reference to parent/customer PO#
+
   // External reference (e.g., from Bradford's system)
   externalRef     String?  // e.g., estimateNumber, componentId
+
+  // Uploaded PO PDF (for Bradford → JD)
+  pdfFileId       String?
+  pdfFile         File?    @relation("PurchaseOrderPDF", fields: [pdfFileId], references: [id])
 
   status          POStatus @default(PENDING)
 
@@ -364,6 +390,8 @@ model PurchaseOrder {
   @@index([targetCompanyId])
   @@index([jobId])
   @@index([externalRef])
+  @@index([poNumber])
+  @@index([referencePONumber])
 }
 
 // ============================================================================
@@ -490,6 +518,8 @@ enum NotificationType {
   SHIPMENT_SCHEDULED
   INVOICE_SENT
   PO_CREATED
+  JOB_READY_FOR_PRODUCTION
+  JOB_SUBMITTED_CONFIRMATION
 }
 
 model Notification {
@@ -573,4 +603,30 @@ model PaperTransaction {
   @@index([inventoryId])
   @@index([jobId])
   @@index([createdAt])
+}
+
+// ============================================================================
+// Pricing Rules
+// ============================================================================
+
+model PricingRule {
+  id              String   @id @default(cuid())
+  sizeName        String   @unique  // "26 x 9.75", "6 x 11", etc.
+  baseCPM         Decimal  // Standard rate per thousand
+  printCPM        Decimal  // What Bradford pays JD for printing per thousand
+
+  // Paper specifications
+  paperWeightPer1000  Decimal?  // Paper weight in lbs per thousand pieces
+  paperCostPerLb      Decimal?  // Cost per pound of paper
+  paperCPM            Decimal?  // Bradford's paper COST per thousand
+  paperChargedCPM     Decimal?  // What Bradford CHARGES for paper per thousand (with markup)
+  rollSize            Int?      // Roll size in inches (15, 18, or 20)
+
+  isActive        Boolean  @default(true)
+  notes           String?  // Optional notes about this pricing
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sizeName])
+  @@index([isActive])
 }

@@ -120,6 +120,7 @@ export interface CreateDirectJobBody {
   quantity: number;
   description?: string;
   specs?: Record<string, any>;
+  customPrice?: number; // Custom customer price (if different from standard pricing)
 }
 
 export const jobsAPI = {
@@ -240,12 +241,48 @@ export interface CreatePurchaseOrderBody {
   externalRef?: string;
 }
 
+export interface UpdatePurchaseOrderBody {
+  originalAmount?: number;
+  vendorAmount?: number;
+  marginAmount?: number;
+  status?: string;
+  externalRef?: string;
+}
+
 export const purchaseOrdersAPI = {
   create: async (data: CreatePurchaseOrderBody) => {
     const response = await fetch(`${API_URL}/api/purchase-orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (poId: string, data: UpdatePurchaseOrderBody) => {
+    const response = await fetch(`${API_URL}/api/purchase-orders/${poId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  uploadPdf: async (poId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/api/purchase-orders/${poId}/upload-pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  generatePdf: async (poId: string) => {
+    const response = await fetch(`${API_URL}/api/purchase-orders/${poId}/generate-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
     });
     return handleResponse(response);
   },
@@ -344,7 +381,62 @@ export const filesAPI = {
 // Invoices API
 // ============================================================================
 
+export interface CreateInvoiceBody {
+  jobId?: string;
+  fromCompanyId: string;
+  toCompanyId: string;
+  amount: number;
+  status?: string;
+  dueAt?: string;
+  issuedAt?: string;
+}
+
+export interface UpdateInvoiceBody {
+  amount?: number;
+  status?: string;
+  dueAt?: string;
+  issuedAt?: string;
+  paidAt?: string;
+}
+
 export const invoicesAPI = {
+  create: async (data: CreateInvoiceBody) => {
+    const response = await fetch(`${API_URL}/api/invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (invoiceId: string, data: UpdateInvoiceBody) => {
+    const response = await fetch(`${API_URL}/api/invoices/${invoiceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  uploadPdf: async (invoiceId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/api/invoices/${invoiceId}/upload-pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  generatePdf: async (invoiceId: string) => {
+    const response = await fetch(`${API_URL}/api/invoices/${invoiceId}/generate-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse(response);
+  },
+
   generate: async (jobId: string) => {
     const response = await fetch(`${API_URL}/api/invoices/${jobId}/generate`, {
       method: 'POST',
@@ -395,6 +487,35 @@ export const shipmentsAPI = {
 // Revenue API
 // ============================================================================
 
+export interface POFlowMetrics {
+  stages: {
+    customerToImpact: {
+      count: number;
+      totalAmount: number;
+      byStatus: Record<string, number>;
+    };
+    impactToBradford: {
+      count: number;
+      totalAmount: number;
+      marginAmount: number;
+      byStatus: Record<string, number>;
+    };
+    bradfordToJD: {
+      count: number;
+      totalAmount: number;
+      marginAmount: number;
+      byStatus: Record<string, number>;
+    };
+  };
+  summary: {
+    totalPOs: number;
+    totalRevenue: number;
+    totalCosts: number;
+    impactMargin: number;
+    bradfordMargin: number;
+  };
+}
+
 export const revenueAPI = {
   getMetrics: async () => {
     const response = await fetch(`${API_URL}/api/revenue/metrics`);
@@ -404,6 +525,11 @@ export const revenueAPI = {
   getBradfordMetrics: async () => {
     const response = await fetch(`${API_URL}/api/revenue/bradford`);
     return handleResponse<any>(response);
+  },
+
+  getPOFlowMetrics: async () => {
+    const response = await fetch(`${API_URL}/api/revenue/po-flow`);
+    return handleResponse<POFlowMetrics>(response);
   },
 };
 
@@ -548,6 +674,62 @@ export const paperInventoryAPI = {
       body: JSON.stringify(settings),
     });
     return handleResponse<{ success: boolean; inventory: PaperInventory }>(response);
+  },
+};
+
+// ============================================================================
+// Admin API
+// ============================================================================
+
+export interface MissingPdfsResponse {
+  invoices: Array<{
+    id: string;
+    invoiceNo: string;
+    amount: number;
+    status: string;
+    jobNo?: string;
+    toCompany: string;
+    fromCompany: string;
+    createdAt: Date;
+  }>;
+  purchaseOrders: Array<{
+    id: string;
+    poNumber: string;
+    vendorAmount: number;
+    status: string;
+    jobNo?: string;
+    originCompany: string;
+    targetCompany: string;
+    createdAt: Date;
+  }>;
+  summary: {
+    totalInvoicesWithoutPdfs: number;
+    totalPurchaseOrdersWithoutPdfs: number;
+  };
+}
+
+export interface GenerateMissingPdfsResponse {
+  success: boolean;
+  message: string;
+  results: {
+    invoices: { success: number; failed: number; errors: string[] };
+    purchaseOrders: { success: number; failed: number; errors: string[] };
+  };
+}
+
+export const adminAPI = {
+  getMissingPdfs: async () => {
+    const response = await fetch(`${API_URL}/api/admin/pdfs/missing`);
+    return handleResponse<MissingPdfsResponse>(response);
+  },
+
+  generateMissingPdfs: async (type?: 'invoices' | 'purchase-orders' | 'all') => {
+    const response = await fetch(`${API_URL}/api/admin/pdfs/generate-missing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: type || 'all' }),
+    });
+    return handleResponse<GenerateMissingPdfsResponse>(response);
   },
 };
 

@@ -15,15 +15,34 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/jobs/from-quote/:quoteId - Create job from quote
   fastify.post('/from-quote/:quoteId', async (request, reply) => {
     const { quoteId } = request.params as { quoteId: string };
-    const job = await createJobFromQuote(quoteId);
+    const { customerPONumber } = request.body as { customerPONumber: string };
+
+    if (!customerPONumber || customerPONumber.trim() === '') {
+      return reply.status(400).send({ error: 'Customer PO number is required' });
+    }
+
+    const job = await createJobFromQuote(quoteId, customerPONumber);
     return job;
   });
 
   // POST /api/jobs/direct - Create direct job (no quote)
   fastify.post('/direct', async (request, reply) => {
-    const body = createJobSchema.parse(request.body);
-    const job = await createDirectJob(body);
-    return job;
+    try {
+      const body = createJobSchema.parse(request.body);
+
+      // Validate customerPONumber is provided
+      if (!body.customerPONumber || body.customerPONumber.trim() === '') {
+        return reply.status(400).send({ error: 'Customer PO number is required' });
+      }
+
+      const job = await createDirectJob(body);
+      return job;
+    } catch (error: any) {
+      return reply.status(400).send({
+        error: error.message || 'Failed to create job',
+        details: error.issues || undefined,
+      });
+    }
   });
 
   // POST /api/jobs/from-pdf - Parse PO file (PDF or text) and create job
@@ -82,21 +101,34 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
         rawPOText: parsed.rawText?.substring(0, 1000) || undefined,
       };
 
-      // Create job
+      // Validate customer PO number was extracted
+      if (!parsed.poNumber || parsed.poNumber.trim() === '') {
+        return reply.status(400).send({
+          error: 'Could not extract customer PO number from PDF. Please provide it manually.',
+          parsed: {
+            description: parsed.description || null,
+            rawTextPreview: parsed.rawText?.substring(0, 500) || null,
+          },
+        });
+      }
+
+      // Create job with extracted customer PO number
       console.log('📝 Creating job with specs:', JSON.stringify(specs, null, 2));
       const job = await createDirectJob({
         customerId,
+        sizeId: 'SM_7_25_16_375', // Default size - should be extracted or provided
+        quantity: parsed.quantity || 1000, // Default quantity
+        customerPONumber: parsed.poNumber,
         specs,
-        customerTotal: parsed.total || 0,
+        description: parsed.description,
       });
 
-      // Update job with PO number and delivery date if available
-      if (parsed.poNumber || parsed.deliveryDate) {
+      // Update job with delivery date if available
+      if (parsed.deliveryDate) {
         const { prisma } = await import('@printing-workflow/db');
         await prisma.job.update({
           where: { id: job.id },
           data: {
-            customerPONumber: parsed.poNumber || undefined,
             deliveryDate: parsed.deliveryDate ? new Date(parsed.deliveryDate) : undefined,
           },
         });
@@ -163,6 +195,77 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     return job;
+  });
+
+  // GET /api/jobs/grouped - List jobs grouped by customer company
+  fastify.get('/grouped', async (request, reply) => {
+    const { prisma } = await import('@printing-workflow/db');
+
+    // Get all jobs with their customer company
+    const jobs = await prisma.job.findMany({
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        jobNo: 'asc',
+      },
+    });
+
+    // Group jobs by customer
+    const customerMap = new Map<string, {
+      id: string;
+      name: string;
+      type: string;
+      email: string | null;
+      jobs: any[];
+      jobCount: number;
+      totalRevenue: number;
+    }>();
+
+    for (const job of jobs) {
+      const customerId = job.customer.id;
+
+      if (!customerMap.has(customerId)) {
+        customerMap.set(customerId, {
+          id: job.customer.id,
+          name: job.customer.name,
+          type: job.customer.type,
+          email: job.customer.email,
+          jobs: [],
+          jobCount: 0,
+          totalRevenue: 0,
+        });
+      }
+
+      const customer = customerMap.get(customerId)!;
+      customer.jobs.push(job);
+      customer.jobCount++;
+      customer.totalRevenue += Number(job.customerTotal || 0);
+    }
+
+    // Convert map to array and sort by name
+    const customers = Array.from(customerMap.values())
+      .filter(c => c.type === 'customer') // Only include actual customers
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      customers: customers.map(c => ({
+        ...c,
+        totalRevenue: c.totalRevenue.toFixed(2),
+      })),
+      summary: {
+        totalCustomers: customers.length,
+        totalJobs: customers.reduce((sum, c) => sum + c.jobCount, 0),
+        totalRevenue: customers.reduce((sum, c) => sum + c.totalRevenue, 0).toFixed(2),
+      },
+    };
   });
 
   // GET /api/jobs - List jobs with role-based filtering

@@ -197,6 +197,8 @@ export interface ParsedCustomerPO {
   poNumber?: string;
   deliveryDate?: string;
   samples?: string;
+  requiredArtworkCount?: number;  // Number of artwork files customer should upload
+  requiredDataFileCount?: number; // Number of data files customer should upload
   rawText: string;
 }
 
@@ -384,12 +386,16 @@ Extract the following information from the PO text:
 - poNumber: Purchase order number
 - deliveryDate: Delivery date in YYYY-MM-DD format
 - samples: Sample information or quantity
+- requiredArtworkCount: Number of artwork files needed (e.g., 1 for simple jobs, 2+ for front/back or multi-piece jobs). Default to 1 if not specified.
+- requiredDataFileCount: Number of data/mailing list files needed (e.g., 1 for direct mail, 0 for non-personalized). Default to 0 if not specified or not a data-driven job.
 
 Important:
 - If any field cannot be found, set it to null
 - For colors, use the standard X/Y notation (front/back)
 - For finishing, list all processes (e.g., "Cut, Fold, Glue")
 - For dates, convert to YYYY-MM-DD format
+- For file counts, analyze the job complexity: simple jobs need 1 artwork, complex/multi-piece need more
+- Data files are only needed for personalized/variable data jobs (direct mail, etc.)
 - Return ONLY the JSON object with these exact field names`;
 
     const schema = {
@@ -405,8 +411,10 @@ Important:
         poNumber: { type: ['string', 'null'] },
         deliveryDate: { type: ['string', 'null'] },
         samples: { type: ['string', 'null'] },
+        requiredArtworkCount: { type: ['number', 'null'] },
+        requiredDataFileCount: { type: ['number', 'null'] },
       },
-      required: ['description', 'paper', 'flatSize', 'foldedSize', 'colors', 'finishing', 'total', 'poNumber', 'deliveryDate', 'samples'],
+      required: ['description', 'paper', 'flatSize', 'foldedSize', 'colors', 'finishing', 'total', 'poNumber', 'deliveryDate', 'samples', 'requiredArtworkCount', 'requiredDataFileCount'],
       additionalProperties: false,
     };
 
@@ -421,6 +429,8 @@ Important:
       poNumber: string | null;
       deliveryDate: string | null;
       samples: string | null;
+      requiredArtworkCount: number | null;
+      requiredDataFileCount: number | null;
     }>(text, prompt, schema);
 
     console.log('🤖 OpenAI returned:', JSON.stringify(parsed, null, 2));
@@ -436,6 +446,8 @@ Important:
       poNumber: parsed.poNumber || undefined,
       deliveryDate: parsed.deliveryDate || undefined,
       samples: parsed.samples || undefined,
+      requiredArtworkCount: parsed.requiredArtworkCount ?? 1, // Default to 1 if not specified
+      requiredDataFileCount: parsed.requiredDataFileCount ?? 0, // Default to 0 if not specified
       rawText: text,
     };
 

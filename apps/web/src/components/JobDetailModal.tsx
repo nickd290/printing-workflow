@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { jobsAPI, filesAPI, proofsAPI, invoicesAPI } from '@/lib/api-client';
+import { jobsAPI, filesAPI, proofsAPI, invoicesAPI, purchaseOrdersAPI } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
+import { PricingBreakdown } from '@/components/PricingBreakdown';
 
 interface JobDetailModalProps {
   jobId: string;
@@ -11,7 +12,7 @@ interface JobDetailModalProps {
 }
 
 export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
-  const { user, isCustomer, isBrokerAdmin, isManager, isBradfordAdmin } = useUser();
+  const { user, isCustomer, isBrokerAdmin, isBradfordAdmin } = useUser();
   const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'pos' | 'shipment'>('overview');
   const [job, setJob] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -19,12 +20,49 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofComments, setProofComments] = useState('');
 
+  // Edit mode states
+  const [isEditingJob, setIsEditingJob] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    deliveryDate: '',
+    packingSlipNotes: '',
+    customerPONumber: '',
+    status: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  // PO Edit state
+  const [editingPOId, setEditingPOId] = useState<string | null>(null);
+  const [editPOData, setEditPOData] = useState({
+    vendorAmount: '',
+    status: '',
+  });
+
+  // Invoice Edit state
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [editInvoiceData, setEditInvoiceData] = useState({
+    amount: '',
+    status: '',
+  });
+
+  // Create PO state
+  const [showCreatePO, setShowCreatePO] = useState(false);
+  const [newPOData, setNewPOData] = useState({
+    originCompanyId: 'impact-direct',
+    targetCompanyId: 'bradford',
+    vendorAmount: '',
+  });
+
+  // PDF generation state
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+
   // Role-based permissions
-  const canUploadProof = isBrokerAdmin || isManager || isBradfordAdmin;
-  const canApproveProof = isCustomer || isBrokerAdmin || isManager;
-  const canGenerateInvoice = isBrokerAdmin || isManager;
-  const canSeeAllPOs = isBrokerAdmin || isManager;
+  const canUploadProof = isBrokerAdmin || isBradfordAdmin;
+  const canApproveProof = isCustomer || isBrokerAdmin;
+  const canGenerateInvoice = isBrokerAdmin;
+  const canSeeAllPOs = isBrokerAdmin;
   const canSeeBradfordPOs = isBradfordAdmin;
+  const canEditJob = isBrokerAdmin;
+  const canCreatePO = isBrokerAdmin || isBradfordAdmin; // Both can create POs
 
   useEffect(() => {
     loadJob();
@@ -34,11 +72,167 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     try {
       setLoading(true);
       const data = await jobsAPI.getById(jobId);
-      setJob(data.job || data);
+      const jobData = data.job || data;
+      setJob(jobData);
+
+      // Initialize edit form data
+      setEditFormData({
+        deliveryDate: jobData.deliveryDate ? new Date(jobData.deliveryDate).toISOString().split('T')[0] : '',
+        packingSlipNotes: jobData.packingSlipNotes || '',
+        customerPONumber: jobData.customerPONumber || '',
+        status: jobData.status || '',
+      });
     } catch (err) {
       console.error('Failed to load job:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveJob = async () => {
+    if (!job) return;
+    setSaving(true);
+
+    try {
+      // Update job details
+      await fetch(`http://localhost:3001/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deliveryDate: editFormData.deliveryDate || undefined,
+          packingSlipNotes: editFormData.packingSlipNotes || undefined,
+          customerPONumber: editFormData.customerPONumber || undefined,
+        }),
+      });
+
+      // Update status if changed
+      if (editFormData.status !== job.status) {
+        await fetch(`http://localhost:3001/api/jobs/${job.id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: editFormData.status }),
+        });
+      }
+
+      toast.success('Job updated successfully!');
+      setIsEditingJob(false);
+      await loadJob();
+    } catch (err) {
+      console.error('Failed to save job:', err);
+      toast.error('Failed to save job changes');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingJob(false);
+    // Reset form to current job data
+    if (job) {
+      setEditFormData({
+        deliveryDate: job.deliveryDate ? new Date(job.deliveryDate).toISOString().split('T')[0] : '',
+        packingSlipNotes: job.packingSlipNotes || '',
+        customerPONumber: job.customerPONumber || '',
+        status: job.status || '',
+      });
+    }
+  };
+
+  const handleEditPO = (po: any) => {
+    setEditingPOId(po.id);
+    setEditPOData({
+      vendorAmount: po.vendorAmount.toString(),
+      status: po.status,
+    });
+  };
+
+  const handleSavePO = async (poId: string) => {
+    setSaving(true);
+    try {
+      await fetch(`http://localhost:3001/api/purchase-orders/${poId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorAmount: parseFloat(editPOData.vendorAmount),
+          status: editPOData.status,
+        }),
+      });
+      toast.success('Purchase order updated!');
+      setEditingPOId(null);
+      await loadJob();
+    } catch (err) {
+      console.error('Failed to update PO:', err);
+      toast.error('Failed to update purchase order');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditInvoice = (invoice: any) => {
+    setEditingInvoiceId(invoice.id);
+    setEditInvoiceData({
+      amount: invoice.amount.toString(),
+      status: invoice.status,
+    });
+  };
+
+  const handleSaveInvoice = async (invoiceId: string) => {
+    setSaving(true);
+    try {
+      await fetch(`http://localhost:3001/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(editInvoiceData.amount),
+          status: editInvoiceData.status,
+        }),
+      });
+      toast.success('Invoice updated!');
+      setEditingInvoiceId(null);
+      await loadJob();
+    } catch (err) {
+      console.error('Failed to update invoice:', err);
+      toast.error('Failed to update invoice');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreatePO = async () => {
+    if (!newPOData.vendorAmount || !job) return;
+
+    setSaving(true);
+    try {
+      const vendorAmount = parseFloat(newPOData.vendorAmount);
+      const originalAmount = Number(job.customerTotal);
+      const marginAmount = originalAmount - vendorAmount;
+
+      await fetch('http://localhost:3001/api/purchase-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originCompanyId: newPOData.originCompanyId,
+          targetCompanyId: newPOData.targetCompanyId,
+          jobId: job.id,
+          originalAmount,
+          vendorAmount,
+          marginAmount,
+        }),
+      });
+
+      toast.success('Purchase order created!');
+      setShowCreatePO(false);
+      setNewPOData({
+        originCompanyId: 'impact-direct',
+        targetCompanyId: 'bradford',
+        vendorAmount: '',
+      });
+      await loadJob();
+    } catch (err) {
+      console.error('Failed to create PO:', err);
+      toast.error('Failed to create purchase order');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -79,6 +273,56 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     } catch (err) {
       console.error('Failed to generate invoice:', err);
       toast.error('Failed to generate invoice');
+    }
+  };
+
+  const handleGenerateInvoicePdf = async (invoiceId: string) => {
+    try {
+      setGeneratingPdfId(invoiceId);
+      toast.loading('Generating invoice PDF...', { id: 'gen-pdf' });
+      await invoicesAPI.generatePdf(invoiceId);
+      await loadJob();
+      toast.success('Invoice PDF generated successfully!', { id: 'gen-pdf' });
+    } catch (err) {
+      console.error('Failed to generate invoice PDF:', err);
+      toast.error('Failed to generate invoice PDF', { id: 'gen-pdf' });
+    } finally {
+      setGeneratingPdfId(null);
+    }
+  };
+
+  const handleGeneratePOPdf = async (poId: string) => {
+    try {
+      setGeneratingPdfId(poId);
+      toast.loading('Generating PO PDF...', { id: 'gen-pdf' });
+      await purchaseOrdersAPI.generatePdf(poId);
+      await loadJob();
+      toast.success('PO PDF generated successfully!', { id: 'gen-pdf' });
+    } catch (err) {
+      console.error('Failed to generate PO PDF:', err);
+      toast.error('Failed to generate PO PDF', { id: 'gen-pdf' });
+    } finally {
+      setGeneratingPdfId(null);
+    }
+  };
+
+  const handleDownloadPdf = async (fileId: string, fileName: string) => {
+    try {
+      toast.loading('Preparing download...', { id: 'download-pdf' });
+      const { url } = await filesAPI.getDownloadUrl(fileId);
+
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Download started!', { id: 'download-pdf' });
+    } catch (err) {
+      console.error('Failed to download PDF:', err);
+      toast.error('Failed to download PDF', { id: 'download-pdf' });
     }
   };
 
@@ -156,118 +400,290 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <Toaster position="top-right" />
-      <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg w-full max-w-7xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div className="px-8 py-6 border-b-2 border-gray-200 flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{job.jobNo}</h2>
-            <p className="text-sm text-gray-600">{customerName} • ${Number(job.customerTotal).toLocaleString()}</p>
+            <h2 className="text-3xl font-bold text-gray-900 mb-1">{job.jobNo}</h2>
+            <p className="text-base text-gray-600">{customerName} • <span className="font-semibold text-green-600">${Number(job.customerTotal).toLocaleString()}</span></p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-3">
+            {canEditJob && activeTab === 'overview' && !isEditingJob && (
+              <button
+                onClick={() => setIsEditingJob(true)}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Job
+              </button>
+            )}
+            {isEditingJob && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveJob}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 px-6 bg-gray-50">
-          <div className="flex gap-8">
+        <div className="border-b-2 border-gray-200 px-8 bg-white">
+          <div className="flex gap-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`py-3 border-b-2 font-medium text-sm transition-colors ${
+                className={`px-6 py-4 font-semibold text-base transition-all relative ${
                   activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
                 {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full"></div>
+                )}
               </button>
             ))}
           </div>
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-8">
           {/* Overview Tab */}
           {activeTab === 'overview' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Job Number</label>
-                  <p className="text-lg font-semibold text-gray-900">{job.jobNo}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Customer</label>
-                  <p className="text-lg font-semibold text-gray-900">{customerName}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Status</label>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                    {job.status.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Order Date</label>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {new Date(job.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Total</label>
-                  <p className="text-lg font-semibold text-gray-900">${Number(job.customerTotal).toLocaleString()}</p>
-                </div>
-                {job.deliveryDate && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Due Date</label>
-                    <p className="text-lg font-semibold text-gray-900">
-                      {new Date(job.deliveryDate).toLocaleDateString()}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Specs */}
-              {job.specs && Object.keys(job.specs).length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Specifications</h3>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    {Object.entries(job.specs).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <span className="text-sm text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                        <span className="text-sm font-medium text-gray-900">{String(value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {job.packingSlipNotes && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Special Instructions</h3>
-                  <p className="text-sm text-gray-700 bg-yellow-50 p-4 rounded-lg">{job.packingSlipNotes}</p>
-                </div>
-              )}
-
-              {/* Timeline */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h3>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+            <div className="space-y-8">
+              {!isEditingJob ? (
+                <>
+                  {/* View Mode */}
+                  <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Job Created</p>
-                      <p className="text-xs text-gray-500">{new Date(job.createdAt).toLocaleString()}</p>
+                      <label className="text-sm font-medium text-gray-500">Job Number</label>
+                      <p className="text-lg font-semibold text-gray-900">{job.jobNo}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Customer</label>
+                      <p className="text-lg font-semibold text-gray-900">{customerName}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Status</label>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                        {job.status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Customer PO Number</label>
+                      <p className="text-lg font-semibold text-gray-900">{job.customerPONumber || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Order Date</label>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {new Date(job.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Total</label>
+                      <p className="text-lg font-semibold text-gray-900">${Number(job.customerTotal).toLocaleString()}</p>
+                    </div>
+                    {job.deliveryDate && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Delivery Date</label>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {new Date(job.deliveryDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Specs */}
+                  {job.specs && Object.keys(job.specs).length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+                        Specifications
+                      </h3>
+                      <div className="bg-gray-50 rounded-lg p-5 space-y-3 border border-gray-200">
+                        {Object.entries(job.specs).map(([key, value]) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-sm text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span className="text-sm font-medium text-gray-900">{String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pricing Breakdown */}
+                  <PricingBreakdown job={job} userRole={user?.role} />
+
+                  {/* Notes */}
+                  {job.packingSlipNotes && (
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                        <div className="w-1 h-6 bg-yellow-500 rounded-full"></div>
+                        Special Instructions
+                      </h3>
+                      <p className="text-sm text-gray-700 bg-yellow-50 p-5 rounded-lg border border-yellow-200">{job.packingSlipNotes}</p>
+                    </div>
+                  )}
+
+                  {/* Timeline */}
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <div className="w-1 h-6 bg-green-600 rounded-full"></div>
+                      Timeline
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Job Created</p>
+                          <p className="text-xs text-gray-500">{new Date(job.createdAt).toLocaleString()}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                </>
+              ) : (
+                <>
+                  {/* Edit Mode */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-blue-900">Edit Mode</p>
+                        <p className="text-sm text-blue-700 mt-1">Update job details below. Click "Save Changes" when done.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Read-only fields */}
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Job Number</label>
+                      <p className="text-lg font-semibold text-gray-900">{job.jobNo}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Customer</label>
+                      <p className="text-lg font-semibold text-gray-900">{customerName}</p>
+                    </div>
+
+                    {/* Editable: Status */}
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Status *</label>
+                      <select
+                        value={editFormData.status}
+                        onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="IN_PRODUCTION">IN PRODUCTION</option>
+                        <option value="READY_FOR_PROOF">READY FOR PROOF</option>
+                        <option value="PROOF_APPROVED">PROOF APPROVED</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                        <option value="CANCELLED">CANCELLED</option>
+                      </select>
+                    </div>
+
+                    {/* Editable: Customer PO Number */}
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Customer PO Number</label>
+                      <input
+                        type="text"
+                        value={editFormData.customerPONumber}
+                        onChange={(e) => setEditFormData({ ...editFormData, customerPONumber: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="PO-12345"
+                      />
+                    </div>
+
+                    {/* Read-only */}
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Order Date</label>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {new Date(job.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    {/* Editable: Delivery Date */}
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Delivery Date</label>
+                      <input
+                        type="date"
+                        value={editFormData.deliveryDate}
+                        onChange={(e) => setEditFormData({ ...editFormData, deliveryDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Editable: Packing Slip Notes */}
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Special Instructions / Notes</label>
+                    <textarea
+                      value={editFormData.packingSlipNotes}
+                      onChange={(e) => setEditFormData({ ...editFormData, packingSlipNotes: e.target.value })}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Add any special instructions or notes for this job..."
+                    />
+                  </div>
+
+                  {/* Specs - Read-only in edit mode */}
+                  {job.specs && Object.keys(job.specs).length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Specifications (Read-Only)</h3>
+                      <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                        {Object.entries(job.specs).map(([key, value]) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-sm text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span className="text-sm font-medium text-gray-900">{String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -446,7 +862,113 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
           {/* Purchase Orders Tab - Hidden for customers */}
           {!isCustomer && activeTab === 'pos' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Purchase Orders</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Purchase Orders</h3>
+                {canCreatePO && !showCreatePO && (
+                  <button
+                    onClick={() => {
+                      // Set default values based on role
+                      if (isBradfordAdmin) {
+                        setNewPOData({
+                          originCompanyId: 'bradford',
+                          targetCompanyId: 'jd-graphic',
+                          vendorAmount: '',
+                        });
+                      } else {
+                        setNewPOData({
+                          originCompanyId: 'impact-direct',
+                          targetCompanyId: 'bradford',
+                          vendorAmount: '',
+                        });
+                      }
+                      setShowCreatePO(true);
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create Purchase Order
+                  </button>
+                )}
+              </div>
+
+              {/* Create PO Form */}
+              {showCreatePO && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                  <h4 className="text-md font-semibold text-gray-900 mb-4">New Purchase Order</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">From (Origin Company)</label>
+                      <select
+                        value={newPOData.originCompanyId}
+                        onChange={(e) => setNewPOData({ ...newPOData, originCompanyId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="impact-direct">Impact Direct</option>
+                        <option value="bradford">Bradford</option>
+                        <option value="jd-graphic">JD Graphic</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">To (Target Company)</label>
+                      <select
+                        value={newPOData.targetCompanyId}
+                        onChange={(e) => setNewPOData({ ...newPOData, targetCompanyId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      >
+                        <option value="bradford">Bradford</option>
+                        <option value="jd-graphic">JD Graphic</option>
+                        <option value="impact-direct">Impact Direct</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Vendor Amount *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={newPOData.vendorAmount}
+                        onChange={(e) => setNewPOData({ ...newPOData, vendorAmount: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="0.00"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Job Total: ${Number(job.customerTotal).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Margin (Auto-calculated)</label>
+                      <p className="text-lg font-semibold text-green-600 mt-2">
+                        ${newPOData.vendorAmount ? (Number(job.customerTotal) - parseFloat(newPOData.vendorAmount)).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={handleCreatePO}
+                      disabled={saving || !newPOData.vendorAmount}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {saving ? 'Creating...' : 'Create PO'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCreatePO(false);
+                        setNewPOData({
+                          originCompanyId: 'impact-direct',
+                          targetCompanyId: 'bradford',
+                          vendorAmount: '',
+                        });
+                      }}
+                      disabled={saving}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {job.purchaseOrders && job.purchaseOrders.length > 0 ? (
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -456,6 +978,8 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Margin</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">PDF</th>
+                      {canCreatePO && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -464,26 +988,116 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                       const originalAmount = Number(po.originalAmount || job.customerTotal);
                       const margin = originalAmount - vendorAmount;
                       const marginPercent = ((margin / originalAmount) * 100).toFixed(1);
+                      const isEditing = editingPOId === po.id;
 
                       return (
-                        <tr key={po.id}>
+                        <tr key={po.id} className={isEditing ? 'bg-blue-50' : ''}>
                           <td className="px-4 py-4 text-sm text-gray-900">
                             {po.originCompany.name} → {po.targetCompany.name}
                           </td>
                           <td className="px-4 py-4 text-sm font-medium text-gray-900">
-                            ${vendorAmount.toLocaleString()}
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editPOData.vendorAmount}
+                                onChange={(e) => setEditPOData({ ...editPOData, vendorAmount: e.target.value })}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              `$${vendorAmount.toLocaleString()}`
+                            )}
                           </td>
                           <td className="px-4 py-4 text-sm text-green-600 font-medium">
                             ${margin.toLocaleString()} ({marginPercent}%)
                           </td>
                           <td className="px-4 py-4">
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {po.status}
-                            </span>
+                            {isEditing ? (
+                              <select
+                                value={editPOData.status}
+                                onChange={(e) => setEditPOData({ ...editPOData, status: e.target.value })}
+                                className="px-2 py-1 border border-gray-300 rounded text-xs"
+                              >
+                                <option value="PENDING">PENDING</option>
+                                <option value="ACCEPTED">ACCEPTED</option>
+                                <option value="IN_PROGRESS">IN PROGRESS</option>
+                                <option value="COMPLETED">COMPLETED</option>
+                                <option value="CANCELLED">CANCELLED</option>
+                              </select>
+                            ) : (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {po.status}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-500">
                             {new Date(po.createdAt).toLocaleDateString()}
                           </td>
+                          <td className="px-4 py-4 text-sm">
+                            {po.pdfFile ? (
+                              <button
+                                onClick={() => handleDownloadPdf(po.pdfFile.id, po.pdfFile.fileName)}
+                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Download
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleGeneratePOPdf(po.id)}
+                                disabled={generatingPdfId === po.id}
+                                className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {generatingPdfId === po.id ? (
+                                  <>
+                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Generating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Generate PDF
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </td>
+                          {canCreatePO && (
+                            <td className="px-4 py-4 text-sm">
+                              {isEditing ? (
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleSavePO(po.id)}
+                                    disabled={saving}
+                                    className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingPOId(null)}
+                                    disabled={saving}
+                                    className="text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleEditPO(po)}
+                                  className="text-blue-600 hover:text-blue-800 font-medium"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -550,36 +1164,122 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                 </div>
                 {job.invoices && job.invoices.length > 0 ? (
                   <div className="space-y-3">
-                    {job.invoices.map((invoice: any) => (
-                      <div key={invoice.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{invoice.invoiceNo}</p>
-                            <p className="text-xs text-gray-500">
-                              {invoice.fromCompany.name} → {invoice.toCompany?.name || 'Customer'}
-                            </p>
+                    {job.invoices.map((invoice: any) => {
+                      const isEditing = editingInvoiceId === invoice.id;
+
+                      return (
+                        <div key={invoice.id} className={`p-4 rounded-lg border ${isEditing ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{invoice.invoiceNo}</p>
+                              <p className="text-xs text-gray-500">
+                                {invoice.fromCompany.name} → {invoice.toCompany?.name || 'Customer'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editInvoiceData.amount}
+                                    onChange={(e) => setEditInvoiceData({ ...editInvoiceData, amount: e.target.value })}
+                                    className="w-32 px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                  />
+                                  <select
+                                    value={editInvoiceData.status}
+                                    onChange={(e) => setEditInvoiceData({ ...editInvoiceData, status: e.target.value })}
+                                    className="w-32 px-2 py-1 border border-gray-300 rounded text-xs"
+                                  >
+                                    <option value="DRAFT">DRAFT</option>
+                                    <option value="SENT">SENT</option>
+                                    <option value="PAID">PAID</option>
+                                    <option value="CANCELLED">CANCELLED</option>
+                                  </select>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-lg font-bold text-gray-900">${Number(invoice.amount).toLocaleString()}</p>
+                                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                    invoice.status === 'PAID' ? 'bg-green-100 text-green-800' :
+                                    invoice.status === 'SENT' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {invoice.status}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-gray-900">${Number(invoice.amount).toLocaleString()}</p>
-                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                              invoice.status === 'PAID' ? 'bg-green-100 text-green-800' :
-                              invoice.status === 'SENT' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {invoice.status}
-                            </span>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <span>{new Date(invoice.createdAt).toLocaleDateString()}</span>
+                            <div className="flex gap-2">
+                              {invoice.pdfFile ? (
+                                <button
+                                  onClick={() => handleDownloadPdf(invoice.pdfFile.id, invoice.pdfFile.fileName)}
+                                  className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  Download PDF
+                                </button>
+                              ) : canEditJob && (
+                                <button
+                                  onClick={() => handleGenerateInvoicePdf(invoice.id)}
+                                  disabled={generatingPdfId === invoice.id}
+                                  className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {generatingPdfId === invoice.id ? (
+                                    <>
+                                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      Generating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                      </svg>
+                                      Generate PDF
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                              {canEditJob && (
+                                isEditing ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleSaveInvoice(invoice.id)}
+                                      disabled={saving}
+                                      className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingInvoiceId(null)}
+                                      disabled={saving}
+                                      className="text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => handleEditInvoice(invoice)}
+                                    className="text-blue-600 hover:text-blue-800 font-medium"
+                                  >
+                                    Edit
+                                  </button>
+                                )
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span>{new Date(invoice.createdAt).toLocaleDateString()}</span>
-                          {invoice.pdfUrl && (
-                            <button className="text-blue-600 hover:text-blue-700 font-medium">
-                              Download PDF
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 text-center py-8 bg-gray-50 rounded-lg">No invoice generated yet</p>

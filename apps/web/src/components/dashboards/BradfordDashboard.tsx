@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { revenueAPI, jobsAPI } from '@/lib/api-client';
 import { JobDetailModal } from '@/components/JobDetailModal';
 
@@ -34,6 +34,7 @@ export function BradfordDashboard() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -62,6 +63,51 @@ export function BradfordDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate incoming vs outgoing PO metrics
+  const incomingPOs = jobs.flatMap(job =>
+    (job.purchaseOrders || []).filter((po: any) => po.targetCompany?.id === 'bradford')
+  );
+  const outgoingPOs = jobs.flatMap(job =>
+    (job.purchaseOrders || []).filter((po: any) => po.originCompany?.id === 'bradford')
+  );
+
+  const incomingPOTotal = incomingPOs.reduce((sum, po) => sum + Number(po.vendorAmount || 0), 0);
+  const outgoingPOTotal = outgoingPOs.reduce((sum, po) => sum + Number(po.vendorAmount || 0), 0);
+  const poMargin = incomingPOTotal - outgoingPOTotal;
+  const poMarginPercent = incomingPOTotal > 0 ? (poMargin / incomingPOTotal) * 100 : 0;
+
+  // Group jobs by customer
+  const groupedJobs = jobs.reduce((acc, job) => {
+    const customerName = typeof job.customer === 'string' ? job.customer : job.customer?.name || 'Unknown';
+    if (!acc[customerName]) {
+      acc[customerName] = [];
+    }
+    acc[customerName].push(job);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  // Calculate totals per customer
+  const customerTotals = (Object.entries(groupedJobs) as [string, any[]][]).map(([customerName, customerJobs]) => ({
+    name: customerName,
+    jobCount: customerJobs.length,
+    totalRevenue: customerJobs.reduce((sum, job) => sum + Number(job.bradfordTotal || 0), 0),
+    totalCustomerRevenue: customerJobs.reduce((sum, job) => sum + Number(job.customerTotal || 0), 0),
+    jobs: customerJobs,
+  }));
+
+  // Toggle customer expansion
+  const toggleCustomer = (customerName: string) => {
+    setExpandedCustomers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(customerName)) {
+        newSet.delete(customerName);
+      } else {
+        newSet.add(customerName);
+      }
+      return newSet;
+    });
   };
 
   if (loading) {
@@ -159,22 +205,67 @@ export function BradfordDashboard() {
           </div>
         </div>
 
-        {/* Purchase Orders */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        {/* Incoming POs (from Impact Direct) */}
+        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">Purchase Orders</p>
-              <p className="text-4xl font-bold text-gray-900 mt-2">{metrics.purchaseOrders.total}</p>
+              <p className="text-sm font-medium text-gray-500">Incoming POs</p>
+              <p className="text-xs text-blue-600 mb-2">← From Impact Direct</p>
+              <p className="text-4xl font-bold text-blue-600 mt-2">{incomingPOs.length}</p>
             </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
               </svg>
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-xs text-gray-500">
-              Total: ${metrics.purchaseOrders.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <p className="text-lg font-semibold text-gray-900">
+              ${incomingPOTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+
+        {/* Outgoing POs (to JD Graphic) */}
+        <div className="bg-white rounded-lg shadow-sm border border-orange-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Outgoing POs</p>
+              <p className="text-xs text-orange-600 mb-2">→ To JD Graphic</p>
+              <p className="text-4xl font-bold text-orange-600 mt-2">{outgoingPOs.length}</p>
+            </div>
+            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-lg font-semibold text-gray-900">
+              ${outgoingPOTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+
+        {/* PO Margin */}
+        <div className={`bg-white rounded-lg shadow-sm border p-6 ${poMargin >= 0 ? 'border-green-200' : 'border-red-200'}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">PO Margin</p>
+              <p className="text-xs text-gray-500 mb-2">Incoming - Outgoing</p>
+              <p className={`text-4xl font-bold mt-2 ${poMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ${Math.abs(poMargin).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${poMargin >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
+              <svg className={`w-6 h-6 ${poMargin >= 0 ? 'text-green-600' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={poMargin >= 0 ? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" : "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"} />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className={`text-sm font-medium ${poMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {poMargin >= 0 ? '↑' : '↓'} {poMarginPercent.toFixed(1)}% margin
             </p>
           </div>
         </div>
@@ -230,50 +321,97 @@ export function BradfordDashboard() {
           <p className="text-sm text-gray-500 mt-1">Click any row to view details</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer PO#</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Total</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice to Impact</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">JD Print Cost</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paper Cost</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paper (lbs)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {jobs.slice(0, 20).map((job) => (
-                <tr
-                  key={job.id}
-                  onClick={() => setSelectedJobId(job.id)}
-                  className="hover:bg-blue-50 cursor-pointer transition-colors"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                    {job.jobNo}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {typeof job.customer === 'string' ? job.customer : job.customer?.name || 'Unknown'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                    ${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-purple-600">
-                    ${job.bradfordTotalMargin ? Number(job.bradfordTotalMargin).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {job.paperWeightTotal ? Number(job.paperWeightTotal).toLocaleString('en-US', { minimumFractionDigits: 0 }) : '—'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {job.status.replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(job.createdAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="bg-white">
+              {customerTotals.map((customer) => {
+                const isExpanded = expandedCustomers.has(customer.name);
+                return (
+                  <React.Fragment key={customer.name}>
+                    {/* Customer Header Row */}
+                    <tr
+                      onClick={() => toggleCustomer(customer.name)}
+                      className="bg-gray-100 hover:bg-gray-200 cursor-pointer border-t-2 border-gray-300 sticky top-0 z-10"
+                    >
+                      <td colSpan={9} className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <svg
+                              className={`w-5 h-5 text-gray-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            <span className="text-base font-bold text-gray-900">{customer.name}</span>
+                            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {customer.jobCount} {customer.jobCount === 1 ? 'job' : 'jobs'}
+                            </span>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-700">
+                            <div className="text-blue-600">Customer Revenue: ${customer.totalCustomerRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                            <div className="text-green-600">Bradford Invoice: ${customer.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Job Rows (only visible when expanded) */}
+                    {isExpanded && customer.jobs.map((job) => (
+                      <tr
+                        key={job.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedJobId(job.id);
+                        }}
+                        className="hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-200"
+                      >
+                        <td className="px-6 py-3 pl-12 whitespace-nowrap">
+                          <div className="text-sm font-bold text-blue-600">{job.customerPONumber || '—'}</div>
+                          <div className="text-xs text-gray-500">Job: {job.jobNo}</div>
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {job.sizeName || '—'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {job.quantity ? Number(job.quantity).toLocaleString('en-US') : '—'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-blue-600">
+                          ${job.customerTotal ? Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
+                          ${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-orange-600">
+                          ${job.jdTotal ? Number(job.jdTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-red-600">
+                          ${job.paperCostTotal ? Number(job.paperCostTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {job.paperWeightTotal ? Number(job.paperWeightTotal).toLocaleString('en-US', { minimumFractionDigits: 0 }) : '—'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-purple-600">
+                          ${job.bradfordTotalMargin ? Number(job.bradfordTotalMargin).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
           {jobs.length === 0 && (

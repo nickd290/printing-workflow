@@ -40,9 +40,19 @@ next-env.d.ts
 
 # prisma
 prisma/migrations/**/migration.sql
+*.db
+*.db-journal
+# Prevent nested/duplicate Prisma database directories
+**/prisma/prisma/
+**/prisma/packages/
+**/db/prisma/prisma/
+**/db/prisma/packages/
 
 # docker
 volumes/
 
 # uploads
 uploads/
+
+# logs
+logs/

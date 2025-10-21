@@ -3,6 +3,17 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
+import {
+  HomeIcon,
+  DocumentIcon,
+  FolderIcon,
+  ShoppingCartIcon,
+  ReceiptIcon,
+  ChartBarIcon,
+  SparklesIcon,
+  CurrencyDollarIcon,
+  PrinterIcon,
+} from '@/components/ui/Icons';
 
 export function Navigation() {
   const pathname = usePathname();
@@ -14,27 +25,27 @@ export function Navigation() {
 
   const navigation = user?.role === 'CUSTOMER'
     ? [
-        { name: 'My Jobs', href: '/dashboard', icon: '📋' },
-        { name: 'Submit Quote', href: '/quotes', icon: '✨' },
-        { name: 'My Invoices', href: '/financials', icon: '💰' },
+        { name: 'My Jobs', href: '/dashboard', Icon: DocumentIcon },
+        { name: 'Submit Quote', href: '/quotes', Icon: SparklesIcon },
+        { name: 'My Invoices', href: '/financials', Icon: CurrencyDollarIcon },
       ]
     : user?.role === 'BRADFORD_ADMIN'
     ? [
-        { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
+        { name: 'Dashboard', href: '/dashboard', Icon: HomeIcon },
       ]
     : user?.role === 'BROKER_ADMIN' || user?.role === 'MANAGER'
     ? [
-        { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
-        { name: 'Financials', href: '/financials', icon: '📊' },
+        { name: 'Dashboard', href: '/dashboard', Icon: HomeIcon },
+        { name: 'Financials', href: '/financials', Icon: ChartBarIcon },
       ]
     : [
-        { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
-        { name: 'Jobs', href: '/jobs', icon: '📋' },
-        { name: 'Quotes', href: '/quotes', icon: '✨' },
-        { name: 'Files', href: '/files', icon: '📁' },
-        { name: 'Purchase Orders', href: '/purchase-orders', icon: '🛒' },
-        { name: 'Invoices', href: '/invoices', icon: '💵' },
-        { name: 'Financials', href: '/financials', icon: '📊' },
+        { name: 'Dashboard', href: '/dashboard', Icon: HomeIcon },
+        { name: 'Jobs', href: '/jobs', Icon: DocumentIcon },
+        { name: 'Quotes', href: '/quotes', Icon: SparklesIcon },
+        { name: 'Files', href: '/files', Icon: FolderIcon },
+        { name: 'Purchase Orders', href: '/purchase-orders', Icon: ShoppingCartIcon },
+        { name: 'Invoices', href: '/invoices', Icon: ReceiptIcon },
+        { name: 'Financials', href: '/financials', Icon: ChartBarIcon },
       ];
 
   const handleLogout = () => {
@@ -43,64 +54,65 @@ export function Navigation() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-slate-900 border-b border-slate-700 shadow-lg">
+    <nav className="sticky top-0 z-50 bg-card border-b border-border shadow-sm">
       <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             {/* Logo */}
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/dashboard" className="flex items-center gap-3">
-                <div className="bg-blue-600 p-2 rounded-lg">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
+              <Link href="/dashboard" className="flex items-center gap-3 group">
+                <div className="bg-primary p-2 rounded-lg group-hover:bg-primary-hover transition-colors">
+                  <PrinterIcon className="w-6 h-6 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white">
+                  <h1 className="text-lg font-bold text-foreground">
                     Printing Workflow
                   </h1>
-                  <p className="text-xs text-slate-400 -mt-0.5">Production System</p>
+                  <p className="text-xs text-muted-foreground -mt-0.5">Production System</p>
                 </div>
               </Link>
             </div>
 
             {/* Navigation Links */}
             <div className="hidden lg:ml-10 lg:flex lg:space-x-1">
-              {navigation.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    pathname === item.href
-                      ? 'bg-slate-800 text-white'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>{item.icon}</span>
-                    <span>{item.name}</span>
-                  </span>
-                </Link>
-              ))}
+              {navigation.map((item) => {
+                const Icon = item.Icon;
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      pathname === item.href
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Icon className="w-4 h-4" />
+                      <span>{item.name}</span>
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
           {/* User Info & Actions */}
           <div className="flex items-center gap-4">
             {user && (
-              <div className="hidden md:flex items-center gap-3 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700">
+              <div className="hidden md:flex items-center gap-3 px-4 py-2 rounded-lg bg-muted border border-border">
                 <div className="text-right">
-                  <div className="text-sm font-semibold text-white">{user.name}</div>
-                  <div className="text-xs text-slate-400">{user.companyName}</div>
+                  <div className="text-sm font-semibold text-foreground">{user.name}</div>
+                  <div className="text-xs text-muted-foreground">{user.companyName}</div>
                 </div>
-                <span className="inline-flex px-3 py-1 rounded-md text-xs font-semibold text-white bg-blue-600">
+                <span className="inline-flex px-3 py-1 rounded-md text-xs font-semibold bg-primary text-primary-foreground">
                   {user.role.replace(/_/g, ' ')}
                 </span>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium text-danger-foreground bg-danger hover:opacity-90 transition-opacity"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

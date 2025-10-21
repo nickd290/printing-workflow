@@ -128,6 +128,18 @@ export async function generateBradfordPOPdf(purchaseOrderId: string) {
     color: rgb(0, 0, 0),
   });
 
+  // Show PO# chain if customer PO# is available
+  if (po.job?.customerPONumber) {
+    page.drawText(`Reference: Customer PO# ${po.job.customerPONumber}`, {
+      x: 50,
+      y: height - 90,
+      size: 9,
+      font: boldFont,
+      color: rgb(0.2, 0.2, 0.8),
+    });
+    y -= 10; // Adjust starting Y position for fields
+  }
+
   // Bradford address
   page.drawText('The Bradford Group    9333 Milwaukee Ave    Niles, IL 60714', {
     x: 100,

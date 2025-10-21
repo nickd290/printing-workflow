@@ -14,12 +14,19 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx src/seed.ts",
+    "db:import": "tsx src/import-csv.ts",
+    "db:import:excel": "tsx src/import-excel.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\""
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0"
+    "@prisma/client": "^6.1.0",
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

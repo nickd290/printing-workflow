@@ -16,11 +16,16 @@ export interface GenerateInvoicePdfJob {
   invoiceId: string;
 }
 
+export interface GeneratePurchaseOrderPdfJob {
+  purchaseOrderId: string;
+}
+
 export interface CreateAutoPOJob {
   jobId: string;
   customerTotal: number;
   bradfordTotal: number;
   jdTotal: number;
+  customerPONumber?: string;
 }
 
 // Simple in-memory queue (runs synchronously without Redis)
@@ -39,8 +44,15 @@ export async function queueInvoicePdfGeneration(data: GenerateInvoicePdfJob) {
   return Promise.resolve();
 }
 
+export async function queuePurchaseOrderPdfGeneration(data: GeneratePurchaseOrderPdfJob) {
+  console.log(`[PDF Queue] Generating purchase order PDF for: ${data.purchaseOrderId}`);
+  // PDF generation will happen inline when needed
+  return Promise.resolve();
+}
+
 export async function queueAutoPOCreation(data: CreateAutoPOJob) {
   console.log(`[PO Queue] Creating auto-POs for job: ${data.jobId}`);
+  console.log(`[PO Queue]   Customer PO#: ${data.customerPONumber || 'N/A'}`);
   console.log(`[PO Queue]   Customer Total: $${data.customerTotal}`);
   console.log(`[PO Queue]   Bradford Total: $${data.bradfordTotal}`);
   console.log(`[PO Queue]   JD Total: $${data.jdTotal}`);
@@ -56,20 +68,15 @@ export async function queueAutoPOCreation(data: CreateAutoPOJob) {
       targetCompanyId: COMPANY_IDS.BRADFORD,
       originalAmount: data.customerTotal,
       vendorAmount: data.bradfordTotal,
+      customerPONumber: data.customerPONumber,
     });
 
-    // PO #2: Bradford → JD Graphic
-    await createAutoPurchaseOrder({
-      jobId: data.jobId,
-      originCompanyId: COMPANY_IDS.BRADFORD,
-      targetCompanyId: COMPANY_IDS.JD_GRAPHIC,
-      originalAmount: data.bradfordTotal,
-      vendorAmount: data.jdTotal,
-    });
+    // Note: PO #2 (Bradford → JD Graphic) is created via Bradford PO PDF upload
+    // This allows Bradford to upload their actual PO PDF and extract the PO#
 
-    console.log(`[PO Queue] ✅ Auto-POs created successfully (Impact→Bradford, Bradford→JD)`);
+    console.log(`[PO Queue] ✅ Auto-PO created successfully (Impact→Bradford)`);
   } catch (error) {
-    console.error(`[PO Queue] ❌ Failed to create auto-POs:`, error);
+    console.error(`[PO Queue] ❌ Failed to create auto-PO:`, error);
   }
 
   return Promise.resolve();

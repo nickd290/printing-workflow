@@ -2,9 +2,10 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
-export type UserRole = 'CUSTOMER' | 'BROKER_ADMIN' | 'BRADFORD_ADMIN' | 'MANAGER';
+export type UserRole = 'CUSTOMER' | 'BROKER_ADMIN' | 'BRADFORD_ADMIN';
 
 export interface User {
+  id: string;
   email: string;
   name: string;
   role: UserRole;
@@ -14,87 +15,92 @@ export interface User {
 
 interface UserContextType {
   user: User | null;
-  login: (email: string) => void;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   isCustomer: boolean;
   isBrokerAdmin: boolean;
   isBradfordAdmin: boolean;
-  isManager: boolean;
+  loading: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-// Mock user database matching seed.ts
-const MOCK_USERS: Record<string, User> = {
-  'admin@impactdirect.com': {
-    email: 'admin@impactdirect.com',
-    name: 'Impact Direct Admin',
-    role: 'BROKER_ADMIN',
-    companyId: 'impact-direct',
-    companyName: 'Impact Direct',
-  },
-  'manager@impactdirect.com': {
-    email: 'manager@impactdirect.com',
-    name: 'Impact Direct Manager',
-    role: 'MANAGER',
-    companyId: 'impact-direct',
-    companyName: 'Impact Direct',
-  },
-  'steve.gustafson@bgeltd.com': {
-    email: 'steve.gustafson@bgeltd.com',
-    name: 'Steve Gustafson',
-    role: 'BRADFORD_ADMIN',
-    companyId: 'bradford',
-    companyName: 'Bradford',
-  },
-  'orders@jjsa.com': {
-    email: 'orders@jjsa.com',
-    name: 'JJSA Orders',
-    role: 'CUSTOMER',
-    companyId: 'jjsa',
-    companyName: 'JJSA',
-  },
-  'orders@ballantine.com': {
-    email: 'orders@ballantine.com',
-    name: 'Ballantine Orders',
-    role: 'CUSTOMER',
-    companyId: 'ballantine',
-    companyName: 'Ballantine',
-  },
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Load user from localStorage on mount
+  // Check for existing session on mount
   useEffect(() => {
-    const stored = localStorage.getItem('currentUser');
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to parse stored user');
+    const checkSession = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const response = await fetch(`${API_URL}/api/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            credentials: 'include',
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setUser(data.user);
+          } else {
+            // Token invalid, clear it
+            localStorage.removeItem('auth_token');
+          }
+        } catch (error) {
+          console.error('Failed to check session:', error);
+          localStorage.removeItem('auth_token');
+        }
       }
-    }
+      setLoading(false);
+    };
+
+    checkSession();
   }, []);
 
-  const login = (email: string) => {
-    const foundUser = MOCK_USERS[email.toLowerCase()];
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('currentUser', JSON.stringify(foundUser));
+  const login = async (email: string, password: string) => {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Login failed');
     }
+
+    const data = await response.json();
+    setUser(data.user);
+
+    // Store token in localStorage as backup (cookie is primary)
+    localStorage.setItem('auth_token', data.token);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+
     setUser(null);
-    localStorage.removeItem('currentUser');
+    localStorage.removeItem('auth_token');
   };
 
   const isCustomer = user?.role === 'CUSTOMER';
   const isBrokerAdmin = user?.role === 'BROKER_ADMIN';
   const isBradfordAdmin = user?.role === 'BRADFORD_ADMIN';
-  const isManager = user?.role === 'MANAGER';
 
   return (
     <UserContext.Provider
@@ -105,7 +111,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         isCustomer,
         isBrokerAdmin,
         isBradfordAdmin,
-        isManager,
+        loading,
       }}
     >
       {children}

@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import { InvoiceFormModal, InvoiceFormData } from '../modals/InvoiceFormModal';
+
 interface PurchaseOrder {
   id: string;
   originCompany: { name: string };
@@ -23,13 +26,58 @@ interface InvoicingTabProps {
   purchaseOrders: PurchaseOrder[];
   invoices: Invoice[];
   customerTotal: number;
+  isInternalTeam?: boolean;
+  jobId?: string;
+  onRefresh?: () => void;
 }
 
 export function InvoicingTab({
   purchaseOrders,
   invoices,
   customerTotal,
+  isInternalTeam = false,
+  jobId,
+  onRefresh,
 }: InvoicingTabProps) {
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showPOModal, setShowPOModal] = useState(false);
+  const handleCreateInvoice = async (data: InvoiceFormData) => {
+    try {
+      const response = await fetch('http://localhost:3001/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          jobId: data.jobId || jobId,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to create invoice');
+
+      // Upload PDF if provided
+      if (data.pdfFile) {
+        const invoice = await response.json();
+        const formData = new FormData();
+        formData.append('file', data.pdfFile);
+
+        await fetch(`http://localhost:3001/api/invoices/${invoice.id}/upload-pdf`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
+
+      onRefresh?.();
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      throw error;
+    }
+  };
+
+  const handleCreatePO = async () => {
+    // Placeholder - will implement PO modal similarly
+    console.log('Create PO clicked');
+  };
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
@@ -57,7 +105,17 @@ export function InvoicingTab({
     <div className="space-y-8">
       {/* Purchase Order Chain */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Purchase Order Chain</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Purchase Order Chain</h3>
+          {isInternalTeam && (
+            <button
+              onClick={handleCreatePO}
+              className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 font-medium text-sm"
+            >
+              + Create Purchase Order
+            </button>
+          )}
+        </div>
 
         {purchaseOrders.length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
@@ -180,7 +238,17 @@ export function InvoicingTab({
 
       {/* Invoices Section */}
       <div className="border-t border-gray-200 pt-8">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoices</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Invoices</h3>
+          {isInternalTeam && (
+            <button
+              onClick={() => setShowInvoiceModal(true)}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 font-medium text-sm"
+            >
+              + Create Invoice
+            </button>
+          )}
+        </div>
 
         {invoices.length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
@@ -259,6 +327,14 @@ export function InvoicingTab({
           </div>
         </div>
       )}
+
+      {/* Invoice Form Modal */}
+      <InvoiceFormModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        onSubmit={handleCreateInvoice}
+        jobId={jobId}
+      />
     </div>
   );
 }

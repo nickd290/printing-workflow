@@ -426,4 +426,68 @@ export const emailTemplates = {
       `New PO ${poNumber} for ${componentId}`
     ),
   }),
+
+  // Job Ready for Production (Internal Team)
+  jobReadyForProduction: (jobNo: string, customerName: string, artworkCount: number, dataFileCount: number, customerPO?: string) => ({
+    subject: `🚀 Job Ready for Production - ${jobNo}`,
+    html: emailTemplate(
+      `
+        <h2>Job Ready to Start Production</h2>
+        <p>All required files have been uploaded and the job is ready to begin production.</p>
+
+        <div class="info-box">
+          <p><strong>Job Number:</strong> ${jobNo}</p>
+          <p><strong>Customer:</strong> ${customerName}</p>
+          ${customerPO ? `<p><strong>Customer PO:</strong> ${customerPO}</p>` : ''}
+          <p><strong>Artwork Files:</strong> ${artworkCount} uploaded ✅</p>
+          <p><strong>Data Files:</strong> ${dataFileCount} uploaded ✅</p>
+        </div>
+
+        <center>
+          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">View Job & Start Production</a>
+        </center>
+
+        <div class="divider"></div>
+
+        <p style="color: #718096; font-size: 14px;">
+          <strong>Next Steps:</strong> Review all files and specifications before starting production.
+        </p>
+      `,
+      `Job ${jobNo} ready for production`
+    ),
+  }),
+
+  // Job Submitted Confirmation (Customer)
+  jobSubmittedConfirmation: (jobNo: string, customerName: string, artworkCount: number, dataFileCount: number, deliveryDate?: string) => ({
+    subject: `✅ Job ${jobNo} Submitted Successfully`,
+    html: emailTemplate(
+      `
+        <h2>Thank You - Your Job Has Been Submitted!</h2>
+        <p>We've received all your files and your job is now queued for production.</p>
+
+        <div class="info-box">
+          <p><strong>Job Number:</strong> ${jobNo}</p>
+          <p><strong>Status:</strong> Ready for Production ✅</p>
+          <p><strong>Artwork Files Received:</strong> ${artworkCount}</p>
+          <p><strong>Data Files Received:</strong> ${dataFileCount}</p>
+          ${deliveryDate ? `<p><strong>Estimated Delivery:</strong> ${deliveryDate}</p>` : ''}
+        </div>
+
+        <p style="margin-top: 25px;">
+          Our production team will review your files and begin work on your order. We'll send you a proof for approval before finalizing production.
+        </p>
+
+        <center>
+          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">Track Your Order</a>
+        </center>
+
+        <div class="divider"></div>
+
+        <p style="color: #718096; font-size: 14px;">
+          <strong>What's Next?</strong> You'll receive a proof for approval within 1-2 business days. Production will begin immediately after your approval.
+        </p>
+      `,
+      `Job ${jobNo} submitted and ready for production`
+    ),
+  }),
 };
