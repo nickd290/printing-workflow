@@ -59,7 +59,7 @@ export async function sendJobReadyNotifications(job: {
     },
   });
 
-  console.log(`=ç Sent job ready notification to internal team: ${job.jobNo}`);
+  console.log(`âœ“ Sent job ready notification to internal team: ${job.jobNo}`);
 
   // 2. Send to customer (if email available)
   if (job.customer.email) {
@@ -89,7 +89,7 @@ export async function sendJobReadyNotifications(job: {
       },
     });
 
-    console.log(`=ç Sent job submission confirmation to customer: ${job.customer.email}`);
+    console.log(`âœ“ Sent job submission confirmation to customer: ${job.customer.email}`);
   }
 }
 
@@ -120,5 +120,5 @@ export async function sendNotification(params: {
     },
   });
 
-  console.log(`=ç Sent notification to ${params.to}: ${params.subject}`);
+  console.log(`âœ“ Sent notification to ${params.to}: ${params.subject}`);
 }
