@@ -2,10 +2,10 @@
 nixPkgs = ["nodejs", "pnpm"]
 
 [phases.install]
-cmds = ["pnpm install"]
+cmds = ["cd ../.. && pnpm install"]
 
 [phases.build]
-cmds = ["pnpm db:generate", "pnpm build --filter=@printing-workflow/api..."]
+cmds = ["cd ../.. && pnpm db:generate && pnpm build --filter=@printing-workflow/api"]
 
 [start]
-cmd = "pnpm --filter=@printing-workflow/api start"
+cmd = "pnpm start"
