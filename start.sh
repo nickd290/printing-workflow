@@ -40,6 +40,33 @@ if [ "$RAILWAY_SERVICE_NAME" = "api" ]; then
   echo "Checking apps/api directory..."
   ls -la apps/api || echo "Warning: Could not list apps/api"
 
+  # Validate build output exists
+  if [ ! -d "apps/api/dist" ]; then
+    echo "❌ ERROR: apps/api/dist directory not found!"
+    echo "Build may have failed. Please check build logs."
+    exit 1
+  fi
+
+  if [ ! -f "apps/api/dist/index.js" ]; then
+    echo "❌ ERROR: apps/api/dist/index.js not found!"
+    echo "Build incomplete. Please check build logs."
+    exit 1
+  fi
+
+  # Validate workspace packages are built
+  if [ ! -d "packages/db/dist" ]; then
+    echo "❌ ERROR: packages/db/dist not found!"
+    echo "@printing-workflow/db package not built."
+    exit 1
+  fi
+
+  if [ ! -d "packages/shared/dist" ]; then
+    echo "❌ ERROR: packages/shared/dist not found!"
+    echo "@printing-workflow/shared package not built."
+    exit 1
+  fi
+
+  echo "✅ Build validation passed"
   echo "Changing to apps/api directory..."
   cd apps/api
 
@@ -55,6 +82,27 @@ elif [ "$RAILWAY_SERVICE_NAME" = "web" ]; then
   echo "Checking apps/web directory..."
   ls -la apps/web || echo "Warning: Could not list apps/web"
 
+  # Validate build output exists
+  if [ ! -d "apps/web/.next" ]; then
+    echo "❌ ERROR: apps/web/.next directory not found!"
+    echo "Next.js build may have failed. Please check build logs."
+    exit 1
+  fi
+
+  # Validate workspace packages are built
+  if [ ! -d "packages/db/dist" ]; then
+    echo "❌ ERROR: packages/db/dist not found!"
+    echo "@printing-workflow/db package not built."
+    exit 1
+  fi
+
+  if [ ! -d "packages/shared/dist" ]; then
+    echo "❌ ERROR: packages/shared/dist not found!"
+    echo "@printing-workflow/shared package not built."
+    exit 1
+  fi
+
+  echo "✅ Build validation passed"
   echo "Changing to apps/web directory..."
   cd apps/web
 

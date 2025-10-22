@@ -5,7 +5,11 @@ nixPkgs = ["nodejs", "pnpm"]
 cmds = ["pnpm install --frozen-lockfile"]
 
 [phases.build]
-cmds = ["pnpm db:generate", "pnpm build"]
+cmds = [
+  "pnpm --filter @printing-workflow/db db:generate",
+  "pnpm --filter @printing-workflow/shared build",
+  "turbo build"
+]
 
 [start]
 cmd = "./start.sh"

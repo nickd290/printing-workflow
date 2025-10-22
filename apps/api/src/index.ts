@@ -108,7 +108,7 @@ try {
   await prisma.$connect();
   console.log('✅ Database connected successfully!');
 
-  const port = parseInt(env.API_PORT, 10);
+  const port = parseInt(env.PORT, 10);
   console.log(`Attempting to bind to port: ${port} on host 0.0.0.0`);
 
   await fastify.listen({ port, host: '0.0.0.0' });
