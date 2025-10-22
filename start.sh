@@ -22,8 +22,7 @@ echo "NEXTAUTH_URL: ${NEXTAUTH_URL:-NOT_SET}"
 echo "NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:0:10}..."
 echo "API_URL: ${API_URL:-NOT_SET}"
 echo "NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-NOT_SET}"
-echo "PORT: ${PORT:-NOT_SET}"
-echo "API_PORT: ${API_PORT:-NOT_SET}"
+echo "PORT: ${PORT:-NOT_SET} (Railway auto-injects 8080)"
 echo "-----------------------------------------"
 
 # Check if apps directory exists

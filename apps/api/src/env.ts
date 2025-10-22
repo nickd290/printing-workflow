@@ -16,8 +16,7 @@ export const env = createEnv({
     EMAIL_FROM_NAME: z.string().default('IDP Production'),
     EMAIL_REDIRECT_TO: z.string().email().optional(), // Redirect all emails to this address (for testing)
 
-    PORT: z.string().default('3001'), // Railway uses PORT, local dev defaults to 3001
-    API_PORT: z.string().default('3001'),
+    PORT: z.string().default('3001'), // Railway uses PORT (auto-set to 8080), local dev defaults to 3001
     API_URL: z.string().url().default('http://localhost:3001'),
 
     NEXTAUTH_URL: z.string().url(),

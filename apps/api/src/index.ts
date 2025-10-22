@@ -12,7 +12,7 @@ console.log('========================================');
 console.log('Timestamp:', new Date().toISOString());
 console.log('Node Version:', process.version);
 console.log('Environment:', env.NODE_ENV);
-console.log('API Port:', env.API_PORT);
+console.log('Port (from env):', env.PORT);
 console.log('API URL:', env.API_URL);
 console.log('NEXTAUTH_URL:', env.NEXTAUTH_URL);
 console.log('DATABASE_URL:', env.DATABASE_URL ? `${env.DATABASE_URL.substring(0, 30)}...` : 'NOT SET');
@@ -116,10 +116,10 @@ try {
   await prisma.$connect();
   console.log('✅ Database connected successfully!');
 
-  // Use Railway's PORT if available, otherwise use API_PORT from env
-  const port = parseInt(process.env.PORT || env.API_PORT || '3001', 10);
+  // Use PORT from environment (Railway auto-injects 8080, local defaults to 3001)
+  const port = parseInt(env.PORT, 10);
   console.log(`Attempting to bind to port: ${port} on host 0.0.0.0`);
-  console.log(`Railway PORT: ${process.env.PORT || 'not set'}, API_PORT: ${env.API_PORT}`);
+  console.log(`Using PORT: ${env.PORT} (Railway auto-injects 8080 in production)`);
 
   await fastify.listen({ port, host: '0.0.0.0' });
 
