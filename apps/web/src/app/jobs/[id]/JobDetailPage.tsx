@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { Navigation } from '@/components/navigation';
 import { FileManagementSection } from '@/components/jobs/FileManagementSection';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 // Types
 interface Job {
   id: string;
@@ -134,7 +136,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
   const loadJob = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3001/api/jobs/${jobId}`);
+      const response = await fetch(`${API_URL}/api/jobs/${jobId}`);
       if (!response.ok) throw new Error('Failed to load job');
 
       const data = await response.json();
@@ -172,7 +174,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
       formData.append('jobId', jobId);
       formData.append('kind', 'PO_PDF');
 
-      const response = await fetch('http://localhost:3001/api/files/upload', {
+      const response = await fetch(`${API_URL}/api/files/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -200,7 +202,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
         formData.append('jobId', jobId);
         formData.append('kind', 'ARTWORK');
 
-        const response = await fetch('http://localhost:3001/api/files/upload', {
+        const response = await fetch(`${API_URL}/api/files/upload`, {
           method: 'POST',
           body: formData,
         });
@@ -233,7 +235,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
       if (proofNotes) formData.append('adminNotes', proofNotes);
       if (proofComments) formData.append('adminComments', proofComments);
 
-      const response = await fetch('http://localhost:3001/api/files/upload', {
+      const response = await fetch(`${API_URL}/api/files/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -257,7 +259,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
     if (!confirm('Are you sure you want to approve this proof?')) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/proofs/${proofId}/approve`, {
+      const response = await fetch(`${API_URL}/api/proofs/${proofId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approved: true }),
@@ -277,7 +279,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
     if (!comments) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/proofs/${proofId}/approve`, {
+      const response = await fetch(`${API_URL}/api/proofs/${proofId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approved: false, comments }),
@@ -294,7 +296,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
   const handleUpdateDelivery = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/jobs/${jobId}`, {
+      const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -317,7 +319,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
       for (const recipient of sampleRecipients) {
         if (!recipient.name || !recipient.email) continue;
 
-        const response = await fetch(`http://localhost:3001/api/jobs/${jobId}/sample-shipments`, {
+        const response = await fetch(`${API_URL}/api/jobs/${jobId}/sample-shipments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -348,7 +350,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
     if (!confirm(`Change job status to ${newStatus.replace(/_/g, ' ')}?`)) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/jobs/${jobId}`, {
+      const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -375,7 +377,7 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
 
   const downloadFile = async (fileId: string, fileName: string) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/files/${fileId}/download`);
+      const response = await fetch(`${API_URL}/api/files/${fileId}/download`);
       if (!response.ok) throw new Error('Download failed');
 
       const blob = await response.blob();

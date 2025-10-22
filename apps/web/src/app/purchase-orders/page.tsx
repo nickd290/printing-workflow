@@ -45,6 +45,7 @@ const mockPOs = [
   },
 ];
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 export default function PurchaseOrdersPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -123,7 +124,7 @@ export default function PurchaseOrdersPage() {
   const handleExportCSV = async () => {
     try {
       toast.loading('Exporting purchase orders to CSV...', { id: 'export-pos' });
-      const response = await fetch('http://localhost:3001/api/exports/purchase-orders');
+      const response = await fetch('${API_URL}/api/exports/purchase-orders');
       if (!response.ok) throw new Error('Export failed');
 
       const blob = await response.blob();

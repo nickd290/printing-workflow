@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { purchaseOrdersAPI, invoicesAPI, jobsAPI } from '@/lib/api-client';
 import toast, { Toaster } from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 export default function InvoicesPOsPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -84,7 +85,7 @@ export default function InvoicesPOsPage() {
 
     setSaving(true);
     try {
-      await fetch('http://localhost:3001/api/purchase-orders', {
+      await fetch('${API_URL}/api/purchase-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,7 +122,7 @@ export default function InvoicesPOsPage() {
   const handleSavePO = async (poId: string) => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3001/api/purchase-orders/${poId}`, {
+      await fetch(`${API_URL}/api/purchase-orders/${poId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,7 +152,7 @@ export default function InvoicesPOsPage() {
   const handleSaveInvoice = async (invoiceId: string) => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3001/api/invoices/${invoiceId}`, {
+      await fetch(`${API_URL}/api/invoices/${invoiceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

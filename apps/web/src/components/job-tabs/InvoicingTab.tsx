@@ -43,7 +43,7 @@ export function InvoicingTab({
   const [showPOModal, setShowPOModal] = useState(false);
   const handleCreateInvoice = async (data: InvoiceFormData) => {
     try {
-      const response = await fetch('http://localhost:3001/api/invoices', {
+      const response = await fetch('${API_URL}/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -60,7 +60,7 @@ export function InvoicingTab({
         const formData = new FormData();
         formData.append('file', data.pdfFile);
 
-        await fetch(`http://localhost:3001/api/invoices/${invoice.id}/upload-pdf`, {
+        await fetch(`${API_URL}/api/invoices/${invoice.id}/upload-pdf`, {
           method: 'POST',
           body: formData,
         });

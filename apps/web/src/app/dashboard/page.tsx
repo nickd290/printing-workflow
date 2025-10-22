@@ -10,6 +10,8 @@ import { jobsAPI } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export default function DashboardPage() {
   const { user, isCustomer, isBrokerAdmin, isBradfordAdmin } = useUser();
   const [allJobs, setAllJobs] = useState<any[]>([]);
@@ -111,7 +113,7 @@ export default function DashboardPage() {
       parseFormData.append('file', file);
 
       console.log('🔍 Sending parse request...');
-      const parseResponse = await fetch('http://localhost:3001/api/files/parse-po', {
+      const parseResponse = await fetch(`${API_URL}/api/files/parse-po`, {
         method: 'POST',
         body: parseFormData,
       });
@@ -135,7 +137,7 @@ export default function DashboardPage() {
       uploadFormData.append('kind', 'PO_PDF');
 
       console.log('📁 Uploading file for storage...');
-      const uploadResponse = await fetch('http://localhost:3001/api/files/upload', {
+      const uploadResponse = await fetch(`${API_URL}/api/files/upload`, {
         method: 'POST',
         body: uploadFormData,
       });
@@ -262,8 +264,8 @@ export default function DashboardPage() {
       toast.loading(approved ? 'Approving proof...' : 'Requesting changes...', { id: 'proof-action' });
 
       const endpoint = approved
-        ? `http://localhost:3001/api/proofs/${proofId}/approve`
-        : `http://localhost:3001/api/proofs/${proofId}/changes`;
+        ? `${API_URL}/api/proofs/${proofId}/approve`
+        : `${API_URL}/api/proofs/${proofId}/changes`;
 
       const response = await fetch(endpoint, {
         method: 'POST',

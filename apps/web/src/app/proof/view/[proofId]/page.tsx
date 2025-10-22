@@ -33,6 +33,7 @@ interface ProofData {
   }>;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 export default function ProofViewerPage() {
   const params = useParams();
   const router = useRouter();
@@ -52,7 +53,7 @@ export default function ProofViewerPage() {
 
     async function fetchProof() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 
         // Fetch proof data
         const proofRes = await fetch(`${apiUrl}/api/proofs/${proofId}`);
@@ -83,7 +84,7 @@ export default function ProofViewerPage() {
     setActionLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
       const res = await fetch(`${apiUrl}/api/proofs/${proofId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,7 +121,7 @@ export default function ProofViewerPage() {
     setActionLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
       const res = await fetch(`${apiUrl}/api/proofs/${proofId}/request-changes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

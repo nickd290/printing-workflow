@@ -6,6 +6,8 @@ import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { PricingBreakdown } from '@/components/PricingBreakdown';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 interface JobDetailModalProps {
   jobId: string;
   onClose: () => void;
@@ -95,7 +97,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
     try {
       // Update job details
-      await fetch(`http://localhost:3001/api/jobs/${job.id}`, {
+      await fetch(`${API_URL}/api/jobs/${job.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,7 +109,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
       // Update status if changed
       if (editFormData.status !== job.status) {
-        await fetch(`http://localhost:3001/api/jobs/${job.id}/status`, {
+        await fetch(`${API_URL}/api/jobs/${job.id}/status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: editFormData.status }),
@@ -149,7 +151,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   const handleSavePO = async (poId: string) => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3001/api/purchase-orders/${poId}`, {
+      await fetch(`${API_URL}/api/purchase-orders/${poId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -179,7 +181,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   const handleSaveInvoice = async (invoiceId: string) => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3001/api/invoices/${invoiceId}`, {
+      await fetch(`${API_URL}/api/invoices/${invoiceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -207,7 +209,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
       const originalAmount = Number(job.customerTotal);
       const marginAmount = originalAmount - vendorAmount;
 
-      await fetch('http://localhost:3001/api/purchase-orders', {
+      await fetch(`${API_URL}/api/purchase-orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -329,7 +331,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   const handleEmailProof = async (proofId: string, customerEmail: string) => {
     try {
       toast.loading('Sending proof email...', { id: 'email-proof' });
-      const response = await fetch('http://localhost:3001/api/notifications/send-proof-notification', {
+      const response = await fetch(`${API_URL}/api/notifications/send-proof-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proofId, customerEmail }),
@@ -346,7 +348,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
   const downloadFile = async (fileId: string, fileName: string) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/files/${fileId}/download`);
+      const response = await fetch(`${API_URL}/api/files/${fileId}/download`);
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { revenueAPI } from '@/lib/api-client';
 import toast, { Toaster } from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 export default function RevenuePage() {
   const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,7 @@ export default function RevenuePage() {
   const handleExportCSV = async () => {
     try {
       toast.loading('Exporting revenue data to CSV...', { id: 'export-revenue' });
-      const response = await fetch('http://localhost:3001/api/exports/revenue');
+      const response = await fetch('${API_URL}/api/exports/revenue');
       if (!response.ok) throw new Error('Export failed');
 
       const blob = await response.blob();

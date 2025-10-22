@@ -40,11 +40,12 @@ const mockInvoices = [
   },
 ];
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 export default function InvoicesPage() {
   const handleExportCSV = async () => {
     try {
       toast.loading('Exporting invoices to CSV...', { id: 'export-invoices' });
-      const response = await fetch('http://localhost:3001/api/exports/invoices');
+      const response = await fetch('${API_URL}/api/exports/invoices');
       if (!response.ok) throw new Error('Export failed');
 
       const blob = await response.blob();

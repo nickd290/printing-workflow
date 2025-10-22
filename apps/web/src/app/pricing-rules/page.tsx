@@ -19,6 +19,7 @@ interface PricingRule {
   updatedAt: string;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
 export default function PricingRulesPage() {
   const [rules, setRules] = useState<PricingRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +34,7 @@ export default function PricingRulesPage() {
   const loadRules = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/pricing-rules');
+      const response = await fetch('${API_URL}/api/pricing-rules');
       const data = await response.json();
       setRules(data.rules);
       setError(null);
@@ -61,7 +62,7 @@ export default function PricingRulesPage() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3001/api/pricing-rules/${id}`, {
+      const response = await fetch(`${API_URL}/api/pricing-rules/${id}`, {
         method: 'DELETE',
       });
 
@@ -79,8 +80,8 @@ export default function PricingRulesPage() {
   const handleSave = async (data: Partial<PricingRule>) => {
     try {
       const url = editingRule
-        ? `http://localhost:3001/api/pricing-rules/${editingRule.id}`
-        : 'http://localhost:3001/api/pricing-rules';
+        ? `${API_URL}/api/pricing-rules/${editingRule.id}`
+        : '${API_URL}/api/pricing-rules';
 
       const method = editingRule ? 'PATCH' : 'POST';
 

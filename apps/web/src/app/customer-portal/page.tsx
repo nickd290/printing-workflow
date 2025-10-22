@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export default function CustomerPortalPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<'jjsa' | 'ballantine' | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -21,7 +23,7 @@ export default function CustomerPortalPage() {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3001/api/jobs`);
+      const response = await fetch(`${API_URL}/api/jobs`);
       const data = await response.json();
 
       // Filter jobs for the selected customer only
@@ -63,7 +65,7 @@ export default function CustomerPortalPage() {
       formData.append('file', selectedFile);
       formData.append('customerId', selectedCustomer);
 
-      const response = await fetch('http://localhost:3001/api/customer/upload-po', {
+      const response = await fetch(`${API_URL}/api/customer/upload-po`, {
         method: 'POST',
         body: formData,
       });
@@ -88,8 +90,8 @@ export default function CustomerPortalPage() {
       toast.loading(approved ? 'Approving proof...' : 'Requesting changes...', { id: 'proof-action' });
 
       const endpoint = approved
-        ? `http://localhost:3001/api/proofs/${proofId}/approve`
-        : `http://localhost:3001/api/proofs/${proofId}/changes`;
+        ? `${API_URL}/api/proofs/${proofId}/approve`
+        : `${API_URL}/api/proofs/${proofId}/changes`;
 
       const response = await fetch(endpoint, {
         method: 'POST',
