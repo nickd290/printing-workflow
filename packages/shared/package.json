@@ -3,15 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./constants": "./src/constants.ts",
-    "./schemas": "./src/schemas.ts",
-    "./types": "./src/types.ts"
+    ".": "./dist/index.js",
+    "./constants": "./dist/constants.js",
+    "./schemas": "./dist/schemas.js",
+    "./types": "./dist/types.js"
   },
   "scripts": {
+    "build": "tsup",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
