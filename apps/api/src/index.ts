@@ -5,6 +5,18 @@ import cookie from '@fastify/cookie';
 import { env } from './env.js';
 import { prisma } from '@printing-workflow/db';
 
+console.log('========================================');
+console.log('🔵 API Server Starting...');
+console.log('========================================');
+console.log('Timestamp:', new Date().toISOString());
+console.log('Node Version:', process.version);
+console.log('Environment:', env.NODE_ENV);
+console.log('API Port:', env.API_PORT);
+console.log('API URL:', env.API_URL);
+console.log('NEXTAUTH_URL:', env.NEXTAUTH_URL);
+console.log('DATABASE_URL:', env.DATABASE_URL ? `${env.DATABASE_URL.substring(0, 30)}...` : 'NOT SET');
+console.log('----------------------------------------');
+
 // Import routes
 import authRoutes from './routes/auth.js';
 import { quoteRoutes } from './routes/quotes.js';
@@ -92,10 +104,26 @@ listeners.forEach((signal) => {
 
 // Start server
 try {
+  console.log('Testing database connection...');
+  await prisma.$connect();
+  console.log('✅ Database connected successfully!');
+
   const port = parseInt(env.API_PORT, 10);
+  console.log(`Attempting to bind to port: ${port} on host 0.0.0.0`);
+
   await fastify.listen({ port, host: '0.0.0.0' });
-  console.log(`🚀 API server listening at http://localhost:${port}`);
+
+  console.log('========================================');
+  console.log(`✅ API server listening at http://localhost:${port}`);
+  console.log('Server is ready to accept connections!');
+  console.log('========================================');
 } catch (err) {
+  console.error('========================================');
+  console.error('❌ FATAL ERROR: Failed to start server');
+  console.error('========================================');
+  console.error('Error details:', err);
+  console.error('Error message:', err instanceof Error ? err.message : 'Unknown error');
+  console.error('Error stack:', err instanceof Error ? err.stack : 'No stack trace');
   fastify.log.error(err);
   process.exit(1);
 }
