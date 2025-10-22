@@ -116,8 +116,10 @@ try {
   await prisma.$connect();
   console.log('✅ Database connected successfully!');
 
-  const port = parseInt(env.PORT, 10);
+  // Use Railway's PORT if available, otherwise use API_PORT from env
+  const port = parseInt(process.env.PORT || env.API_PORT || '3001', 10);
   console.log(`Attempting to bind to port: ${port} on host 0.0.0.0`);
+  console.log(`Railway PORT: ${process.env.PORT || 'not set'}, API_PORT: ${env.API_PORT}`);
 
   await fastify.listen({ port, host: '0.0.0.0' });
 
