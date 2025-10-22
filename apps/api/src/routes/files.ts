@@ -4,8 +4,10 @@ import {
   createFile,
   getFileById,
   getFileDownloadUrl,
+  getFileBuffer,
   listFiles,
   listFilesByJob,
+  deleteFile,
 } from '../services/file.service.js';
 import { parseCustomerPO } from '../services/pdf-parser.service.js';
 
@@ -84,7 +86,7 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
     return file;
   });
 
-  // GET /api/files/:id/download-url - Get signed download URL
+  // GET /api/files/:id/download-url - Get download URL
   fastify.get('/:id/download-url', async (request, reply) => {
     const { id } = request.params as { id: string };
     const url = await getFileDownloadUrl(id);
@@ -112,29 +114,35 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/files/:id/download - Download file
   fastify.get('/:id/download', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const file = await getFileById(id);
-
-    if (!file) {
-      return reply.status(404).send({ error: 'File not found' });
-    }
-
-    // For local filesystem, read from uploads directory
-    const fs = await import('fs/promises');
-    const path = await import('path');
-
-    const uploadsDir = path.join(process.cwd(), '../../uploads');
-    const filePath = path.join(uploadsDir, file.objectKey);
 
     try {
-      const fileBuffer = await fs.readFile(filePath);
+      const { buffer, fileName, mimeType } = await getFileBuffer(id);
 
-      reply.header('Content-Type', file.mimeType);
-      reply.header('Content-Disposition', `attachment; filename="${file.fileName}"`);
-      reply.header('Content-Length', file.size.toString());
+      reply.header('Content-Type', mimeType);
+      reply.header('Content-Disposition', `attachment; filename="${fileName}"`);
+      reply.header('Content-Length', buffer.length.toString());
 
-      return reply.send(fileBuffer);
-    } catch (error) {
-      return reply.status(404).send({ error: 'File not found on disk' });
+      return reply.send(buffer);
+    } catch (error: any) {
+      if (error.message === 'File not found') {
+        return reply.status(404).send({ error: 'File not found' });
+      }
+      return reply.status(500).send({ error: 'Failed to download file' });
+    }
+  });
+
+  // DELETE /api/files/:id - Delete file
+  fastify.delete('/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      await deleteFile(id);
+      return { success: true, message: 'File deleted successfully' };
+    } catch (error: any) {
+      if (error.message === 'File not found') {
+        return reply.status(404).send({ error: 'File not found' });
+      }
+      return reply.status(500).send({ error: 'Failed to delete file' });
     }
   });
 };

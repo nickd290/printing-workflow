@@ -4,6 +4,7 @@ import multipart from '@fastify/multipart';
 import cookie from '@fastify/cookie';
 import { env } from './env.js';
 import { prisma } from '@printing-workflow/db';
+import fs from 'fs';
 
 console.log('========================================');
 console.log('🔵 API Server Starting...');
@@ -47,12 +48,19 @@ await fastify.register(cors, {
   credentials: true,
 });
 
+// Configure upload directory
+const uploadDir = env.UPLOAD_DIR || './uploads';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log(`✅ Created upload directory: ${uploadDir}`);
+} else {
+  console.log(`✅ Upload directory exists: ${uploadDir}`);
+}
+
 await fastify.register(multipart, {
+  attachFieldsToBody: true,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max per file (reduced for security)
-    files: 5, // Max 5 files per request
-    fields: 20, // Max 20 form fields
-    parts: 25, // Max 25 parts total
+    fileSize: 10 * 1024 * 1024, // 10MB max per file
   },
 });
 

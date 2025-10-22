@@ -9,12 +9,7 @@ export const env = createEnv({
     REDIS_HOST: z.string().default('localhost'),
     REDIS_PORT: z.string().default('6379'),
 
-    S3_ENDPOINT: z.string().url().optional(),
-    S3_REGION: z.string().default('us-east-1'),
-    S3_BUCKET: z.string().optional(),
-    S3_ACCESS_KEY_ID: z.string().optional(),
-    S3_SECRET_ACCESS_KEY: z.string().optional(),
-    S3_PUBLIC_URL: z.string().url().optional(),
+    UPLOAD_DIR: z.string().default('./uploads'),
 
     SENDGRID_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().email(),

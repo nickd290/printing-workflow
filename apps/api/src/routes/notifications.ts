@@ -74,7 +74,7 @@ const notificationsRoutes: FastifyPluginAsync = async (server) => {
         ? [
             {
               filename: `${invoice.invoiceNo}.pdf`,
-              content: Buffer.from(''), // TODO: Fetch from S3
+              content: Buffer.from(''), // TODO: Fetch from disk storage using getFileBuffer
             },
           ]
         : undefined;

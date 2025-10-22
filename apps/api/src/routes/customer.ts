@@ -285,7 +285,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
 
       const buffer = await data.toBuffer();
 
-      // Create file record (simplified - in production, upload to S3)
+      // Create file record (uses disk storage)
       const file = await prisma.file.create({
         data: {
           kind: fileKind as any,

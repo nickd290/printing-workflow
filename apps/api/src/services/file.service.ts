@@ -1,5 +1,65 @@
 import { prisma, FileKind } from '@printing-workflow/db';
-import { uploadFile, getSignedDownloadUrl, getPublicUrl } from '../lib/s3.js';
+import fs from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto';
+import { env } from '../env.js';
+
+/**
+ * Calculate SHA-256 checksum for file integrity
+ */
+function calculateChecksum(buffer: Buffer): string {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Generate unique filename with prefix
+ */
+function generateFileName(originalFileName: string, folder: string): string {
+  const timestamp = Date.now();
+  const hash = crypto.randomBytes(8).toString('hex');
+  const sanitizedName = originalFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+  return `${folder}/${timestamp}-${hash}-${sanitizedName}`;
+}
+
+/**
+ * Upload file to disk storage
+ */
+async function uploadFile(params: {
+  file: Buffer;
+  fileName: string;
+  mimeType: string;
+  folder: string;
+}): Promise<{
+  objectKey: string;
+  checksum: string;
+  size: number;
+}> {
+  const { file, fileName, folder } = params;
+
+  const uploadDir = env.UPLOAD_DIR || './uploads';
+  const folderPath = path.join(uploadDir, folder);
+
+  // Create folder if it doesn't exist
+  await fs.mkdir(folderPath, { recursive: true });
+
+  // Generate unique filename
+  const objectKey = generateFileName(fileName, folder);
+  const filePath = path.join(uploadDir, objectKey);
+
+  // Calculate checksum
+  const checksum = calculateChecksum(file);
+
+  // Write file to disk
+  await fs.writeFile(filePath, file);
+
+  console.log(`✅ File uploaded to disk: ${objectKey}`);
+
+  return {
+    objectKey,
+    checksum,
+    size: file.length,
+  };
+}
 
 export async function createFile(data: {
   jobId?: string;
@@ -9,12 +69,23 @@ export async function createFile(data: {
   mimeType: string;
   uploadedBy?: string;
 }) {
-  // Upload to S3
+  // Determine folder based on file kind
+  const folderMap: Record<FileKind, string> = {
+    ARTWORK: 'artwork',
+    PROOF: 'proofs',
+    INVOICE: 'invoices',
+    PO_PDF: 'pos',
+    DATA_FILE: 'data_files',
+  };
+
+  const folder = folderMap[data.kind] || 'uploads';
+
+  // Upload to disk
   const uploadResult = await uploadFile({
     file: data.file,
     fileName: data.fileName,
     mimeType: data.mimeType,
-    folder: data.kind.toLowerCase(),
+    folder,
   });
 
   // Create file record
@@ -49,8 +120,8 @@ export async function getFileDownloadUrl(id: string) {
     throw new Error('File not found');
   }
 
-  const signedUrl = await getSignedDownloadUrl(file.objectKey);
-  return signedUrl;
+  // Return API endpoint for download
+  return `${env.API_URL}/api/files/${id}/download`;
 }
 
 export async function listFilesByJob(jobId: string) {
@@ -78,9 +149,51 @@ export async function listFiles(filters?: { kind?: FileKind; jobId?: string }) {
 }
 
 export async function deleteFile(id: string) {
-  // Note: This only deletes the DB record, not the S3 object
-  // In production, you might want to delete from S3 as well
+  const file = await getFileById(id);
+  if (!file) {
+    throw new Error('File not found');
+  }
+
+  // Delete physical file from disk
+  const uploadDir = env.UPLOAD_DIR || './uploads';
+  const filePath = path.join(uploadDir, file.objectKey);
+
+  try {
+    await fs.unlink(filePath);
+    console.log(`🗑️  File deleted from disk: ${file.objectKey}`);
+  } catch (error) {
+    console.error(`Failed to delete file from disk: ${file.objectKey}`, error);
+    // Continue with database deletion even if disk deletion fails
+  }
+
+  // Delete database record
   return prisma.file.delete({
     where: { id },
   });
+}
+
+/**
+ * Get file buffer from disk (for downloading)
+ */
+export async function getFileBuffer(id: string): Promise<{
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+}> {
+  const file = await getFileById(id);
+  if (!file) {
+    throw new Error('File not found');
+  }
+
+  const uploadDir = env.UPLOAD_DIR || './uploads';
+  const filePath = path.join(uploadDir, file.objectKey);
+
+  // Read file from disk
+  const buffer = await fs.readFile(filePath);
+
+  return {
+    buffer,
+    fileName: file.fileName,
+    mimeType: file.mimeType,
+  };
 }
