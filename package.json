@@ -17,7 +17,7 @@
     "status:logs": "bash scripts/dev-status.sh --logs",
     "clean": "bash scripts/cleanup-ports.sh",
     "clean:all": "bash scripts/cleanup-ports.sh --all",
-    "build": "turbo build",
+    "build": "pnpm db:generate && turbo build",
     "test": "pnpm --filter api test && pnpm --filter web test",
     "test:e2e": "playwright test",
     "lint": "turbo lint",
