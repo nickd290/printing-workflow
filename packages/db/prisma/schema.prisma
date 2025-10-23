@@ -316,6 +316,10 @@ model Proof {
   adminNotes String?
   adminComments String?
 
+  // Shareable link for customer proof approval
+  shareToken     String?   @unique // UUID for public access
+  shareExpiresAt DateTime? // Link expiration date
+
   approvals ProofApproval[]
 
   createdAt DateTime    @default(now())
@@ -323,6 +327,7 @@ model Proof {
 
   @@unique([jobId, version])
   @@index([jobId])
+  @@index([shareToken])
 }
 
 model ProofApproval {

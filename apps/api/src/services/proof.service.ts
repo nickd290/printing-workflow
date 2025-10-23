@@ -2,6 +2,7 @@ import { prisma, ProofStatus, JobStatus } from '@printing-workflow/db';
 import { queueEmail } from '../lib/queue.js';
 import { emailTemplates } from '../lib/email.js';
 import { createInvoiceForJob } from './invoice.service.js';
+import { randomUUID } from 'crypto';
 
 export async function uploadProof(data: { jobId: string; fileId: string }) {
   const job = await prisma.job.findUnique({
@@ -22,6 +23,11 @@ export async function uploadProof(data: { jobId: string; fileId: string }) {
   // Calculate next version number
   const nextVersion = job.proofs.length > 0 ? job.proofs[0].version + 1 : 1;
 
+  // Generate shareable link (UUID) and set expiration (7 days from now)
+  const shareToken = randomUUID();
+  const shareExpiresAt = new Date();
+  shareExpiresAt.setDate(shareExpiresAt.getDate() + 7);
+
   // Create proof
   const proof = await prisma.proof.create({
     data: {
@@ -29,6 +35,8 @@ export async function uploadProof(data: { jobId: string; fileId: string }) {
       fileId: data.fileId,
       version: nextVersion,
       status: ProofStatus.PENDING,
+      shareToken,
+      shareExpiresAt,
     },
     include: {
       job: {
@@ -46,8 +54,8 @@ export async function uploadProof(data: { jobId: string; fileId: string }) {
     data: { status: JobStatus.READY_FOR_PROOF },
   });
 
-  // Queue email notification
-  const template = emailTemplates.proofReady(job.jobNo, proof.id, nextVersion);
+  // Queue email notification with shareable link
+  const template = emailTemplates.proofReady(job.jobNo, proof.id, nextVersion, shareToken);
 
   await queueEmail({
     to: job.customer.email || '',
@@ -228,4 +236,62 @@ export async function listProofsByJob(jobId: string) {
       version: 'desc',
     },
   });
+}
+
+/**
+ * Get proof by shareable token (for public access)
+ * Validates that the link hasn't expired
+ */
+export async function getProofByShareToken(token: string) {
+  const proof = await prisma.proof.findUnique({
+    where: { shareToken: token },
+    include: {
+      job: {
+        include: {
+          customer: true,
+        },
+      },
+      file: true,
+      approvals: {
+        orderBy: {
+          createdAt: 'desc',
+        },
+      },
+    },
+  });
+
+  if (!proof) {
+    throw new Error('Proof not found');
+  }
+
+  // Check if link has expired
+  if (proof.shareExpiresAt && proof.shareExpiresAt < new Date()) {
+    throw new Error('This proof link has expired');
+  }
+
+  return proof;
+}
+
+/**
+ * Generate a new share link for an existing proof
+ * Extends expiration by 7 days from now
+ */
+export async function generateShareLink(proofId: string) {
+  const shareToken = randomUUID();
+  const shareExpiresAt = new Date();
+  shareExpiresAt.setDate(shareExpiresAt.getDate() + 7);
+
+  const proof = await prisma.proof.update({
+    where: { id: proofId },
+    data: {
+      shareToken,
+      shareExpiresAt,
+    },
+    include: {
+      job: true,
+      file: true,
+    },
+  });
+
+  return proof;
 }

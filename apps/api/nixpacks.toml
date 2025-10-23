@@ -1,16 +1,18 @@
 [phases.setup]
-nixPkgs = ["nodejs", "pnpm"]
+nixPkgs = ['nodejs_20', 'pnpm']
 
 [phases.install]
-cmds = ["cd ../.. && pnpm install --frozen-lockfile"]
+cmds = [
+  'cd ../.. && pnpm install --frozen-lockfile'
+]
 
 [phases.build]
 cmds = [
-  "cd ../..",
-  "pnpm --filter @printing-workflow/db db:generate",
-  "pnpm --filter @printing-workflow/shared build",
-  "pnpm --filter @printing-workflow/api build"
+  'cd ../..',
+  'pnpm --filter @printing-workflow/db db:generate',
+  'pnpm --filter @printing-workflow/db db:push',
+  'pnpm --filter @printing-workflow/api build'
 ]
 
 [start]
-cmd = "cd ../.. && ./start.sh"
+cmd = 'cd ../.. && cd apps/api && pnpm start'

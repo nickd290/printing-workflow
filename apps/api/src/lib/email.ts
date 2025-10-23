@@ -233,7 +233,7 @@ export const emailTemplates = {
     ),
   }),
 
-  proofReady: (jobNo: string, proofId: string, version: number, customerEmail?: string) => ({
+  proofReady: (jobNo: string, proofId: string, version: number, shareToken?: string, customerEmail?: string) => ({
     subject: `🎨 Proof Ready for Review - Job ${jobNo}`,
     html: emailTemplate(
       `
@@ -247,8 +247,18 @@ export const emailTemplates = {
         </div>
 
         <center>
-          <a href="${env.NEXTAUTH_URL}/proof/view/${proofId}" class="button">Review & Approve Proof</a>
+          <a href="${shareToken ? `${env.NEXTAUTH_URL}/proof/share/${shareToken}` : `${env.NEXTAUTH_URL}/proof/view/${proofId}`}" class="button">Review & Approve Proof</a>
         </center>
+
+        ${shareToken ? `
+        <p style="text-align: center; color: #718096; font-size: 14px; margin-top: 16px;">
+          <strong>Direct Link:</strong><br>
+          <a href="${env.NEXTAUTH_URL}/proof/share/${shareToken}" style="color: #3182CE; word-break: break-all;">
+            ${env.NEXTAUTH_URL}/proof/share/${shareToken}
+          </a><br>
+          <span style="color: #E53E3E; font-size: 12px;">⏰ This link expires in 7 days</span>
+        </p>
+        ` : ''}
 
         <div class="divider"></div>
 
