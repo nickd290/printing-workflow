@@ -5,6 +5,7 @@ import {
   createJobFromQuote,
   createDirectJob,
   updateJobStatus,
+  updateJob,
   getJobById,
   getJobByJobNo,
   listJobs,
@@ -281,51 +282,51 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     return { jobs };
   });
 
-  // PATCH /api/jobs/:id - Update job details
+  // PATCH /api/jobs/:id - Update job details with activity tracking
   fastify.patch('/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
+      quantity?: number;
       deliveryDate?: string;
       packingSlipNotes?: string;
       customerPONumber?: string;
+      specs?: any;
+      // User context for activity tracking
+      changedBy?: string;
+      changedByRole?: string;
     };
 
-    const { prisma } = await import('@printing-workflow/db');
+    // Extract user context (from auth middleware or request body)
+    const changedBy = body.changedBy || 'Unknown User';
+    const changedByRole = body.changedByRole || 'CUSTOMER';
 
-    const job = await prisma.job.update({
-      where: { id },
-      data: {
-        deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : undefined,
-        packingSlipNotes: body.packingSlipNotes,
-        customerPONumber: body.customerPONumber,
-      },
-      include: {
-        customer: true,
-        files: true,
-        proofs: {
-          include: {
-            file: true,
-            approvals: true,
-          },
-        },
-        purchaseOrders: {
-          include: {
-            originCompany: true,
-            targetCompany: true,
-          },
-        },
-        invoices: {
-          include: {
-            fromCompany: true,
-            toCompany: true,
-          },
-        },
-        shipments: true,
-        sampleShipments: true,
-      },
+    // Build updates object (exclude context fields)
+    const updates: any = {};
+    if (body.quantity !== undefined) updates.quantity = body.quantity;
+    if (body.deliveryDate !== undefined) updates.deliveryDate = body.deliveryDate;
+    if (body.packingSlipNotes !== undefined) updates.packingSlipNotes = body.packingSlipNotes;
+    if (body.customerPONumber !== undefined) updates.customerPONumber = body.customerPONumber;
+    if (body.specs !== undefined) updates.specs = body.specs;
+
+    const job = await updateJob(id, updates, {
+      changedBy,
+      changedByRole,
     });
 
     return { job };
+  });
+
+  // GET /api/jobs/:id/activities - Get job activity history
+  fastify.get('/:id/activities', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { prisma } = await import('@printing-workflow/db');
+
+    const activities = await prisma.jobActivity.findMany({
+      where: { jobId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { activities };
   });
 
   // POST /api/jobs/:id/sample-shipments - Add sample shipment

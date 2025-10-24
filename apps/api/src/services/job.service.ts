@@ -420,3 +420,242 @@ export async function getJobFileProgress(jobId: string): Promise<{
     },
   };
 }
+
+// ============================================================================
+// Job Updates with Activity Tracking
+// ============================================================================
+
+interface JobUpdateData {
+  quantity?: number;
+  deliveryDate?: Date | string;
+  packingSlipNotes?: string;
+  customerPONumber?: string;
+  specs?: any;
+}
+
+interface UpdateContext {
+  changedBy: string;       // User email or ID
+  changedByRole: string;   // CUSTOMER, BROKER_ADMIN, BRADFORD_ADMIN
+}
+
+/**
+ * Update job with activity tracking and email notifications
+ */
+export async function updateJob(
+  jobId: string,
+  updates: JobUpdateData,
+  context: UpdateContext
+) {
+  // Get current job state
+  const currentJob = await prisma.job.findUnique({
+    where: { id: jobId },
+    include: {
+      customer: {
+        include: {
+          contacts: {
+            where: { isPrimary: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!currentJob) {
+    throw new Error(`Job not found: ${jobId}`);
+  }
+
+  // Track changes for activity log
+  const changes: Array<{ field: string; oldValue: string; newValue: string }> = [];
+
+  // Build update data and track changes
+  const updateData: any = {};
+
+  // Quantity
+  if (updates.quantity !== undefined && updates.quantity !== currentJob.quantity) {
+    changes.push({
+      field: 'quantity',
+      oldValue: currentJob.quantity?.toString() || 'None',
+      newValue: updates.quantity.toString(),
+    });
+    updateData.quantity = updates.quantity;
+  }
+
+  // Delivery Date
+  if (updates.deliveryDate !== undefined) {
+    const newDate = typeof updates.deliveryDate === 'string'
+      ? new Date(updates.deliveryDate)
+      : updates.deliveryDate;
+    const oldDate = currentJob.deliveryDate;
+
+    // Compare dates (null-safe)
+    const datesAreDifferent = oldDate?.getTime() !== newDate.getTime();
+
+    if (datesAreDifferent) {
+      changes.push({
+        field: 'deliveryDate',
+        oldValue: oldDate ? oldDate.toLocaleDateString() : 'None',
+        newValue: newDate.toLocaleDateString(),
+      });
+      updateData.deliveryDate = newDate;
+    }
+  }
+
+  // Packing Slip Notes
+  if (updates.packingSlipNotes !== undefined && updates.packingSlipNotes !== currentJob.packingSlipNotes) {
+    changes.push({
+      field: 'packingSlipNotes',
+      oldValue: currentJob.packingSlipNotes || 'None',
+      newValue: updates.packingSlipNotes,
+    });
+    updateData.packingSlipNotes = updates.packingSlipNotes;
+  }
+
+  // Customer PO Number
+  if (updates.customerPONumber !== undefined && updates.customerPONumber !== currentJob.customerPONumber) {
+    changes.push({
+      field: 'customerPONumber',
+      oldValue: currentJob.customerPONumber || 'None',
+      newValue: updates.customerPONumber,
+    });
+    updateData.customerPONumber = updates.customerPONumber;
+  }
+
+  // Specs (Job specifications as JSON)
+  if (updates.specs !== undefined) {
+    const oldSpecs = currentJob.specs as any || {};
+    const newSpecs = updates.specs;
+
+    // Track changes in specs object
+    for (const key of Object.keys(newSpecs)) {
+      if (JSON.stringify(oldSpecs[key]) !== JSON.stringify(newSpecs[key])) {
+        changes.push({
+          field: `specs.${key}`,
+          oldValue: JSON.stringify(oldSpecs[key]) || 'None',
+          newValue: JSON.stringify(newSpecs[key]),
+        });
+      }
+    }
+
+    updateData.specs = newSpecs;
+  }
+
+  // If no changes, return current job
+  if (changes.length === 0) {
+    return currentJob;
+  }
+
+  // Update job and create activity records in a transaction
+  const updatedJob = await prisma.$transaction(async (tx) => {
+    // Update the job
+    const job = await tx.job.update({
+      where: { id: jobId },
+      data: updateData,
+      include: {
+        customer: {
+          include: {
+            contacts: {
+              where: { isPrimary: true },
+            },
+          },
+        },
+        files: true,
+        proofs: {
+          include: {
+            file: true,
+            approvals: true,
+          },
+        },
+        purchaseOrders: {
+          include: {
+            originCompany: true,
+            targetCompany: true,
+          },
+        },
+        invoices: {
+          include: {
+            fromCompany: true,
+            toCompany: true,
+          },
+        },
+        shipments: true,
+        sampleShipments: true,
+      },
+    });
+
+    // Create activity records for each change
+    for (const change of changes) {
+      await tx.jobActivity.create({
+        data: {
+          jobId,
+          action: 'UPDATED',
+          field: change.field,
+          oldValue: change.oldValue,
+          newValue: change.newValue,
+          changedBy: context.changedBy,
+          changedByRole: context.changedByRole as any,
+        },
+      });
+    }
+
+    return job;
+  });
+
+  // Send email notifications (non-blocking)
+  sendJobUpdateEmail(updatedJob, changes, context).catch((error) => {
+    console.error('Failed to send job update email:', error);
+  });
+
+  return updatedJob;
+}
+
+/**
+ * Send email notification for job updates
+ */
+async function sendJobUpdateEmail(
+  job: any,
+  changes: Array<{ field: string; oldValue: string; newValue: string }>,
+  context: UpdateContext
+) {
+  const { sendEmail, emailTemplates } = await import('../lib/email.js');
+
+  // Format changes for email
+  const changesText = changes
+    .map(c => {
+      const fieldName = c.field.replace('specs.', '').replace(/([A-Z])/g, ' $1').trim();
+      const formatted = fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+      return `• ${formatted}: ${c.oldValue} → ${c.newValue}`;
+    })
+    .join('\n');
+
+  // Get customer email
+  const customerEmail = job.customer?.contacts?.[0]?.email || job.customer?.email;
+
+  // Email to nick@jdgraphic.com (primary recipient)
+  const nickEmail = 'nick@jdgraphic.com';
+
+  await sendEmail(
+    nickEmail,
+    `Job ${job.jobNo} Updated by ${context.changedByRole}`,
+    `<div>
+      <h2>Job ${job.jobNo} Updated</h2>
+      <p><strong>Customer:</strong> ${job.customer?.name}</p>
+      <p><strong>Updated by:</strong> ${context.changedBy} (${context.changedByRole})</p>
+      <h3>Changes:</h3>
+      <pre>${changesText}</pre>
+    </div>`
+  );
+
+  // Email to customer (secondary recipient)
+  if (customerEmail) {
+    await sendEmail(
+      customerEmail,
+      `Your Job ${job.jobNo} Has Been Updated`,
+      `<div>
+        <h2>Job ${job.jobNo} Updated</h2>
+        <p>The following changes were made to your job:</p>
+        <pre>${changesText}</pre>
+        <p>If you have any questions, please contact us.</p>
+      </div>`
+    );
+  }
+}

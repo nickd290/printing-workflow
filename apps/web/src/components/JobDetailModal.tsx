@@ -25,6 +25,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   // Edit mode states
   const [isEditingJob, setIsEditingJob] = useState(false);
   const [editFormData, setEditFormData] = useState({
+    quantity: '',
     deliveryDate: '',
     packingSlipNotes: '',
     customerPONumber: '',
@@ -63,7 +64,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   const canGenerateInvoice = isBrokerAdmin;
   const canSeeAllPOs = isBrokerAdmin;
   const canSeeBradfordPOs = isBradfordAdmin;
-  const canEditJob = isBrokerAdmin;
+  const canEditJob = isCustomer || isBrokerAdmin; // Allow customers to edit jobs
   const canCreatePO = isBrokerAdmin || isBradfordAdmin; // Both can create POs
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
       // Initialize edit form data
       setEditFormData({
+        quantity: jobData.quantity?.toString() || '',
         deliveryDate: jobData.deliveryDate ? new Date(jobData.deliveryDate).toISOString().split('T')[0] : '',
         packingSlipNotes: jobData.packingSlipNotes || '',
         customerPONumber: jobData.customerPONumber || '',
@@ -96,14 +98,18 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     setSaving(true);
 
     try {
-      // Update job details
+      // Update job details with activity tracking
       await fetch(`${API_URL}/api/jobs/${job.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          quantity: editFormData.quantity ? parseInt(editFormData.quantity) : undefined,
           deliveryDate: editFormData.deliveryDate || undefined,
           packingSlipNotes: editFormData.packingSlipNotes || undefined,
           customerPONumber: editFormData.customerPONumber || undefined,
+          // User context for activity tracking
+          changedBy: user?.email || 'Unknown User',
+          changedByRole: user?.role || 'CUSTOMER',
         }),
       });
 
@@ -116,7 +122,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
         });
       }
 
-      toast.success('Job updated successfully!');
+      toast.success('Job updated successfully! Notification emails sent.');
       setIsEditingJob(false);
       await loadJob();
     } catch (err) {
@@ -132,6 +138,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     // Reset form to current job data
     if (job) {
       setEditFormData({
+        quantity: job.quantity?.toString() || '',
         deliveryDate: job.deliveryDate ? new Date(job.deliveryDate).toISOString().split('T')[0] : '',
         packingSlipNotes: job.packingSlipNotes || '',
         customerPONumber: job.customerPONumber || '',
@@ -524,6 +531,12 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                       <label className="text-sm font-medium text-gray-500">Total</label>
                       <p className="text-lg font-semibold text-gray-900">${Number(job.customerTotal).toLocaleString()}</p>
                     </div>
+                    {job.quantity && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Quantity</label>
+                        <p className="text-lg font-semibold text-gray-900">{job.quantity.toLocaleString()}</p>
+                      </div>
+                    )}
                     {job.deliveryDate && (
                       <div>
                         <label className="text-sm font-medium text-gray-500">Delivery Date</label>
@@ -635,6 +648,19 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                         onChange={(e) => setEditFormData({ ...editFormData, customerPONumber: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="PO-12345"
+                      />
+                    </div>
+
+                    {/* Editable: Quantity */}
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Quantity</label>
+                      <input
+                        type="number"
+                        value={editFormData.quantity}
+                        onChange={(e) => setEditFormData({ ...editFormData, quantity: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="50000"
+                        min="1"
                       />
                     </div>
 

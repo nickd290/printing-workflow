@@ -249,10 +249,31 @@ model Job {
   shipments  Shipment[]
   sampleShipments SampleShipment[]
   notifications Notification[]
+  activities JobActivity[]
 
   @@index([customerId])
   @@index([status])
   @@index([jobNo])
+}
+
+// Job Activity / Audit Log
+model JobActivity {
+  id            String   @id @default(cuid())
+  jobId         String
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  action        String   // "UPDATED", "CREATED", "STATUS_CHANGED", etc.
+  field         String?  // Field that was changed (e.g., "quantity", "deliveryDate")
+  oldValue      String?  // Previous value (stored as string for flexibility)
+  newValue      String?  // New value (stored as string for flexibility)
+
+  changedBy     String   // User email or ID who made the change
+  changedByRole Role     // User's role at time of change
+
+  createdAt     DateTime @default(now())
+
+  @@index([jobId])
+  @@index([createdAt])
 }
 
 // ============================================================================
