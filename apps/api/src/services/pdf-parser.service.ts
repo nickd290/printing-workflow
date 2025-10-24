@@ -197,9 +197,152 @@ export interface ParsedCustomerPO {
   poNumber?: string;
   deliveryDate?: string;
   samples?: string;
+  quantity?: number;
   requiredArtworkCount?: number;  // Number of artwork files customer should upload
   requiredDataFileCount?: number; // Number of data files customer should upload
   rawText: string;
+}
+
+interface ParsedFilenameData {
+  customerCode?: string;
+  projectName?: string;
+  year?: string;
+  size?: string;
+  productType?: string;
+  quantity?: number;
+  date?: string;
+  version?: number;
+}
+
+/**
+ * Parse filename to extract job information
+ * Handles formats like: CE.Halloween.2025.6x9.postcard.8.25.25 (2).pdf
+ *
+ * Format patterns:
+ * - CustomerCode.ProjectName.Year.Size.Type.Date.pdf
+ * - CustomerCode.ProjectName.Size.Quantity.Type.Date.pdf
+ * - Variations with dashes, underscores, or mixed delimiters
+ */
+function parseFilename(filename: string): ParsedFilenameData {
+  console.log('📄 Parsing filename:', filename);
+
+  // Remove .pdf extension and any parenthetical version numbers
+  let cleanName = filename.replace(/\.pdf$/i, '');
+
+  // Extract version number if present (e.g., "(2)" or " (2)")
+  const versionMatch = cleanName.match(/\s*\((\d+)\)$/);
+  const version = versionMatch ? parseInt(versionMatch[1]) : undefined;
+  cleanName = cleanName.replace(/\s*\(\d+\)$/, '');
+
+  // Split by dots (main delimiter)
+  const parts = cleanName.split('.');
+
+  if (parts.length < 2) {
+    console.log('⚠️  Filename has too few parts, returning minimal data');
+    return {};
+  }
+
+  const result: ParsedFilenameData = { version };
+
+  // First part is usually customer code (2-4 letters)
+  if (parts[0].length <= 4 && /^[A-Z]{2,4}$/i.test(parts[0])) {
+    result.customerCode = parts[0].toUpperCase();
+  }
+
+  // Look for size pattern (e.g., 6x9, 8.5x11, 4x6)
+  const sizePattern = /^(\d+\.?\d*)\s*x\s*(\d+\.?\d*)$/i;
+  let sizeIndex = -1;
+  for (let i = 0; i < parts.length; i++) {
+    const match = parts[i].match(sizePattern);
+    if (match) {
+      result.size = `${match[1]} x ${match[2]}`; // Normalize format
+      sizeIndex = i;
+      break;
+    }
+  }
+
+  // Look for quantity (5+ digit numbers or formats like 50k, 100K)
+  const quantityPattern = /^(\d{5,})$|^(\d+)[kK]$/;
+  for (const part of parts) {
+    const match = part.match(quantityPattern);
+    if (match) {
+      if (match[1]) {
+        result.quantity = parseInt(match[1]);
+      } else if (match[2]) {
+        result.quantity = parseInt(match[2]) * 1000;
+      }
+      break;
+    }
+  }
+
+  // Look for year (4-digit number starting with 20)
+  for (const part of parts) {
+    if (/^20\d{2}$/.test(part)) {
+      result.year = part;
+      break;
+    }
+  }
+
+  // Look for product type keywords
+  const productTypes = ['postcard', 'brochure', 'flyer', 'card', 'booklet', 'mailer', 'letter', 'envelope', 'poster'];
+  for (const part of parts) {
+    if (productTypes.includes(part.toLowerCase())) {
+      result.productType = part.toLowerCase();
+      break;
+    }
+  }
+
+  // Try to parse date from remaining parts (look for patterns like 8.25.25, 08-25-25, etc.)
+  const datePatterns = [
+    /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/, // 8.25.25 or 08.25.2025
+    /^(\d{1,2})-(\d{1,2})-(\d{2,4})$/,   // 8-25-25 or 08-25-2025
+    /^(\d{4})-(\d{1,2})-(\d{1,2})$/,     // 2025-08-25
+  ];
+
+  for (const part of parts) {
+    for (const pattern of datePatterns) {
+      const match = part.match(pattern);
+      if (match) {
+        // Convert to YYYY-MM-DD format
+        if (pattern === datePatterns[2]) {
+          // Already in YYYY-MM-DD
+          result.date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+        } else {
+          // MM.DD.YY or MM-DD-YY format
+          const month = match[1].padStart(2, '0');
+          const day = match[2].padStart(2, '0');
+          let year = match[3];
+          // Convert 2-digit year to 4-digit
+          if (year.length === 2) {
+            year = `20${year}`;
+          }
+          result.date = `${year}-${month}-${day}`;
+        }
+        break;
+      }
+    }
+    if (result.date) break;
+  }
+
+  // Build project name from parts between customer code and size/type/date
+  // Typically: CustomerCode.ProjectName.Year.Size...
+  const projectParts: string[] = [];
+  for (let i = 1; i < parts.length && i < sizeIndex; i++) {
+    // Skip year, quantity, and product type
+    if (parts[i] !== result.year &&
+        !quantityPattern.test(parts[i]) &&
+        !productTypes.includes(parts[i].toLowerCase()) &&
+        !datePatterns.some(p => p.test(parts[i]))) {
+      projectParts.push(parts[i]);
+    }
+  }
+
+  if (projectParts.length > 0) {
+    result.projectName = projectParts.join(' ');
+  }
+
+  console.log('📄 Parsed filename data:', JSON.stringify(result, null, 2));
+  return result;
 }
 
 export interface ParsedBradfordCustomerPO {
@@ -307,10 +450,18 @@ Return ONLY the JSON object with these exact field names.`;
  * Uses OpenAI GPT-4o to intelligently extract structured data from the PO text.
  * Falls back to regex-based parsing if OpenAI is not available.
  *
+ * Optionally accepts a filename to extract initial data before PDF parsing.
+ * PDF content takes priority over filename data when conflicts occur.
+ *
  * NOTE: This is for customer POs only, NOT Bradford POs.
  * Bradford POs are handled separately via parseBradfordPO().
  */
-export async function parseCustomerPO(buffer: Buffer): Promise<ParsedCustomerPO> {
+export async function parseCustomerPO(buffer: Buffer, filename?: string): Promise<ParsedCustomerPO> {
+  // Parse filename first if provided
+  let filenameData: ParsedFilenameData = {};
+  if (filename) {
+    filenameData = parseFilename(filename);
+  }
   // Try to parse as PDF first, fall back to plain text
   let text: string;
 
@@ -370,7 +521,18 @@ export async function parseCustomerPO(buffer: Buffer): Promise<ParsedCustomerPO>
     // Use OpenAI for intelligent parsing (customer PO only)
     console.log('🤖 Sending to OpenAI for parsing...');
     console.log('🤖 Text length:', text.length);
-    const prompt = `You are a printing industry expert analyzing a purchase order (PO) from a customer.
+
+    // Build filename context for the prompt
+    let filenameContext = '';
+    if (filename) {
+      filenameContext = `\n\nThe filename is: "${filename}"`;
+      if (Object.keys(filenameData).length > 0) {
+        filenameContext += `\nFrom the filename, we extracted: ${JSON.stringify(filenameData)}`;
+      }
+      filenameContext += '\nConsider both the filename and PDF content, but PDF content is more reliable and should take priority.';
+    }
+
+    const prompt = `You are a printing industry expert analyzing a purchase order (PO) from a customer.${filenameContext}
 
 IMPORTANT: If the text appears to be PDF binary data, corrupted, or unreadable, return all fields as null.
 
@@ -384,6 +546,7 @@ Extract the following information from the PO text:
 - finishing: Finishing processes like cut, fold, glue, UV coating, lamination, die cut, perforation, etc.
 - total: Total price in dollars as a number (e.g., 1234.56)
 - poNumber: Purchase order number
+- quantity: Quantity of items to be printed (e.g., 50000, 10000)
 - deliveryDate: Delivery date in YYYY-MM-DD format
 - samples: Sample information or quantity
 - requiredArtworkCount: Number of artwork files needed (e.g., 1 for simple jobs, 2+ for front/back or multi-piece jobs). Default to 1 if not specified.
@@ -394,6 +557,7 @@ Important:
 - For colors, use the standard X/Y notation (front/back)
 - For finishing, list all processes (e.g., "Cut, Fold, Glue")
 - For dates, convert to YYYY-MM-DD format
+- For quantity, extract the number of items to be printed
 - For file counts, analyze the job complexity: simple jobs need 1 artwork, complex/multi-piece need more
 - Data files are only needed for personalized/variable data jobs (direct mail, etc.)
 - Return ONLY the JSON object with these exact field names`;
@@ -409,12 +573,13 @@ Important:
         finishing: { type: ['string', 'null'] },
         total: { type: ['number', 'null'] },
         poNumber: { type: ['string', 'null'] },
+        quantity: { type: ['number', 'null'] },
         deliveryDate: { type: ['string', 'null'] },
         samples: { type: ['string', 'null'] },
         requiredArtworkCount: { type: ['number', 'null'] },
         requiredDataFileCount: { type: ['number', 'null'] },
       },
-      required: ['description', 'paper', 'flatSize', 'foldedSize', 'colors', 'finishing', 'total', 'poNumber', 'deliveryDate', 'samples', 'requiredArtworkCount', 'requiredDataFileCount'],
+      required: ['description', 'paper', 'flatSize', 'foldedSize', 'colors', 'finishing', 'total', 'poNumber', 'quantity', 'deliveryDate', 'samples', 'requiredArtworkCount', 'requiredDataFileCount'],
       additionalProperties: false,
     };
 
@@ -427,6 +592,7 @@ Important:
       finishing: string | null;
       total: number | null;
       poNumber: string | null;
+      quantity: number | null;
       deliveryDate: string | null;
       samples: string | null;
       requiredArtworkCount: number | null;
@@ -435,23 +601,36 @@ Important:
 
     console.log('🤖 OpenAI returned:', JSON.stringify(parsed, null, 2));
 
+    // Merge filename data with PDF data (PDF takes priority)
+    // Build description using filename data if PDF didn't extract one
+    let description = parsed.description || undefined;
+    if (!description && filenameData.projectName) {
+      // Build description from filename parts
+      const parts: string[] = [];
+      if (filenameData.projectName) parts.push(filenameData.projectName);
+      if (filenameData.productType) parts.push(filenameData.productType);
+      if (filenameData.year) parts.push(filenameData.year);
+      description = parts.join(' ');
+    }
+
     const result = {
-      description: parsed.description || undefined,
+      description: description,
       paper: parsed.paper || undefined,
-      flatSize: parsed.flatSize || undefined,
+      flatSize: parsed.flatSize || filenameData.size || undefined,
       foldedSize: parsed.foldedSize || undefined,
       colors: parsed.colors || undefined,
       finishing: parsed.finishing || undefined,
       total: parsed.total || undefined,
       poNumber: parsed.poNumber || undefined,
-      deliveryDate: parsed.deliveryDate || undefined,
+      quantity: parsed.quantity || filenameData.quantity || undefined,
+      deliveryDate: parsed.deliveryDate || filenameData.date || undefined,
       samples: parsed.samples || undefined,
       requiredArtworkCount: parsed.requiredArtworkCount ?? 1, // Default to 1 if not specified
       requiredDataFileCount: parsed.requiredDataFileCount ?? 0, // Default to 0 if not specified
       rawText: text,
     };
 
-    console.log('✅ Final parsed result:', JSON.stringify(result, null, 2));
+    console.log('✅ Final parsed result (merged with filename data):', JSON.stringify(result, null, 2));
 
     return result;
   } catch (error: any) {

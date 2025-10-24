@@ -72,8 +72,8 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       console.log('  - MIME type:', data.mimetype);
       console.log('  - File size:', buffer.length, 'bytes');
 
-      // Parse PO (handles both PDF and text files)
-      const parsed = await parseCustomerPO(buffer);
+      // Parse PO (handles both PDF and text files, with filename parsing)
+      const parsed = await parseCustomerPO(buffer, data.filename);
 
       console.log('✅ PO file parsed');
       console.log('  - Raw text length:', parsed.rawText?.length || 0);
@@ -83,6 +83,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       console.log('  - Folded Size:', parsed.foldedSize || 'N/A');
       console.log('  - Colors:', parsed.colors || 'N/A');
       console.log('  - Finishing:', parsed.finishing || 'N/A');
+      console.log('  - Quantity:', parsed.quantity || 'N/A');
       console.log('  - Total:', parsed.total || 'N/A');
       console.log('  - PO Number:', parsed.poNumber || 'N/A');
       console.log('  - Delivery Date:', parsed.deliveryDate || 'N/A');
