@@ -91,7 +91,21 @@ export default function DashboardPage() {
   const loadJobs = async () => {
     try {
       setLoading(true);
-      const result = await jobsAPI.list();
+
+      // Build filter params based on user role for server-side filtering
+      const params: any = {};
+
+      if (isCustomer && user?.companyId) {
+        // CUSTOMER: Only fetch their own jobs (server-side filtering for security)
+        params.customerId = user.companyId;
+      } else if (isBradfordAdmin && user?.companyId) {
+        // BRADFORD: Use role-based filtering
+        params.companyId = user.companyId;
+        params.userRole = 'BRADFORD_ADMIN';
+      }
+      // BROKER_ADMIN: No params = fetch all jobs (as intended)
+
+      const result = await jobsAPI.list(params);
       setAllJobs(result.jobs);
       setError(null);
     } catch (err) {
