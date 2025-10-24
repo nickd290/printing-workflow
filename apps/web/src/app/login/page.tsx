@@ -81,21 +81,6 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-xs text-blue-800 mb-2">
-            <strong>Demo Accounts:</strong>
-          </p>
-          <ul className="text-xs text-blue-700 space-y-1">
-            <li>• admin@impactdirect.com (Broker Admin)</li>
-            <li>• steve.gustafson@bgeltd.com (Bradford Admin)</li>
-            <li>• orders@jjsa.com (Customer)</li>
-            <li>• orders@ballantine.com (Customer)</li>
-          </ul>
-          <p className="text-xs text-blue-700 mt-2">
-            Password for all accounts: <strong>password123</strong>
-          </p>
-        </div>
       </div>
     </div>
   );

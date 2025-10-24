@@ -30,7 +30,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,js,json}\""
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0",
+    "@prisma/client": "^6.17.1",
     "@types/bcrypt": "^6.0.0",
     "bcrypt": "^6.0.0"
   },
