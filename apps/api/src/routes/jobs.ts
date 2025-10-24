@@ -103,24 +103,26 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
         rawPOText: parsed.rawText?.substring(0, 1000) || undefined,
       };
 
-      // Validate customer PO number was extracted
-      if (!parsed.poNumber || parsed.poNumber.trim() === '') {
-        return reply.status(400).send({
-          error: 'Could not extract customer PO number from PDF. Please provide it manually.',
-          parsed: {
-            description: parsed.description || null,
-            rawTextPreview: parsed.rawText?.substring(0, 500) || null,
-          },
-        });
+      // Check if customer PO number was extracted
+      // If not extracted, we'll generate a temporary one
+      let customerPONumber = parsed.poNumber;
+      let generatedPOWarning = null;
+
+      if (!customerPONumber || customerPONumber.trim() === '') {
+        console.log('⚠️  No PO number extracted from PDF/filename, generating temporary PO number');
+        // Generate a temporary PO number using timestamp
+        customerPONumber = `TEMP-${Date.now()}`;
+        generatedPOWarning = 'PO number was not found in the PDF or filename. A temporary PO number was generated. Please update it manually.';
       }
 
-      // Create job with extracted customer PO number
+      // Create job with extracted or generated customer PO number
       console.log('📝 Creating job with specs:', JSON.stringify(specs, null, 2));
+      console.log('📝 Customer PO Number:', customerPONumber);
       const job = await createDirectJob({
         customerId,
         sizeId: 'SM_7_25_16_375', // Default size - should be extracted or provided
         quantity: parsed.quantity || 1000, // Default quantity
-        customerPONumber: parsed.poNumber,
+        customerPONumber,
         specs,
         description: parsed.description,
       });
@@ -141,6 +143,7 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       return {
         success: true,
         job,
+        warning: generatedPOWarning,
         parsed: {
           description: parsed.description || null,
           paper: parsed.paper || null,

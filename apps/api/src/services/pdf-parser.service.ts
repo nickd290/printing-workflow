@@ -457,11 +457,23 @@ Return ONLY the JSON object with these exact field names.`;
  * Bradford POs are handled separately via parseBradfordPO().
  */
 export async function parseCustomerPO(buffer: Buffer, filename?: string): Promise<ParsedCustomerPO> {
+  console.log('🔄 parseCustomerPO called');
+  console.log('  - Buffer size:', buffer.length);
+  console.log('  - Filename:', filename || '(no filename provided)');
+
   // Parse filename first if provided
   let filenameData: ParsedFilenameData = {};
   if (filename) {
-    filenameData = parseFilename(filename);
+    try {
+      console.log('📝 Parsing filename...');
+      filenameData = parseFilename(filename);
+      console.log('📝 Filename parsed successfully:', JSON.stringify(filenameData, null, 2));
+    } catch (error: any) {
+      console.error('⚠️  Filename parsing failed (non-fatal):', error.message);
+      // Continue anyway - filename parsing is optional
+    }
   }
+
   // Try to parse as PDF first, fall back to plain text
   let text: string;
 
@@ -634,7 +646,51 @@ Important:
 
     return result;
   } catch (error: any) {
-    console.error('OpenAI parsing failed:', error.message);
-    throw new Error(`Failed to parse customer PO: ${error.message}`);
+    console.error('❌ OpenAI parsing failed:', error.message);
+    console.error('❌ Error stack:', error.stack);
+
+    // If we have filename data, use it as a fallback
+    if (Object.keys(filenameData).length > 0) {
+      console.log('🔄 Falling back to filename-only parsing...');
+
+      // Build description from filename
+      const parts: string[] = [];
+      if (filenameData.projectName) parts.push(filenameData.projectName);
+      if (filenameData.productType) parts.push(filenameData.productType);
+      if (filenameData.year) parts.push(filenameData.year);
+      const description = parts.length > 0 ? parts.join(' ') : 'Job from parsed filename';
+
+      const fallbackResult = {
+        description,
+        paper: undefined,
+        flatSize: filenameData.size || undefined,
+        foldedSize: undefined,
+        colors: undefined,
+        finishing: undefined,
+        total: undefined,
+        poNumber: undefined,  // No PO number from filename alone
+        quantity: filenameData.quantity || undefined,
+        deliveryDate: filenameData.date || undefined,
+        samples: undefined,
+        requiredArtworkCount: 1,
+        requiredDataFileCount: 0,
+        rawText: text || '',
+      };
+
+      console.log('⚠️  Using fallback data from filename:', JSON.stringify(fallbackResult, null, 2));
+      return fallbackResult;
+    }
+
+    // No filename data to fall back on - throw detailed error
+    const errorDetails = {
+      message: error.message,
+      stack: error.stack,
+      hasFilename: !!filename,
+      textLength: text?.length || 0,
+      textPreview: text?.substring(0, 200) || '(no text)',
+    };
+
+    console.error('❌ No fallback data available. Error details:', JSON.stringify(errorDetails, null, 2));
+    throw new Error(`Failed to parse customer PO (OpenAI error: ${error.message}). ${!filename ? 'No filename provided for fallback.' : 'Filename parsing also failed.'}`);
   }
 }
