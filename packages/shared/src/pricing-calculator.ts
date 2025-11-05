@@ -1,5 +1,3 @@
-import type { PricingRule } from '@prisma/client';
-
 /**
  * Dynamic Pricing Calculator
  *
@@ -16,8 +14,9 @@ import type { PricingRule } from '@prisma/client';
  * 7. Check undercharge: if quoted < agreed baseline, flag for approval
  */
 
-// PrismaClient type will be passed in from calling code
+// Types will be passed in from calling code to avoid circular dependencies
 type PrismaClient = any;
+type PricingRule = any;
 
 /**
  * Manual override parameters for pricing calculation
