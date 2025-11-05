@@ -1,4 +1,4 @@
-import type { PrismaClient, PricingRule } from '@prisma/client';
+import type { PricingRule } from '@prisma/client';
 
 /**
  * Dynamic Pricing Calculator
