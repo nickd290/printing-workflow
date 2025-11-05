@@ -1,3 +1,5 @@
+import type { PrismaClient, PricingRule } from '@prisma/client';
+
 /**
  * Dynamic Pricing Calculator
  *
@@ -221,7 +223,7 @@ export async function getAvailablePricingRules(prisma: PrismaClient) {
     orderBy: { sizeName: 'asc' },
   });
 
-  return rules.map(rule => ({
+  return rules.map((rule: PricingRule) => ({
     sizeName: rule.sizeName,
     baseCPM: Number(rule.baseCPM),
     impactInvoicePerM: Number(rule.impactInvoicePerM || 0),
