@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Navigation } from '@/components/navigation';
 import { FileManagementSection } from '@/components/jobs/FileManagementSection';
+import { JobEditModal } from '@/components/jobs/JobEditModal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -128,6 +129,9 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
   ]);
   const [sampleCarrier, setSampleCarrier] = useState('');
   const [sampleTracking, setSampleTracking] = useState('');
+
+  // Job edit modal
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     loadJob();
@@ -365,6 +369,37 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
     }
   };
 
+  const handleCompleteAndGenerateInvoices = async () => {
+    if (!confirm('Complete this job and generate all invoices?\n\nThis will create:\n• JD → Bradford invoice\n• Bradford → Impact invoice\n• Impact → Customer invoice\n\nAnd mark the job as COMPLETED.')) {
+      return;
+    }
+
+    try {
+      toast.loading('Generating invoices...', { id: 'complete-job' });
+
+      const response = await fetch(`${API_URL}/api/jobs/${jobId}/complete-and-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to complete job');
+      }
+
+      await loadJob();
+
+      toast.success(
+        `Job completed! Generated invoices:\n• ${data.invoices.jdToBradford.invoiceNo}\n• ${data.invoices.bradfordToImpact.invoiceNo}\n• ${data.invoices.impactToCustomer.invoiceNo}`,
+        { id: 'complete-job', duration: 6000 }
+      );
+    } catch (err: any) {
+      console.error('Failed to complete job:', err);
+      toast.error(err.message || 'Failed to complete job and generate invoices', { id: 'complete-job' });
+    }
+  };
+
   const getNextStatus = (currentStatus: string): string | null => {
     const statusFlow: Record<string, string> = {
       'PENDING': 'IN_PRODUCTION',
@@ -497,6 +532,17 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ring-1 ring-inset ${getStatusColor(job.status)}`}>
                   {job.status.replace(/_/g, ' ')}
                 </span>
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowEditModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit Job
+                  </button>
+                )}
                 {isAdmin && getNextStatus(job.status) && job.status !== 'COMPLETED' && job.status !== 'CANCELLED' && (
                   <button
                     onClick={() => handleStatusChange(getNextStatus(job.status)!)}
@@ -506,6 +552,17 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                     Move to {getNextStatus(job.status)!.replace(/_/g, ' ')}
+                  </button>
+                )}
+                {isAdmin && job.status !== 'COMPLETED' && job.status !== 'CANCELLED' && (
+                  <button
+                    onClick={handleCompleteAndGenerateInvoices}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Complete & Generate Invoices
                   </button>
                 )}
               </div>
@@ -1146,6 +1203,36 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {showEditModal && (
+        <JobEditModal
+          job={job}
+          onClose={() => setShowEditModal(false)}
+          onSave={async (updates) => {
+            try {
+              const response = await fetch(`/api/jobs/${job.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...updates,
+                  changedBy: 'Admin User', // TODO: Get from auth context
+                  changedByRole: 'ADMIN',
+                }),
+              });
+
+              if (!response.ok) {
+                throw new Error('Failed to update job');
+              }
+
+              // Refresh the page to show updated data
+              window.location.reload();
+            } catch (error) {
+              console.error('Error updating job:', error);
+              alert('Failed to update job. Please try again.');
+            }
+          }}
+        />
       )}
     </div>
   );

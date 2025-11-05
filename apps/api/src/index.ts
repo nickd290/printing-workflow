@@ -9,6 +9,7 @@ import fs from 'fs';
 console.log('========================================');
 console.log('🔵 API Server Starting...');
 console.log('========================================');
+// Running on port 3001 (default API port)
 console.log('Timestamp:', new Date().toISOString());
 console.log('Node Version:', process.version);
 console.log('Environment:', env.NODE_ENV);
@@ -35,6 +36,7 @@ import notificationsRoutes from './routes/notifications.js';
 import exportsRoutes from './routes/exports.js';
 import customerRoutes from './routes/customer.js';
 import { adminRoutes } from './routes/admin.js';
+import reportsRoutes from './routes/reports.js';
 
 const fastify = Fastify({
   logger: {
@@ -58,7 +60,6 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 await fastify.register(multipart, {
-  attachFieldsToBody: true,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB max per file
   },
@@ -90,6 +91,7 @@ await fastify.register(notificationsRoutes, { prefix: '/api/notifications' });
 await fastify.register(exportsRoutes, { prefix: '/api/exports' });
 await fastify.register(customerRoutes, { prefix: '/api/customer' });
 await fastify.register(adminRoutes, { prefix: '/api/admin' });
+await fastify.register(reportsRoutes, { prefix: '/api/reports' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

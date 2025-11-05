@@ -124,4 +124,42 @@ export const pricingRulesRoutes: FastifyPluginAsync = async (fastify) => {
 
     return { rule };
   });
+
+  // POST /api/pricing-rules/calculate - Calculate pricing for a job
+  fastify.post('/calculate', async (request, reply) => {
+    const body = request.body as {
+      sizeName: string;
+      quantity: number;
+      overrides?: {
+        customerCPM?: number;
+        printCPM?: number;
+        paperCostCPM?: number;
+        paperChargedCPM?: number;
+        paperMarkupPercent?: number;
+      };
+    };
+
+    const { prisma } = await import('@printing-workflow/db');
+    const { calculateDynamicPricing, validatePricing } = await import('@printing-workflow/shared');
+
+    try {
+      const pricing = await calculateDynamicPricing(
+        prisma,
+        body.sizeName,
+        body.quantity,
+        body.overrides
+      );
+
+      const validation = validatePricing(pricing);
+
+      return {
+        pricing,
+        validation,
+      };
+    } catch (error: any) {
+      return reply.status(400).send({
+        error: error.message || 'Failed to calculate pricing'
+      });
+    }
+  });
 };

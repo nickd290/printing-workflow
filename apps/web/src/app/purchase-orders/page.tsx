@@ -1,6 +1,7 @@
 'use client';
 
 import { Navigation } from '@/components/navigation';
+import { Tabs } from '@/components/Tabs';
 import { useState, useEffect } from 'react';
 import { purchaseOrdersAPI, jobsAPI, APIError } from '@/lib/api-client';
 import toast, { Toaster } from 'react-hot-toast';
@@ -56,6 +57,7 @@ export default function PurchaseOrdersPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<string>('impact-bradford');
 
   useEffect(() => {
     loadData();
@@ -196,6 +198,134 @@ export default function PurchaseOrdersPage() {
           </div>
         ) : (
           <>
+        {/* Split POs by flow type */}
+        {(() => {
+          // Filter POs by flow
+          const impactToBradfordPOs = purchaseOrders.filter(
+            po => po.originCompany?.id === 'impact-direct' && po.targetCompany?.id === 'bradford'
+          );
+          const bradfordToJdPOs = purchaseOrders.filter(
+            po => po.originCompany?.id === 'bradford' && po.targetCompany?.id === 'jd-graphic'
+          );
+
+          // Determine which POs to display based on active tab
+          let displayedPOs = purchaseOrders;
+          if (activeTab === 'impact-bradford') {
+            displayedPOs = impactToBradfordPOs;
+          } else if (activeTab === 'bradford-jd') {
+            displayedPOs = bradfordToJdPOs;
+          }
+
+          const totalAmount = displayedPOs.reduce((sum, po) => sum + Number(po.vendorAmount), 0);
+
+          return (
+            <>
+              {/* Tabs */}
+              <div className="mb-6">
+                <Tabs
+                  activeTab={activeTab}
+                  onChange={setActiveTab}
+                  tabs={[
+                    { id: 'impact-bradford', label: 'Impact → Bradford', count: impactToBradfordPOs.length },
+                    { id: 'bradford-jd', label: 'Bradford → JD', count: bradfordToJdPOs.length },
+                    { id: 'all', label: 'All Purchase Orders', count: purchaseOrders.length }
+                  ]}
+                />
+              </div>
+
+              {/* Summary Card */}
+              <div className="bg-white shadow rounded-lg p-6 mb-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">
+                      {activeTab === 'impact-bradford' ? 'Impact → Bradford POs' :
+                       activeTab === 'bradford-jd' ? 'Bradford → JD POs' :
+                       'All Purchase Orders'}
+                    </p>
+                    <p className="text-3xl font-bold text-blue-600 mt-2">
+                      ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">Total POs</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                      {displayedPOs.length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Purchase Orders Table */}
+              <div className="bg-white shadow rounded-lg">
+                <div className="px-6 py-5 border-b border-gray-200">
+                  <h2 className="text-lg font-medium text-gray-900">
+                    {activeTab === 'impact-bradford' ? 'Impact Direct → Bradford' :
+                     activeTab === 'bradford-jd' ? 'Bradford → JD Graphic' :
+                     'All Purchase Orders'}
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO #</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">To</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {displayedPOs.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                            No purchase orders found for this flow
+                          </td>
+                        </tr>
+                      ) : (
+                        displayedPOs.map((po) => (
+                          <tr key={po.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                              {po.poNumber || `PO-${po.id.slice(0, 8)}`}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {po.originCompany?.name || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {po.targetCompany?.name || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
+                              {po.job?.jobNo || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                              ${Number(po.vendorAmount).toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                po.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                po.status === 'ACCEPTED' || po.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                                po.status === 'COMPLETED' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {po.status.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(po.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+
         {/* Money Flow Diagram */}
         <div className="bg-white shadow rounded-lg p-6 mb-8">
           <h2 className="text-lg font-medium text-gray-900 mb-6">Money Flow Example ($100 Job)</h2>
@@ -236,61 +366,6 @@ export default function PurchaseOrdersPage() {
           </div>
         </div>
 
-        {/* POs Table */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-5 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">All Purchase Orders</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From → To</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {purchaseOrders.map((po) => (
-                  <tr key={po.id}>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="font-medium">{po.originCompany?.name || po.originCompany}</div>
-                      <div className="text-gray-500">→ {po.targetCompany?.name || po.targetCompany}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
-                      {po.job?.jobNo || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${po.originalAmount.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${po.vendorAmount.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">
-                      ${po.marginAmount.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        po.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                        po.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {po.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(po.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
         </>
         )}
 

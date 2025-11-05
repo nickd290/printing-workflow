@@ -5,14 +5,18 @@ import { useState, useEffect } from 'react';
 import { purchaseOrdersAPI, invoicesAPI, jobsAPI } from '@/lib/api-client';
 import toast, { Toaster } from 'react-hot-toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '${API_URL}';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 export default function InvoicesPOsPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'invoices' | 'pos'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'pos' | 'paper-margins'>('invoices');
+
+  // Paper & Margins data
+  const [paperData, setPaperData] = useState<any>(null);
+  const [loadingPaperData, setLoadingPaperData] = useState(false);
 
   // Create PO state
   const [showCreatePO, setShowCreatePO] = useState(false);
@@ -25,6 +29,7 @@ export default function InvoicesPOsPage() {
   const [editPOData, setEditPOData] = useState({ vendorAmount: '', status: '' });
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [editInvoiceData, setEditInvoiceData] = useState({ amount: '', status: '' });
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -67,6 +72,28 @@ export default function InvoicesPOsPage() {
       setLoading(false);
     }
   };
+
+  const loadPaperMarginsData = async () => {
+    try {
+      setLoadingPaperData(true);
+      const response = await fetch(`${API_URL}/api/reports/bradford/paper-margins`);
+      if (!response.ok) throw new Error('Failed to fetch paper/margins data');
+      const data = await response.json();
+      setPaperData(data);
+    } catch (err) {
+      console.error('Failed to load paper/margins data:', err);
+      toast.error('Failed to load paper and margins data');
+    } finally {
+      setLoadingPaperData(false);
+    }
+  };
+
+  // Load paper/margins data when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'paper-margins' && !paperData) {
+      loadPaperMarginsData();
+    }
+  }, [activeTab]);
 
   const handleCreatePO = async () => {
     if (!selectedJobForPO || !newPOAmount) {
@@ -171,6 +198,39 @@ export default function InvoicesPOsPage() {
     }
   };
 
+  const handleDownloadReport = async () => {
+    console.log('[Email Report] Button clicked, API_URL:', API_URL);
+    setDownloading(true);
+    try {
+      const url = `${API_URL}/api/reports/bradford/export`;
+      console.log('[Email Report] Fetching URL:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+      });
+
+      console.log('[Email Report] Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error('Failed to email report');
+      }
+
+      const result = await response.json();
+      console.log('[Email Report] Response data:', result);
+
+      if (result.success) {
+        toast.success('Report emailed to Steve Gustafson and Nick successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to email report');
+      }
+    } catch (err) {
+      console.error('[Email Report] Error:', err);
+      toast.error('Failed to email report');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const totalPOAmount = purchaseOrders.reduce((sum, po) => sum + Number(po.vendorAmount), 0);
   const totalInvoiceAmount = invoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
   const paidInvoices = invoices.filter((inv) => inv.status === 'PAID');
@@ -184,11 +244,23 @@ export default function InvoicesPOsPage() {
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-8 py-8">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Invoices & Purchase Orders</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Track and manage all financial documents
-            </p>
+          <div className="mb-8 flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Invoices & Purchase Orders</h1>
+              <p className="mt-2 text-sm text-gray-600">
+                Track and manage all financial documents
+              </p>
+            </div>
+            <button
+              onClick={handleDownloadReport}
+              disabled={downloading}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              {downloading ? 'Sending...' : 'Email Report to Steve & Nick'}
+            </button>
           </div>
 
           {/* Error Display */}
@@ -274,6 +346,16 @@ export default function InvoicesPOsPage() {
                       }`}
                     >
                       Purchase Orders ({purchaseOrders.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('paper-margins')}
+                      className={`px-6 py-4 font-medium text-sm border-b-2 transition-colors ${
+                        activeTab === 'paper-margins'
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Paper & Margins
                     </button>
                   </div>
                 </div>
@@ -510,7 +592,7 @@ export default function InvoicesPOsPage() {
                           return (
                             <tr key={po.id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                                PO-{po.id.slice(0, 8)}
+                                {po.poNumber || `PO-${po.id.slice(0, 8)}`}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {po.originCompany?.name || 'Unknown'}
@@ -596,6 +678,114 @@ export default function InvoicesPOsPage() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Paper & Margins Tab */}
+              {activeTab === 'paper-margins' && (
+                <div className="p-6">
+                  {loadingPaperData ? (
+                    <div className="text-center py-12">
+                      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                      <p className="mt-4 text-gray-600">Loading paper and margins data...</p>
+                    </div>
+                  ) : paperData ? (
+                    <>
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
+                          <div className="text-sm opacity-90">Total Paper Used</div>
+                          <div className="text-3xl font-bold mt-2">{paperData.totalPaper.toLocaleString()}</div>
+                          <div className="text-xs opacity-75 mt-1">sheets</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg p-6 text-white">
+                          <div className="text-sm opacity-90">Total Margin</div>
+                          <div className="text-3xl font-bold mt-2">${paperData.totalMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          <div className="text-xs opacity-75 mt-1">{paperData.margins.length} jobs</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg p-6 text-white">
+                          <div className="text-sm opacity-90">Avg Margin Per Job</div>
+                          <div className="text-3xl font-bold mt-2">${paperData.avgMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          <div className="text-xs opacity-75 mt-1">per completed job</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg shadow-lg p-6 text-white">
+                          <div className="text-sm opacity-90">Avg Margin %</div>
+                          <div className="text-3xl font-bold mt-2">{paperData.avgMarginPercent.toFixed(1)}%</div>
+                          <div className="text-xs opacity-75 mt-1">markup percentage</div>
+                        </div>
+                      </div>
+
+                      {/* Paper Usage by Size */}
+                      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Paper Usage by Size</h3>
+                        <div className="space-y-3">
+                          {Object.entries(paperData.paperBySize)
+                            .sort(([, a]: any, [, b]: any) => b - a)
+                            .map(([size, quantity]: any) => {
+                              const percentage = (quantity / paperData.totalPaper) * 100;
+                              return (
+                                <div key={size} className="space-y-1">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="font-medium text-gray-700">{size}</span>
+                                    <span className="text-gray-600">{quantity.toLocaleString()} sheets ({percentage.toFixed(1)}%)</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className="bg-blue-600 h-2 rounded-full transition-all"
+                                      style={{ width: `${percentage}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      {/* Margin Analysis Table */}
+                      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-6 py-4 border-b border-gray-200">
+                          <h3 className="text-lg font-semibold text-gray-900">Job Margin Analysis</h3>
+                          <p className="text-sm text-gray-600 mt-1">Sorted by highest margin first</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job #</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Total</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">JD Print Cost</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paper Margin</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Print Margin</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Margin $</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margin %</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {paperData.margins.map((margin: any) => (
+                                <tr key={margin.jobNo} className="hover:bg-gray-50">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">{margin.jobNo}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{margin.sizeName}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{margin.quantity?.toLocaleString() || 'N/A'}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${margin.customerTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${margin.jdTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">${margin.bradfordPaperMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-600">${margin.bradfordPrintMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">${margin.bradfordTotalMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">{margin.marginPercent.toFixed(1)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <p>No data available</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

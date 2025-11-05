@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
+import { Logo } from '@/components/ui/Logo';
 import {
   HomeIcon,
   DocumentIcon,
@@ -13,7 +14,6 @@ import {
   ChartBarIcon,
   SparklesIcon,
   CurrencyDollarIcon,
-  PrinterIcon,
   ChevronDownIcon,
 } from '@/components/ui/Icons';
 
@@ -91,21 +91,11 @@ export function Sidebar() {
 
       {/* Logo Area */}
       <div className="h-16 flex items-center px-4 border-b border-border">
-        <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="flex-shrink-0">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center group-hover:bg-primary-hover transition-colors">
-              <PrinterIcon className="w-5 h-5 text-primary-foreground" />
-            </div>
-          </div>
-          {isExpanded && (
-            <div className="overflow-hidden">
-              <h1 className="text-sm font-bold text-foreground whitespace-nowrap">
-                Printing Workflow
-              </h1>
-              <p className="text-xs text-muted-foreground whitespace-nowrap -mt-0.5">
-                Production System
-              </p>
-            </div>
+        <Link href="/dashboard" className="flex items-center gap-3 group transition-all duration-200">
+          {isExpanded ? (
+            <Logo variant="full" size="md" className="text-primary group-hover:scale-105 transition-transform" />
+          ) : (
+            <Logo variant="icon" size="md" className="text-primary group-hover:scale-110 transition-transform" />
           )}
         </Link>
       </div>

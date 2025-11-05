@@ -5,6 +5,11 @@ import { jobsAPI, filesAPI, proofsAPI, invoicesAPI, purchaseOrdersAPI } from '@/
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { PricingBreakdown } from '@/components/PricingBreakdown';
+import { DeliveryUrgencyBadge } from '@/components/jobs/DeliveryUrgencyBadge';
+import { POViewer } from '@/components/jobs/POViewer';
+import { SampleShipmentCard } from '@/components/jobs/SampleShipmentCard';
+import { FileUploadSection } from '@/components/customer/FileUploadSection';
+import { ProofViewer } from '@/components/ProofViewer';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -15,7 +20,7 @@ interface JobDetailModalProps {
 
 export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   const { user, isCustomer, isBrokerAdmin, isBradfordAdmin } = useUser();
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'pos' | 'shipment'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'samples' | 'pos' | 'shipment'>('overview');
   const [job, setJob] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingProof, setUploadingProof] = useState(false);
@@ -57,6 +62,15 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
   // PDF generation state
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+
+  // File upload state
+  const [showFileUpload, setShowFileUpload] = useState(false);
+
+  // File viewer state
+  const [viewingFile, setViewingFile] = useState<{id: string; fileName: string; mimeType: string} | null>(null);
+
+  // Download all state
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   // Role-based permissions
   const canUploadProof = isBrokerAdmin || isBradfordAdmin;
@@ -371,6 +385,47 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     }
   };
 
+  const downloadAllFiles = async () => {
+    if (allFiles.length === 0) {
+      toast.error('No files to download');
+      return;
+    }
+
+    setDownloadingAll(true);
+    toast.loading(`Downloading ${allFiles.length} file(s)...`, { id: 'download-all' });
+
+    try {
+      for (let i = 0; i < allFiles.length; i++) {
+        const file = allFiles[i];
+        await downloadFile(file.id, file.fileName);
+        // Add small delay to avoid overwhelming the browser
+        await new Promise(resolve => setTimeout(resolve, 500));
+        toast.loading(`Downloaded ${i + 1} of ${allFiles.length}...`, { id: 'download-all' });
+      }
+      toast.success(`Successfully downloaded ${allFiles.length} file(s)!`, { id: 'download-all' });
+    } catch (error) {
+      console.error('Failed to download all files:', error);
+      toast.error('Failed to download all files', { id: 'download-all' });
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
+  const getFileIcon = (mimeType: string) => {
+    if (mimeType === 'application/pdf') return '📄';
+    if (mimeType.startsWith('image/')) return '🖼️';
+    if (mimeType.includes('spreadsheet') || mimeType.includes('csv') || mimeType.includes('excel')) return '📊';
+    if (mimeType.includes('zip')) return '📦';
+    return '📎';
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes || bytes === 0) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -390,13 +445,18 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
   const customerName = typeof job.customer === 'string' ? job.customer : job.customer?.name || 'Unknown';
   const artworkFiles = job.files?.filter((f: any) => f.kind === 'ARTWORK') || [];
+  const dataFiles = job.files?.filter((f: any) => f.kind === 'DATA_FILE') || [];
   const poFiles = job.files?.filter((f: any) => f.kind === 'PO_PDF') || [];
 
-  // Tabs - customers don't see PO tab
+  // All downloadable files
+  const allFiles = [...artworkFiles, ...dataFiles, ...poFiles];
+
+  // Tabs - customers see samples tab, admins see PO tab
   const tabs = isCustomer
     ? [
         { id: 'overview', label: 'Job Details' },
         { id: 'files', label: 'Files & Proofs' },
+        { id: 'samples', label: 'Samples' },
         { id: 'shipment', label: 'Tracking & Invoice' },
       ]
     : [
@@ -540,12 +600,26 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                     {job.deliveryDate && (
                       <div>
                         <label className="text-sm font-medium text-gray-500">Delivery Date</label>
-                        <p className="text-lg font-semibold text-gray-900">
+                        <p className="text-lg font-semibold text-gray-900 mb-2">
                           {new Date(job.deliveryDate).toLocaleDateString()}
                         </p>
+                        <DeliveryUrgencyBadge
+                          deliveryDate={job.deliveryDate}
+                          completedAt={job.completedAt}
+                        />
                       </div>
                     )}
                   </div>
+
+                  {/* PO Viewer */}
+                  {(job.customerPONumber || poFiles.length > 0) && (
+                    <POViewer
+                      customerPONumber={job.customerPONumber}
+                      customerPOFile={job.customerPOFile}
+                      poFiles={poFiles}
+                      onDownload={downloadFile}
+                    />
+                  )}
 
                   {/* Specs */}
                   {job.specs && Object.keys(job.specs).length > 0 && (
@@ -718,23 +792,81 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
           {/* Files & Proofs Tab */}
           {activeTab === 'files' && (
             <div className="space-y-6">
+              {/* Header with Download All button */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-900">Files & Documents</h3>
+                {allFiles.length > 0 && (
+                  <button
+                    onClick={downloadAllFiles}
+                    disabled={downloadingAll}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {downloadingAll ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download All ({allFiles.length})
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* File Upload Section */}
+              {isCustomer && (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                  <FileUploadSection
+                    jobId={job.id}
+                    jobNo={job.jobNo}
+                    requiredArtworkCount={job.requiredArtworkCount || 0}
+                    requiredDataFileCount={job.requiredDataFileCount || 0}
+                    onFilesUpdated={() => {
+                      loadJob();
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Artwork Files */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Artwork Files</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <span>🎨</span>
+                  Artwork Files
+                  {artworkFiles.length > 0 && <span className="text-sm text-gray-500">({artworkFiles.length})</span>}
+                </h3>
                 {artworkFiles.length > 0 ? (
                   <div className="space-y-2">
                     {artworkFiles.map((file: any) => (
-                      <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{file.fileName}</p>
-                          <p className="text-xs text-gray-500">{new Date(file.createdAt).toLocaleDateString()}</p>
+                      <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{getFileIcon(file.mimeType)}</span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{file.fileName}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(file.size)} • {new Date(file.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <button
-                          onClick={() => downloadFile(file.id, file.fileName)}
-                          className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                        >
-                          Download
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setViewingFile({ id: file.id, fileName: file.fileName, mimeType: file.mimeType })}
+                            className="px-3 py-1 text-sm font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded"
+                          >
+                            👁️ Preview
+                          </button>
+                          <button
+                            onClick={() => downloadFile(file.id, file.fileName)}
+                            className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                          >
+                            ⬇️ Download
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -743,23 +875,84 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                 )}
               </div>
 
+              {/* Data Files */}
+              {(dataFiles.length > 0 || job.requiredDataFileCount > 0) && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <span>📊</span>
+                    Data Files
+                    {dataFiles.length > 0 && <span className="text-sm text-gray-500">({dataFiles.length})</span>}
+                  </h3>
+                  {dataFiles.length > 0 ? (
+                    <div className="space-y-2">
+                      {dataFiles.map((file: any) => (
+                        <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{getFileIcon(file.mimeType)}</span>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{file.fileName}</p>
+                              <p className="text-xs text-gray-500">
+                                {formatFileSize(file.size)} • {new Date(file.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setViewingFile({ id: file.id, fileName: file.fileName, mimeType: file.mimeType })}
+                              className="px-3 py-1 text-sm font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded"
+                            >
+                              👁️ Preview
+                            </button>
+                            <button
+                              onClick={() => downloadFile(file.id, file.fileName)}
+                              className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                            >
+                              ⬇️ Download
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-8 bg-gray-50 rounded-lg">No data files uploaded yet</p>
+                  )}
+                </div>
+              )}
+
               {/* PO Files */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Purchase Order Files</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <span>📄</span>
+                  Purchase Order Files
+                  {poFiles.length > 0 && <span className="text-sm text-gray-500">({poFiles.length})</span>}
+                </h3>
                 {poFiles.length > 0 ? (
                   <div className="space-y-2">
                     {poFiles.map((file: any) => (
-                      <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{file.fileName}</p>
-                          <p className="text-xs text-gray-500">{new Date(file.createdAt).toLocaleDateString()}</p>
+                      <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{getFileIcon(file.mimeType)}</span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{file.fileName}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(file.size)} • {new Date(file.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <button
-                          onClick={() => downloadFile(file.id, file.fileName)}
-                          className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                        >
-                          Download
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setViewingFile({ id: file.id, fileName: file.fileName, mimeType: file.mimeType })}
+                            className="px-3 py-1 text-sm font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded"
+                          >
+                            👁️ Preview
+                          </button>
+                          <button
+                            onClick={() => downloadFile(file.id, file.fileName)}
+                            className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                          >
+                            ⬇️ Download
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -771,7 +964,11 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
               {/* Proofs */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Proofs</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <span>✅</span>
+                    Proofs
+                    {job.proofs && job.proofs.length > 0 && <span className="text-sm text-gray-500">({job.proofs.length})</span>}
+                  </h3>
                   {canUploadProof && (
                     <>
                       <button
@@ -1139,6 +1336,19 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
             </div>
           )}
 
+          {/* Samples Tab - Customer only */}
+          {activeTab === 'samples' && (
+            <div>
+              <SampleShipmentCard
+                sampleShipments={job.sampleShipments || []}
+                onRequestSample={() => {
+                  toast.success('Sample request submitted! Our team will contact you shortly.');
+                  // TODO: Implement sample request API call
+                }}
+              />
+            </div>
+          )}
+
           {/* Shipment & Invoice Tab */}
           {activeTab === 'shipment' && (
             <div className="space-y-6">
@@ -1190,9 +1400,15 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                     </button>
                   )}
                 </div>
-                {job.invoices && job.invoices.length > 0 ? (
+                {(() => {
+                  // Filter invoices based on user role - customers only see invoices addressed to them
+                  const filteredInvoices = isCustomer
+                    ? (job.invoices || []).filter((invoice: any) => invoice.toCompany?.id === user?.companyId)
+                    : (job.invoices || []);
+
+                  return filteredInvoices && filteredInvoices.length > 0 ? (
                   <div className="space-y-3">
-                    {job.invoices.map((invoice: any) => {
+                    {filteredInvoices.map((invoice: any) => {
                       const isEditing = editingInvoiceId === invoice.id;
 
                       return (
@@ -1311,12 +1527,41 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 text-center py-8 bg-gray-50 rounded-lg">No invoice generated yet</p>
-                )}
+                );
+                })()}
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* File Viewer Modal */}
+      {viewingFile && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60]" onClick={() => setViewingFile(null)}>
+          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl m-4" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+              <h3 className="text-lg font-semibold text-gray-900">{viewingFile.fileName}</h3>
+              <button
+                onClick={() => setViewingFile(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Modal Body */}
+            <div className="flex-1 overflow-hidden">
+              <ProofViewer
+                fileUrl={`${API_URL}/api/files/${viewingFile.id}/download`}
+                fileName={viewingFile.fileName}
+                mimeType={viewingFile.mimeType}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

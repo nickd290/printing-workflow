@@ -25,9 +25,9 @@ export function Navigation() {
 
   const navigation = user?.role === 'CUSTOMER'
     ? [
-        { name: 'My Jobs', href: '/dashboard', Icon: DocumentIcon },
+        { name: 'My Jobs', href: '/customer-portal', Icon: DocumentIcon },
         { name: 'Submit Quote', href: '/quotes', Icon: SparklesIcon },
-        { name: 'My Invoices', href: '/financials', Icon: CurrencyDollarIcon },
+        { name: 'My Invoices', href: '/customer-portal/invoices', Icon: CurrencyDollarIcon },
       ]
     : user?.role === 'BRADFORD_ADMIN'
     ? [

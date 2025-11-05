@@ -49,13 +49,28 @@ export default function JobsPage() {
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [customPricing, setCustomPricing] = useState<CustomJobPricing | null>(null);
-  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'grouped'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'grouped'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('jobsViewMode');
+      if (saved === 'kanban' || saved === 'table' || saved === 'grouped') {
+        return saved;
+      }
+    }
+    return 'table';
+  });
 
   useEffect(() => {
     if (user) {
       loadJobs();
     }
   }, [user]);
+
+  // Save view mode preference to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('jobsViewMode', viewMode);
+    }
+  }, [viewMode]);
 
   const loadJobs = async () => {
     if (!user) return;

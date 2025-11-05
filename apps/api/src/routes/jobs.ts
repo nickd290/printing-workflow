@@ -11,6 +11,7 @@ import {
   listJobs,
 } from '../services/job.service.js';
 import { parseCustomerPO } from '../services/pdf-parser.service.js';
+import { completeJobAndGenerateInvoices } from '../services/invoice.service.js';
 
 export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/jobs/from-quote/:quoteId - Create job from quote
@@ -295,6 +296,32 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       packingSlipNotes?: string;
       customerPONumber?: string;
       specs?: any;
+      // Financial fields
+      customerTotal?: number | string;
+      jdTotal?: number | string;
+      paperChargedTotal?: number | string;
+      paperCostTotal?: number | string;
+      impactMargin?: number | string;
+      bradfordTotal?: number | string;
+      bradfordPrintMargin?: number | string;
+      bradfordPaperMargin?: number | string;
+      bradfordTotalMargin?: number | string;
+      // CPM fields
+      customerCPM?: number | string;
+      printCPM?: number | string;
+      paperChargedCPM?: number | string;
+      paperCostCPM?: number | string;
+      impactMarginCPM?: number | string;
+      bradfordTotalCPM?: number | string;
+      bradfordPrintMarginCPM?: number | string;
+      bradfordPaperMarginCPM?: number | string;
+      bradfordTotalMarginCPM?: number | string;
+      // Product fields
+      sizeName?: string;
+      sizeId?: string;
+      paperType?: string;
+      paperWeightPer1000?: number | string;
+      paperWeightTotal?: number | string;
       // User context for activity tracking
       changedBy?: string;
       changedByRole?: string;
@@ -311,6 +338,35 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     if (body.packingSlipNotes !== undefined) updates.packingSlipNotes = body.packingSlipNotes;
     if (body.customerPONumber !== undefined) updates.customerPONumber = body.customerPONumber;
     if (body.specs !== undefined) updates.specs = body.specs;
+
+    // Financial fields
+    if (body.customerTotal !== undefined) updates.customerTotal = body.customerTotal;
+    if (body.jdTotal !== undefined) updates.jdTotal = body.jdTotal;
+    if (body.paperChargedTotal !== undefined) updates.paperChargedTotal = body.paperChargedTotal;
+    if (body.paperCostTotal !== undefined) updates.paperCostTotal = body.paperCostTotal;
+    if (body.impactMargin !== undefined) updates.impactMargin = body.impactMargin;
+    if (body.bradfordTotal !== undefined) updates.bradfordTotal = body.bradfordTotal;
+    if (body.bradfordPrintMargin !== undefined) updates.bradfordPrintMargin = body.bradfordPrintMargin;
+    if (body.bradfordPaperMargin !== undefined) updates.bradfordPaperMargin = body.bradfordPaperMargin;
+    if (body.bradfordTotalMargin !== undefined) updates.bradfordTotalMargin = body.bradfordTotalMargin;
+
+    // CPM fields
+    if (body.customerCPM !== undefined) updates.customerCPM = body.customerCPM;
+    if (body.printCPM !== undefined) updates.printCPM = body.printCPM;
+    if (body.paperChargedCPM !== undefined) updates.paperChargedCPM = body.paperChargedCPM;
+    if (body.paperCostCPM !== undefined) updates.paperCostCPM = body.paperCostCPM;
+    if (body.impactMarginCPM !== undefined) updates.impactMarginCPM = body.impactMarginCPM;
+    if (body.bradfordTotalCPM !== undefined) updates.bradfordTotalCPM = body.bradfordTotalCPM;
+    if (body.bradfordPrintMarginCPM !== undefined) updates.bradfordPrintMarginCPM = body.bradfordPrintMarginCPM;
+    if (body.bradfordPaperMarginCPM !== undefined) updates.bradfordPaperMarginCPM = body.bradfordPaperMarginCPM;
+    if (body.bradfordTotalMarginCPM !== undefined) updates.bradfordTotalMarginCPM = body.bradfordTotalMarginCPM;
+
+    // Product fields
+    if (body.sizeName !== undefined) updates.sizeName = body.sizeName;
+    if (body.sizeId !== undefined) updates.sizeId = body.sizeId;
+    if (body.paperType !== undefined) updates.paperType = body.paperType;
+    if (body.paperWeightPer1000 !== undefined) updates.paperWeightPer1000 = body.paperWeightPer1000;
+    if (body.paperWeightTotal !== undefined) updates.paperWeightTotal = body.paperWeightTotal;
 
     const job = await updateJob(id, updates, {
       changedBy,
@@ -331,6 +387,40 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return { activities };
+  });
+
+  // POST /api/jobs/:id/complete-and-invoice - Complete job and generate invoice chain
+  fastify.post('/:id/complete-and-invoice', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const result = await completeJobAndGenerateInvoices(id);
+
+      return {
+        success: true,
+        message: 'Job completed and invoices generated successfully',
+        invoices: {
+          jdToBradford: {
+            invoiceNo: result.jdInvoice.invoiceNo,
+            amount: result.jdInvoice.amount.toString(),
+          },
+          bradfordToImpact: {
+            invoiceNo: result.bradfordInvoice.invoiceNo,
+            amount: result.bradfordInvoice.amount.toString(),
+          },
+          impactToCustomer: {
+            invoiceNo: result.impactInvoice.invoiceNo,
+            amount: result.impactInvoice.amount.toString(),
+          },
+        },
+      };
+    } catch (error: any) {
+      console.error('❌ Error completing job and generating invoices:', error);
+      return reply.status(400).send({
+        success: false,
+        error: error.message || 'Failed to complete job and generate invoices',
+      });
+    }
   });
 
   // POST /api/jobs/:id/sample-shipments - Add sample shipment

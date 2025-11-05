@@ -260,6 +260,7 @@ export async function listJobs(filters?: {
             targetCompany: true,
           },
         },
+        sampleShipments: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -279,6 +280,7 @@ export async function listJobs(filters?: {
           targetCompany: true,
         },
       },
+      sampleShipments: true,
     },
     orderBy: {
       createdAt: 'desc',

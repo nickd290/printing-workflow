@@ -15,7 +15,7 @@ export interface User {
 
 interface UserContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   isCustomer: boolean;
   isBrokerAdmin: boolean;
@@ -62,7 +62,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     checkSession();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     const response = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
@@ -82,6 +82,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Store token in localStorage as backup (cookie is primary)
     localStorage.setItem('auth_token', data.token);
+
+    // Return the user data so caller can immediately check role
+    return data.user;
   };
 
   const logout = async () => {

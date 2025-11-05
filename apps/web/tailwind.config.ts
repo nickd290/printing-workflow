@@ -16,6 +16,7 @@ const config: Config = {
         },
         input: {
           DEFAULT: 'hsl(var(--input))',
+          hover: 'hsl(var(--input-hover))',
           focus: 'hsl(var(--input-focus))',
         },
         ring: 'hsl(var(--ring))',

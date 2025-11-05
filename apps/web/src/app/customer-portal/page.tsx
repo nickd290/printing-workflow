@@ -1,37 +1,68 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
+import { useUser } from '@/contexts/UserContext';
+import { Navigation } from '@/components/navigation';
+import { StatsCards } from '@/components/customer/StatsCards';
+import { JobsTable } from '@/components/customer/JobsTable';
+import { FileUploadModal } from '@/components/customer/FileUploadModal';
+import { ProofReviewModal } from '@/components/customer/ProofReviewModal';
+import { JobDetailModal } from '@/components/JobDetailModal';
+import { CreateJobWizard } from '@/components/customer/CreateJobWizard';
+import { TableSkeleton } from '@/components/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function CustomerPortalPage() {
-  const [selectedCustomer, setSelectedCustomer] = useState<'jjsa' | 'ballantine' | null>(null);
+  const router = useRouter();
+  const { user, isCustomer, logout, loading: authLoading } = useUser();
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadedPO, setUploadedPO] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
+  // Modal states
+  const [fileUploadModal, setFileUploadModal] = useState<{ isOpen: boolean; job: any | null }>({
+    isOpen: false,
+    job: null,
+  });
+  const [proofReviewModal, setProofReviewModal] = useState<{ isOpen: boolean; job: any | null; proof: any | null }>({
+    isOpen: false,
+    job: null,
+    proof: null,
+  });
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  // Auth check - redirect non-customers to login
   useEffect(() => {
-    if (selectedCustomer) {
+    if (!authLoading && (!user || !isCustomer)) {
+      router.push('/login');
+    }
+  }, [user, isCustomer, authLoading, router]);
+
+  // Load jobs when user is authenticated
+  useEffect(() => {
+    if (user && isCustomer) {
       loadJobs();
     }
-  }, [selectedCustomer]);
+  }, [user, isCustomer]);
 
   const loadJobs = async () => {
-    if (!selectedCustomer) return;
+    if (!user?.companyId) return;
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/jobs`);
+      const response = await fetch(`${API_URL}/api/jobs?customerId=${user.companyId}`);
       const data = await response.json();
 
-      // Filter jobs for the selected customer only
-      const customerJobs = data.jobs.filter((job: any) =>
-        job.customerId === selectedCustomer
-      );
+      console.log('🔍 Customer Portal Debug - Jobs loaded:', {
+        totalJobs: data.jobs?.length || 0,
+        firstJob: data.jobs?.[0],
+        allStatuses: data.jobs?.map((j: any) => ({ jobNo: j.jobNo, status: j.status })),
+      });
 
-      setJobs(customerJobs);
+      setJobs(data.jobs || []);
     } catch (error) {
       console.error('Failed to load jobs:', error);
       toast.error('Failed to load your orders');
@@ -40,263 +71,190 @@ export default function CustomerPortalPage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type !== 'application/pdf') {
-        toast.error('Please select a PDF file');
-        return;
+  // Modal handlers
+  const handleUploadFilesClick = (job: any) => {
+    setFileUploadModal({ isOpen: true, job });
+  };
+
+  const handleReviewProofClick = async (job: any) => {
+    // Fetch latest proof for this job
+    try {
+      const response = await fetch(`${API_URL}/api/proofs/by-job/${job.id}`);
+      const data = await response.json();
+
+      if (data.proofs && data.proofs.length > 0) {
+        const latestProof = data.proofs[0]; // Already sorted by version desc
+        setProofReviewModal({ isOpen: true, job, proof: latestProof });
+      } else {
+        toast.error('No proof available for this job');
       }
-      setSelectedFile(file);
-    }
-  };
-
-  const handlePOUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile || !selectedCustomer) {
-      toast.error('Please select a file');
-      return;
-    }
-
-    try {
-      toast.loading('Uploading and parsing your PO...', { id: 'upload-po' });
-
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('customerId', selectedCustomer);
-
-      const response = await fetch(`${API_URL}/api/customer/upload-po`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error('Upload failed');
-
-      const result = await response.json();
-      setUploadedPO(result);
-      setSelectedFile(null);
-      toast.success('PO uploaded successfully! Order created.', { id: 'upload-po' });
-
-      // Reload jobs after upload
-      await loadJobs();
     } catch (error) {
-      console.error('Upload failed:', error);
-      toast.error('Failed to upload PO', { id: 'upload-po' });
+      console.error('Failed to load proof:', error);
+      toast.error('Failed to load proof');
     }
   };
 
-  const handleProofApproval = async (proofId: string, approved: boolean, comments?: string) => {
-    try {
-      toast.loading(approved ? 'Approving proof...' : 'Requesting changes...', { id: 'proof-action' });
-
-      const endpoint = approved
-        ? `${API_URL}/api/proofs/${proofId}/approve`
-        : `${API_URL}/api/proofs/${proofId}/changes`;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          comments,
-          approvedBy: selectedCustomer?.toUpperCase(),
-        }),
-      });
-
-      if (!response.ok) throw new Error('Proof action failed');
-
-      toast.success(
-        approved ? 'Proof approved! Moving to production.' : 'Changes requested',
-        { id: 'proof-action' }
-      );
-
-      await loadJobs();
-    } catch (error) {
-      console.error('Proof action failed:', error);
-      toast.error('Failed to process proof', { id: 'proof-action' });
-    }
+  const handleViewBOLClick = (job: any) => {
+    // TODO: Implement BOL/packing slip PDF download
+    // For now, show a message
+    toast('BOL/Packing slip download coming soon!', { icon: '📄' });
   };
 
-  // Customer login screen
-  if (!selectedCustomer) {
+  const closeFileUploadModal = () => {
+    setFileUploadModal({ isOpen: false, job: null });
+    loadJobs(); // Reload jobs when modal closes
+  };
+
+  const closeProofReviewModal = () => {
+    setProofReviewModal({ isOpen: false, job: null, proof: null });
+    loadJobs(); // Reload jobs when modal closes
+  };
+
+  // Filter jobs based on search query
+  const filteredJobs = useMemo(() => {
+    if (!searchQuery.trim()) return jobs;
+
+    const query = searchQuery.toLowerCase();
+    return jobs.filter(job =>
+      job.jobNo?.toLowerCase().includes(query) ||
+      job.customerPONumber?.toLowerCase().includes(query) ||
+      job.description?.toLowerCase().includes(query) ||
+      job.specs?.description?.toLowerCase().includes(query)
+    );
+  }, [jobs, searchQuery]);
+
+  // Show loading while checking authentication
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Toaster position="top-right" />
-        <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-md w-full">
-          <div className="text-center mb-8">
-            <div className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg mb-4">
-              <h1 className="text-2xl font-bold">Impact Direct</h1>
-            </div>
-            <p className="text-gray-600">Customer Portal</p>
-          </div>
-
-          <div className="space-y-4">
-            <button
-              onClick={() => setSelectedCustomer('ballantine')}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-lg transition-colors shadow-lg"
-            >
-              Login as Ballantine
-            </button>
-            <button
-              onClick={() => setSelectedCustomer('jjsa')}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-lg transition-colors shadow-lg"
-            >
-              Login as JJSA
-            </button>
-          </div>
-
-          <p className="text-xs text-gray-500 text-center mt-8">
-            Secure portal for viewing proofs and placing orders
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="spinner h-12 w-12 mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Customer portal (after login)
+  // Don't render anything if not authenticated (will redirect)
+  if (!user || !isCustomer) {
+    return null;
+  }
+
+  // Customer portal (authenticated)
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <Toaster position="top-right" />
 
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-blue-600">Impact Direct</h1>
-              <p className="text-sm text-gray-600">Welcome, {selectedCustomer.toUpperCase()}</p>
-            </div>
-            <button
-              onClick={() => setSelectedCustomer(null)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900 font-medium"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Navigation */}
+      <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Upload PO Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload Purchase Order</h2>
-          <form onSubmit={handlePOUpload} className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select PO (PDF)
-              </label>
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
-              {selectedFile && (
-                <p className="mt-2 text-sm text-gray-600">
-                  Selected: <span className="font-medium">{selectedFile.name}</span>
-                </p>
-              )}
-            </div>
-            <button
-              type="submit"
-              disabled={!selectedFile}
-              className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Upload & Create Order
-            </button>
-          </form>
-        </div>
+        {/* Stats Cards */}
+        {jobs.length > 0 && <StatsCards jobs={jobs} />}
+
+        {/* Create Job Wizard */}
+        {user?.companyId && (
+          <div className="mb-8">
+            <CreateJobWizard customerId={user.companyId} onJobCreated={loadJobs} />
+          </div>
+        )}
 
         {/* Orders Section */}
-        <div className="bg-white rounded-lg shadow-md">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Your Orders</h2>
+        <div>
+          <div className="mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground tracking-tight">Your Orders</h2>
+                <p className="text-muted-foreground mt-1">Track and manage all your printing orders</p>
+              </div>
+              {jobs.length > 0 && (
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Search by Job #, PO #, or Description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="input"
+                  />
+                  <svg
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">Loading your orders...</p>
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className="text-center py-12">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="mt-4 text-gray-600">No orders yet. Upload a PO to get started!</p>
+            <div className="card p-6">
+              <TableSkeleton rows={8} columns={6} />
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
-              {jobs.map((job) => (
-                <div key={job.id} className="p-6 hover:bg-gray-50">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{job.jobNo}</h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {job.specs?.description || 'No description'}
-                      </p>
-                    </div>
-                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                      job.status === 'READY_FOR_PROOF' ? 'bg-yellow-100 text-yellow-800' :
-                      job.status === 'PROOF_APPROVED' ? 'bg-green-100 text-green-800' :
-                      job.status === 'IN_PRODUCTION' ? 'bg-blue-100 text-blue-800' :
-                      job.status === 'COMPLETED' ? 'bg-purple-100 text-purple-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {job.status.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-
-                  {job.customerTotal && (
-                    <p className="text-lg font-bold text-green-600 mb-4">
-                      Total: ${Number(job.customerTotal).toFixed(2)}
-                    </p>
-                  )}
-
-                  {/* Proof Section - Only show if proof exists */}
-                  {job.status === 'READY_FOR_PROOF' && (
-                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <h4 className="font-semibold text-yellow-900 mb-2">Proof Ready for Review</h4>
-                      <p className="text-sm text-yellow-800 mb-4">
-                        Please review and approve the proof to move forward with production.
-                      </p>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => handleProofApproval(job.id, true)}
-                          className="px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700"
-                        >
-                          ✓ Approve Proof
-                        </button>
-                        <button
-                          onClick={() => handleProofApproval(job.id, false, 'Please make changes')}
-                          className="px-4 py-2 bg-gray-600 text-white font-medium rounded-md hover:bg-gray-700"
-                        >
-                          Request Changes
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {job.status === 'PROOF_APPROVED' && (
-                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-green-800 font-medium">
-                        ✓ Proof approved! Your order is now in production.
-                      </p>
-                    </div>
-                  )}
-
-                  {job.status === 'COMPLETED' && (
-                    <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                      <p className="text-purple-800 font-medium">
-                        ✓ Order completed and shipped!
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <JobsTable
+              jobs={filteredJobs}
+              onUploadFilesClick={handleUploadFilesClick}
+              onReviewProofClick={handleReviewProofClick}
+              onViewBOLClick={handleViewBOLClick}
+              onRowClick={(job) => setSelectedJobId(job.id)}
+            />
           )}
         </div>
       </div>
+
+      {/* File Upload Modal */}
+      {fileUploadModal.job && (
+        <FileUploadModal
+          isOpen={fileUploadModal.isOpen}
+          onClose={closeFileUploadModal}
+          jobId={fileUploadModal.job.id}
+          jobNo={fileUploadModal.job.jobNo}
+          requiredArtworkCount={fileUploadModal.job.requiredArtworkCount || 0}
+          requiredDataFileCount={fileUploadModal.job.requiredDataFileCount || 0}
+          onFilesUpdated={loadJobs}
+        />
+      )}
+
+      {/* Proof Review Modal */}
+      {proofReviewModal.job && proofReviewModal.proof && (
+        <ProofReviewModal
+          isOpen={proofReviewModal.isOpen}
+          onClose={closeProofReviewModal}
+          jobId={proofReviewModal.job.id}
+          jobNo={proofReviewModal.job.jobNo}
+          proofId={proofReviewModal.proof.id}
+          fileId={proofReviewModal.proof.file?.id}
+          fileName={proofReviewModal.proof.file?.fileName}
+          mimeType={proofReviewModal.proof.file?.mimeType}
+          onProofAction={loadJobs}
+        />
+      )}
+
+      {/* Job Detail Modal */}
+      {selectedJobId && (
+        <JobDetailModal
+          jobId={selectedJobId}
+          onClose={() => setSelectedJobId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -17,18 +17,58 @@ interface FileChecklistProps {
 }
 
 export function FileChecklist({ artwork, dataFiles, overall, className = '' }: FileChecklistProps) {
+  // Calculate total required
+  const totalRequired = artwork.required + dataFiles.required;
+  const totalUploaded = artwork.uploaded + dataFiles.uploaded;
+
   return (
     <div className={`space-y-4 ${className}`}>
+      {/* Requirements Summary Banner */}
+      <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-gray-900 mb-1">File Upload Requirements</h3>
+            <p className="text-sm text-gray-700 mb-2">
+              <strong>You need {totalRequired} file{totalRequired !== 1 ? 's' : ''}:</strong>
+            </p>
+            <ul className="text-sm text-gray-600 space-y-1">
+              {artwork.required > 0 && (
+                <li className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                  <strong>{artwork.required}</strong> artwork file{artwork.required !== 1 ? 's' : ''} (Print-ready PDF, AI, or EPS)
+                </li>
+              )}
+              {dataFiles.required > 0 && (
+                <li className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                  <strong>{dataFiles.required}</strong> data file{dataFiles.required !== 1 ? 's' : ''} (Mailing list, variable data - CSV or XLSX)
+                </li>
+              )}
+            </ul>
+            {!overall.complete && totalRequired > 0 && (
+              <p className="text-xs text-gray-500 mt-2 italic">
+                {totalUploaded} of {totalRequired} files uploaded. Upload {totalRequired - totalUploaded} more to continue.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Overall Progress */}
       <div className="rounded-lg bg-gray-50 p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">Overall Progress</span>
+          <span className="text-sm font-medium text-gray-700">Upload Progress</span>
           <span className="text-sm font-semibold text-gray-900">{overall.percentage}%</span>
         </div>
 
-        <div className="w-full bg-gray-200 rounded-full h-2">
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
           <div
-            className={`h-2 rounded-full transition-all duration-300 ${
+            className={`h-2.5 rounded-full transition-all duration-300 ${
               overall.complete ? 'bg-green-500' : 'bg-blue-500'
             }`}
             style={{ width: `${overall.percentage}%` }}
@@ -36,15 +76,18 @@ export function FileChecklist({ artwork, dataFiles, overall, className = '' }: F
         </div>
 
         {overall.complete && (
-          <div className="mt-2 flex items-center text-sm text-green-600">
-            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+          <div className="mt-3 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
                 d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
                 clipRule="evenodd"
               />
             </svg>
-            All files uploaded! Ready to submit.
+            <div>
+              <p className="text-sm font-semibold text-green-800">All files uploaded!</p>
+              <p className="text-xs text-green-700">Your job is ready for production.</p>
+            </div>
           </div>
         )}
       </div>

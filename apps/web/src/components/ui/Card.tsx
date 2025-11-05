@@ -3,7 +3,7 @@ import React from 'react';
 export interface CardProps {
   children: React.ReactNode;
   className?: string;
-  variant?: 'default' | 'hover' | 'elevated';
+  variant?: 'default' | 'hover' | 'elevated' | 'dark' | 'dark-hover';
   onClick?: () => void;
 }
 
@@ -17,6 +17,8 @@ export function Card({
     default: 'card',
     hover: 'card-hover cursor-pointer',
     elevated: 'card-elevated',
+    dark: 'dark-card',
+    'dark-hover': 'dark-card-hover cursor-pointer',
   };
 
   return (

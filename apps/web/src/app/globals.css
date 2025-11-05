@@ -4,73 +4,106 @@
 
 @layer base {
   :root {
-    /* Unified Light Theme - Professional & Clean */
-    --background: 0 0% 98%;
-    --foreground: 222.2 47% 11%;
+    /* Modern Minimalist Light Theme - Clean & Professional */
+    --background: 0 0% 99%;
+    --background-subtle: 210 40% 97%;
+    --foreground: 222 47% 11%;
 
-    /* Card variants */
+    /* Card variants - Enhanced with better contrast */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 47% 11%;
-    --card-hover: 0 0% 98%;
+    --card-foreground: 222 47% 11%;
+    --card-hover: 210 40% 98.5%;
 
-    /* Primary brand color - Professional blue */
-    --primary: 217 91% 60%;
+    /* Primary brand color - Refined blue with gradient support */
+    --primary: 217 89% 61%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 217 91% 52%;
+    --primary-hover: 217 89% 55%;
+    --primary-light: 217 89% 97%;
 
-    /* Secondary colors */
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 222.2 47% 11%;
-    --secondary-hover: 214 32% 85%;
+    /* Secondary colors - Softer tones */
+    --secondary: 214 27% 93%;
+    --secondary-foreground: 222 47% 11%;
+    --secondary-hover: 214 27% 88%;
 
-    /* Status colors */
-    --success: 142 71% 45%;
+    /* Status colors - Refined for modern aesthetic */
+    --success: 142 69% 48%;
     --success-foreground: 0 0% 100%;
-    --success-light: 142 71% 96%;
+    --success-light: 142 69% 97%;
 
-    --warning: 38 92% 50%;
+    --warning: 38 88% 52%;
     --warning-foreground: 0 0% 100%;
-    --warning-light: 48 96% 95%;
+    --warning-light: 38 88% 96%;
 
-    --danger: 0 72% 51%;
+    --danger: 0 70% 54%;
     --danger-foreground: 0 0% 100%;
-    --danger-light: 0 86% 97%;
+    --danger-light: 0 70% 97%;
 
-    --info: 199 89% 48%;
+    --info: 199 87% 50%;
     --info-foreground: 0 0% 100%;
-    --info-light: 199 89% 96%;
+    --info-light: 199 87% 97%;
 
-    /* Neutral colors */
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Neutral colors - Refined grayscale */
+    --muted: 210 35% 96.5%;
+    --muted-foreground: 215 14% 50%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 210 35% 96.5%;
+    --accent-foreground: 222 47% 11%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    /* Borders */
-    --border: 214 32% 91%;
-    --border-strong: 214 32% 82%;
+    /* Borders - Softer, less prominent */
+    --border: 214 27% 92%;
+    --border-light: 214 27% 95%;
+    --border-strong: 214 27% 85%;
 
-    /* Input */
-    --input: 214 32% 91%;
-    --input-focus: 217 91% 60%;
+    /* Input - Enhanced focus states */
+    --input: 214 27% 92%;
+    --input-hover: 214 27% 90%;
+    --input-focus: 217 89% 61%;
 
-    /* Ring for focus states */
-    --ring: 217 91% 60%;
+    /* Ring for focus states - Softer */
+    --ring: 217 89% 61%;
+    --ring-offset: 0 0% 100%;
 
-    /* Radius */
+    /* Radius - Modern, slightly more pronounced */
     --radius: 0.5rem;
     --radius-sm: 0.375rem;
     --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    /* Shadows - Softer, more natural elevation system */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 2px 3px -1px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.09), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+
+    /* Spacing scale - Consistent spacing system */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+
+    /* Dark theme variants (for dashboard/summary sections) */
+    --dark-background: 222 47% 5%;
+    --dark-background-elevated: 222 47% 9%;
+    --dark-foreground: 210 40% 98%;
+
+    --dark-card: 222 47% 9%;
+    --dark-card-hover: 222 47% 11%;
+    --dark-card-foreground: 210 40% 98%;
+
+    --dark-border: 215 20% 22%;
+    --dark-border-strong: 215 20% 32%;
+
+    --dark-muted: 215 20% 16%;
+    --dark-muted-foreground: 217 10% 66%;
   }
 }
 
@@ -92,106 +125,137 @@
 }
 
 @layer components {
-  /* Professional card component */
+  /* Modern card components with refined shadows */
   .card {
-    @apply bg-card rounded-lg border border-border shadow-sm;
+    @apply bg-card rounded-lg border border-border;
+    box-shadow: var(--shadow-sm);
   }
 
   .card-hover {
-    @apply bg-card rounded-lg border border-border shadow-sm transition-all duration-200;
+    @apply bg-card rounded-lg border border-border transition-all duration-300 ease-out;
+    box-shadow: var(--shadow-sm);
   }
 
   .card-hover:hover {
-    @apply shadow-md;
     background-color: hsl(var(--card-hover));
     border-color: hsl(var(--border-strong));
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
   }
 
   .card-elevated {
-    @apply bg-card rounded-lg border border-border shadow-md;
+    @apply bg-card rounded-lg border border-border;
+    box-shadow: var(--shadow-md);
   }
 
-  /* Button variants */
+  /* Button variants - Modern with subtle enhancements */
   .btn {
-    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors;
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium;
+    @apply transition-all duration-200 ease-out;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
-    @apply disabled:opacity-50 disabled:pointer-events-none;
+    @apply disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed;
   }
 
   .btn-primary {
     @apply btn;
-    background-color: hsl(var(--primary));
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-hover)) 100%);
     color: hsl(var(--primary-foreground));
+    box-shadow: var(--shadow-sm), 0 1px 0 0 rgba(255, 255, 255, 0.2) inset;
   }
 
   .btn-primary:hover:not(:disabled) {
-    background-color: hsl(var(--primary-hover));
+    box-shadow: var(--shadow-md), 0 1px 0 0 rgba(255, 255, 255, 0.2) inset;
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0);
   }
 
   .btn-secondary {
     @apply btn;
     background-color: hsl(var(--secondary));
     color: hsl(var(--secondary-foreground));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-xs);
   }
 
   .btn-secondary:hover:not(:disabled) {
     background-color: hsl(var(--secondary-hover));
+    border-color: hsl(var(--border-strong));
+    box-shadow: var(--shadow-sm);
   }
 
   .btn-ghost {
-    @apply btn hover:bg-accent hover:text-accent-foreground;
+    @apply btn;
+    background: transparent;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
   }
 
   .btn-danger {
     @apply btn;
-    background-color: hsl(var(--danger));
+    background: linear-gradient(135deg, hsl(var(--danger)) 0%, hsl(var(--danger) / 0.9) 100%);
     color: hsl(var(--danger-foreground));
+    box-shadow: var(--shadow-sm);
   }
 
   .btn-danger:hover:not(:disabled) {
-    opacity: 0.9;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
   }
 
-  /* Input styles */
+  /* Input styles - Enhanced focus and hover states */
   .input {
     @apply flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm;
     @apply file:border-0 file:bg-transparent file:text-sm file:font-medium;
     @apply placeholder:text-muted-foreground;
+    @apply transition-all duration-200 ease-out;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0;
+    @apply focus-visible:border-input-focus;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
+    box-shadow: var(--shadow-xs);
   }
 
-  /* Badge variants */
+  .input:focus-visible {
+    box-shadow: var(--shadow-sm), 0 0 0 3px hsl(var(--ring) / 0.1);
+  }
+
+  /* Badge variants - Softer, pill-shaped design */
   .badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors;
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply transition-all duration-200 ease-out;
   }
 
   .badge-success {
     @apply badge;
     background-color: hsl(var(--success-light));
     color: hsl(var(--success));
-    border: 1px solid hsl(var(--success) / 0.2);
+    border: 1px solid hsl(var(--success) / 0.15);
   }
 
   .badge-warning {
     @apply badge;
     background-color: hsl(var(--warning-light));
     color: hsl(var(--warning));
-    border: 1px solid hsl(var(--warning) / 0.2);
+    border: 1px solid hsl(var(--warning) / 0.15);
   }
 
   .badge-danger {
     @apply badge;
     background-color: hsl(var(--danger-light));
     color: hsl(var(--danger));
-    border: 1px solid hsl(var(--danger) / 0.2);
+    border: 1px solid hsl(var(--danger) / 0.15);
   }
 
   .badge-info {
     @apply badge;
     background-color: hsl(var(--info-light));
     color: hsl(var(--info));
-    border: 1px solid hsl(var(--info) / 0.2);
+    border: 1px solid hsl(var(--info) / 0.15);
   }
 
   .badge-neutral {
@@ -238,5 +302,133 @@
 
   .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: hsl(var(--border-strong));
+  }
+
+  /* Dark theme variants for dashboard/summary sections */
+  .dark-section {
+    background: linear-gradient(135deg, hsl(var(--dark-background)) 0%, hsl(var(--dark-background-elevated)) 100%);
+    color: hsl(var(--dark-foreground));
+  }
+
+  .dark-card {
+    background: hsl(var(--dark-card));
+    border: 1px solid hsl(var(--dark-border));
+    color: hsl(var(--dark-card-foreground));
+    @apply rounded-lg shadow-lg;
+  }
+
+  .dark-card-hover {
+    background: hsl(var(--dark-card));
+    border: 1px solid hsl(var(--dark-border));
+    color: hsl(var(--dark-card-foreground));
+    @apply rounded-lg shadow-lg transition-all duration-300;
+  }
+
+  .dark-card-hover:hover {
+    background: hsl(var(--dark-card-hover));
+    border-color: hsl(var(--dark-border-strong));
+    @apply shadow-xl -translate-y-1;
+  }
+
+  .dark-badge-success {
+    background-color: hsl(var(--success) / 0.15);
+    color: hsl(var(--success));
+    border: 1px solid hsl(var(--success) / 0.3);
+    @apply badge;
+  }
+
+  .dark-badge-warning {
+    background-color: hsl(var(--warning) / 0.15);
+    color: hsl(var(--warning));
+    border: 1px solid hsl(var(--warning) / 0.3);
+    @apply badge;
+  }
+
+  .dark-badge-danger {
+    background-color: hsl(var(--danger) / 0.15);
+    color: hsl(var(--danger));
+    border: 1px solid hsl(var(--danger) / 0.3);
+    @apply badge;
+  }
+
+  .dark-badge-info {
+    background-color: hsl(var(--info) / 0.15);
+    color: hsl(var(--info));
+    border: 1px solid hsl(var(--info) / 0.3);
+    @apply badge;
+  }
+
+  /* Skeleton loaders for better loading states */
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+
+  .skeleton-text {
+    @apply skeleton h-4 w-full;
+  }
+
+  .skeleton-title {
+    @apply skeleton h-6 w-3/4;
+  }
+
+  .skeleton-avatar {
+    @apply skeleton h-10 w-10 rounded-full;
+  }
+
+  .skeleton-card {
+    @apply skeleton h-32 w-full rounded-lg;
+  }
+
+  .skeleton-button {
+    @apply skeleton h-10 w-24 rounded-md;
+  }
+
+  /* Dark skeleton variants */
+  .dark-skeleton {
+    @apply animate-pulse rounded;
+    background: hsl(var(--dark-muted));
+  }
+
+  .dark-skeleton-text {
+    @apply dark-skeleton h-4 w-full;
+  }
+
+  .dark-skeleton-title {
+    @apply dark-skeleton h-6 w-3/4;
+  }
+
+  .dark-skeleton-card {
+    @apply dark-skeleton h-32 w-full rounded-lg;
+  }
+
+  /* Gradient backgrounds for stats and features */
+  .gradient-success {
+    background: linear-gradient(135deg, hsl(var(--success) / 0.1) 0%, hsl(var(--success) / 0.05) 100%);
+    border: 1px solid hsl(var(--success) / 0.2);
+  }
+
+  .gradient-warning {
+    background: linear-gradient(135deg, hsl(var(--warning) / 0.1) 0%, hsl(var(--warning) / 0.05) 100%);
+    border: 1px solid hsl(var(--warning) / 0.2);
+  }
+
+  .gradient-danger {
+    background: linear-gradient(135deg, hsl(var(--danger) / 0.1) 0%, hsl(var(--danger) / 0.05) 100%);
+    border: 1px solid hsl(var(--danger) / 0.2);
+  }
+
+  .gradient-info {
+    background: linear-gradient(135deg, hsl(var(--info) / 0.1) 0%, hsl(var(--info) / 0.05) 100%);
+    border: 1px solid hsl(var(--info) / 0.2);
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.1) 0%, hsl(var(--primary) / 0.05) 100%);
+    border: 1px solid hsl(var(--primary) / 0.2);
+  }
+
+  /* Smooth transitions for all interactive elements */
+  .transition-smooth {
+    @apply transition-all duration-300 ease-in-out;
   }
 }

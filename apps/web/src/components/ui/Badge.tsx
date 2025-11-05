@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'dark-success' | 'dark-warning' | 'dark-danger' | 'dark-info';
   className?: string;
   icon?: React.ReactNode;
 }
@@ -19,6 +19,10 @@ export function Badge({
     danger: 'badge-danger',
     info: 'badge-info',
     neutral: 'badge-neutral',
+    'dark-success': 'dark-badge-success',
+    'dark-warning': 'dark-badge-warning',
+    'dark-danger': 'dark-badge-danger',
+    'dark-info': 'dark-badge-info',
   };
 
   return (

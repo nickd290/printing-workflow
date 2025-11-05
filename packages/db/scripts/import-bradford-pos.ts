@@ -87,7 +87,26 @@ async function importBradfordPOs() {
           continue;
         }
 
-        const vendorAmount = parseFloat(po.total_amount);
+        const csvAmount = parseFloat(po.total_amount);
+
+        // Determine if CSV amount is CPM or total
+        // Heuristic: If amount < 500 and job quantity > 1000, likely CPM
+        const quantity = job.quantity || 0;
+        let vendorCPM: number | null = null;
+        let vendorAmount: number;
+
+        if (csvAmount < 500 && quantity > 1000) {
+          // Likely a CPM rate - calculate total
+          vendorCPM = csvAmount;
+          vendorAmount = (quantity / 1000.0) * csvAmount;
+          console.log(`  📊 Detected CPM pricing: $${vendorCPM}/M × ${quantity.toLocaleString()} = $${vendorAmount.toFixed(2)}`);
+        } else {
+          // Likely a total amount - calculate CPM if possible
+          vendorAmount = csvAmount;
+          if (quantity > 0) {
+            vendorCPM = csvAmount / (quantity / 1000.0);
+          }
+        }
 
         await prisma.purchaseOrder.create({
           data: {
@@ -97,13 +116,14 @@ async function importBradfordPOs() {
             jobId: job.id,  // Use actual job ID from database
             referencePONumber: po.customer_po_number || null,
             vendorAmount: vendorAmount,
+            vendorCPM: vendorCPM,
             originalAmount: vendorAmount,
             marginAmount: 0,  // Bradford->JD has no margin for Bradford
             status: 'COMPLETED',  // POs are already sent/completed
           },
         });
 
-        console.log(`✅ Imported PO ${po.po_number} for job ${po.job_number} ($${vendorAmount.toFixed(2)})`);
+        console.log(`✅ Imported PO ${po.po_number} for job ${po.job_number} - Total: $${vendorAmount.toFixed(2)}${vendorCPM ? ` (CPM: $${vendorCPM.toFixed(2)})` : ''}`);
         successCount++;
       } catch (error: any) {
         console.error(`❌ Error importing PO ${po.po_number}:`, error.message);

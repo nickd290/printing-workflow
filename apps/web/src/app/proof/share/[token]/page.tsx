@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { ProofViewer } from '@/components/ProofViewer';
 
 interface Proof {
   id: string;
@@ -15,7 +16,9 @@ interface Proof {
     };
   };
   file: {
+    id: string;
     fileName: string;
+    mimeType: string;
     objectKey: string;
   };
 }
@@ -217,18 +220,12 @@ export default function PublicProofViewerPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Proof Display */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-              <div className="aspect-[8.5/11] bg-gray-100 flex items-center justify-center">
-                {/* TODO: Display actual proof image/PDF */}
-                <div className="text-center p-8">
-                  <svg className="w-24 h-24 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  <p className="text-gray-600 font-medium">{proof.file.fileName}</p>
-                  <p className="text-sm text-gray-500 mt-2">Proof File</p>
-                  {/* In production, render the actual image or PDF viewer here */}
-                </div>
-              </div>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: '700px' }}>
+              <ProofViewer
+                fileUrl={`${process.env.NEXT_PUBLIC_API_URL}/api/files/${proof.file.id}/download`}
+                fileName={proof.file.fileName}
+                mimeType={proof.file.mimeType}
+              />
             </div>
           </div>
 

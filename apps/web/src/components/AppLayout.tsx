@@ -9,8 +9,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Check if we're on the login page (don't show sidebar/topbar)
-  const isLoginPage = pathname === '/login';
+  // Check if we're on the login page or customer portal (don't show sidebar/topbar)
+  const isExcludedPage = pathname === '/login' || pathname === '/customer-portal';
 
   // Listen to sidebar collapsed state from localStorage
   useEffect(() => {
@@ -33,8 +33,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Don't render layout components on login page
-  if (isLoginPage) {
+  // Don't render layout components on excluded pages
+  if (isExcludedPage) {
     return <>{children}</>;
   }
 

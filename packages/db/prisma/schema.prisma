@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -235,6 +235,8 @@ model Job {
   // File requirements and production readiness
   requiredArtworkCount  Int?      // Number of artwork files required (from AI or manual)
   requiredDataFileCount Int?      // Number of data files required (from AI or manual)
+  artworkSectionComplete Boolean  @default(false) // User manually marked artwork section as complete
+  dataFilesSectionComplete Boolean @default(false) // User manually marked data files section as complete
   isReadyForProduction  Boolean   @default(false) // Auto-calculated when all files uploaded
   submittedForProductionAt DateTime? // When customer submitted job for production
 
@@ -393,7 +395,8 @@ model PurchaseOrder {
 
   // Amounts
   originalAmount  Decimal   // Customer's original payment
-  vendorAmount    Decimal   // Amount to vendor
+  vendorAmount    Decimal   // Amount to vendor (total)
+  vendorCPM       Decimal?  // Cost per thousand (for Bradford→JD POs using CPM pricing)
   marginAmount    Decimal   // Margin kept by origin company
 
   // PO Number tracking
@@ -424,13 +427,6 @@ model PurchaseOrder {
 // Invoices
 // ============================================================================
 
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  PAID
-  CANCELLED
-}
-
 model Invoice {
   id         String        @id @default(cuid())
 
@@ -446,8 +442,7 @@ model Invoice {
   fromCompany   Company    @relation("InvoiceFromCompany", fields: [fromCompanyId], references: [id])
 
   invoiceNo  String        @unique
-  amount     Decimal       
-  status     InvoiceStatus @default(DRAFT)
+  amount     Decimal
 
   pdfFileId  String?
   pdfFile    File?         @relation(fields: [pdfFileId], references: [id])
@@ -462,7 +457,6 @@ model Invoice {
   @@index([jobId])
   @@index([toCompanyId])
   @@index([fromCompanyId])
-  @@index([status])
 }
 
 // ============================================================================
@@ -637,16 +631,28 @@ model PaperTransaction {
 
 model PricingRule {
   id              String   @id @default(cuid())
-  sizeName        String   @unique  // "26 x 9.75", "6 x 11", etc.
-  baseCPM         Decimal  // Standard rate per thousand
+  sizeName        String   @unique  // "7 1/4 x 16 3/8", "6 x 11", etc.
+
+  // Legacy/fallback field
+  baseCPM         Decimal  // Standard rate per thousand (legacy)
+
+  // JD TO BRADFORD (Printing costs)
   printCPM        Decimal  // What Bradford pays JD for printing per thousand
+  jdInvoicePerM   Decimal? // Total invoice from JD to Bradford per M (from CSV: "Invoice Jd to Bradford")
 
   // Paper specifications
   paperWeightPer1000  Decimal?  // Paper weight in lbs per thousand pieces
   paperCostPerLb      Decimal?  // Cost per pound of paper
-  paperCPM            Decimal?  // Bradford's paper COST per thousand
+  paperCPM            Decimal?  // Bradford's paper COST per thousand (raw paper cost)
   paperChargedCPM     Decimal?  // What Bradford CHARGES for paper per thousand (with markup)
+  paperMarkupPercent  Decimal?  // Paper markup percentage (default 20%)
   rollSize            Int?      // Roll size in inches (15, 18, or 20)
+
+  // BRADFORD TO IMPACT (What Impact pays Bradford)
+  bradfordInvoicePerM Decimal? // Invoice from Bradford to Impact per M (from CSV: "Invoice Bradford to Impact")
+
+  // IMPACT TO CUSTOMER (Standard/agreed customer rate)
+  impactInvoicePerM   Decimal? // Standard customer rate per M (from CSV: "Impact to Customer")
 
   isActive        Boolean  @default(true)
   notes           String?  // Optional notes about this pricing

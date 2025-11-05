@@ -1,4 +1,4 @@
-import { prisma, POStatus, InvoiceStatus } from '@printing-workflow/db';
+import { prisma, POStatus } from '@printing-workflow/db';
 import { COMPANY_IDS } from '@printing-workflow/shared';
 
 export interface RevenueMetrics {
@@ -90,10 +90,10 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
 
   // Calculate invoice metrics
   const paidInvoices = allInvoices.filter(
-    (inv) => inv.status === InvoiceStatus.PAID
+    (inv) => inv.paidAt != null
   );
   const unpaidInvoices = allInvoices.filter(
-    (inv) => inv.status !== InvoiceStatus.PAID
+    (inv) => inv.paidAt == null
   );
 
   // Customer invoices (from Impact Direct to customers)
@@ -195,9 +195,9 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
             (sum, inv) => sum + parseFloat(inv.amount.toString()),
             0
           ),
-          paid: jjsaInvoices.filter((inv) => inv.status === InvoiceStatus.PAID)
+          paid: jjsaInvoices.filter((inv) => inv.paidAt != null)
             .length,
-          unpaid: jjsaInvoices.filter((inv) => inv.status !== InvoiceStatus.PAID)
+          unpaid: jjsaInvoices.filter((inv) => inv.paidAt == null)
             .length,
         },
         ballantine: {
@@ -207,10 +207,10 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
             0
           ),
           paid: ballantineInvoices.filter(
-            (inv) => inv.status === InvoiceStatus.PAID
+            (inv) => inv.paidAt != null
           ).length,
           unpaid: ballantineInvoices.filter(
-            (inv) => inv.status !== InvoiceStatus.PAID
+            (inv) => inv.paidAt == null
           ).length,
         },
       },

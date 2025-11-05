@@ -3,6 +3,7 @@ import { prisma } from '@printing-workflow/db';
 import { parseCustomerPO } from '../services/pdf-parser.service.js';
 import { checkJobReadiness, updateJobReadiness, getJobFileProgress } from '../services/job.service.js';
 import { sendNotification, sendJobReadyNotifications } from '../services/notification.service.js';
+import { sendEmail, emailTemplates } from '../lib/email.js';
 
 const customerRoutes: FastifyPluginAsync = async (server) => {
   // Customer uploads their PO
@@ -153,8 +154,18 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
       const buffer = await data.toBuffer();
       console.log(`📄 Parsing customer PO: ${data.filename}`);
 
-      // Parse the PO file with AI
-      const parsed = await parseCustomerPO(buffer);
+      // Parse the PO file with AI (pass filename for additional context)
+      const parsed = await parseCustomerPO(buffer, data.filename);
+
+      // Debug log to track data flow
+      console.log('📊 API Response Data:', JSON.stringify({
+        quantity: parsed.quantity,
+        orderDate: parsed.orderDate,
+        pickupDate: parsed.pickupDate,
+        poolDate: parsed.poolDate,
+        sampleInstructions: parsed.sampleInstructions?.substring(0, 50) + '...',
+        sampleRecipientsCount: parsed.sampleRecipients?.length || 0
+      }, null, 2));
 
       return {
         success: true,
@@ -171,6 +182,12 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           samples: parsed.samples || null,
           requiredArtworkCount: parsed.requiredArtworkCount || 1,
           requiredDataFileCount: parsed.requiredDataFileCount || 0,
+          quantity: parsed.quantity || null,
+          orderDate: parsed.orderDate || null,
+          pickupDate: parsed.pickupDate || null,
+          poolDate: parsed.poolDate || null,
+          sampleInstructions: parsed.sampleInstructions || null,
+          sampleRecipients: parsed.sampleRecipients || null,
         },
       };
     } catch (error: any) {
@@ -182,28 +199,88 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
   /**
    * POST /customer/jobs
    * Create a new job (from PO data or manual entry)
+   * Accepts multipart form data with optional PO file
    */
   server.post('/jobs', async (request, reply) => {
     try {
-      const body = request.body as any;
-      const {
-        customerId,
-        description,
-        paper,
-        flatSize,
-        foldedSize,
-        colors,
-        finishing,
-        total,
-        poNumber,
-        deliveryDate,
-        samples,
-        requiredArtworkCount,
-        requiredDataFileCount,
-      } = body;
+      // Parse multipart form data with request.parts() for better field handling
+      const parts = request.parts();
+      const fields: Record<string, string> = {};
+      let fileData: { buffer: Buffer; filename: string; mimetype: string } | null = null;
+
+      // Iterate through all parts of the multipart request
+      for await (const part of parts) {
+        if (part.type === 'file') {
+          // Handle file upload
+          const buffer = await part.toBuffer();
+          fileData = {
+            buffer,
+            filename: part.filename,
+            mimetype: part.mimetype,
+          };
+        } else {
+          // Handle form field
+          fields[part.fieldname] = part.value as string;
+        }
+      }
+
+      // Extract fields from collected data
+      const customerId = fields.customerId;
+      const description = fields.description;
+      const paper = fields.paper;
+      const flatSize = fields.flatSize;
+      const foldedSize = fields.foldedSize;
+      const colors = fields.colors;
+      const finishing = fields.finishing;
+      const total = fields.total;
+      const poNumber = fields.poNumber;
+      const deliveryDate = fields.deliveryDate;
+      const samples = fields.samples;
+      const requiredArtworkCount = fields.requiredArtworkCount;
+      const requiredDataFileCount = fields.requiredDataFileCount;
+      const notes = fields.notes;
+      const quantity = fields.quantity;
 
       if (!customerId) {
         return reply.code(400).send({ error: 'Customer ID is required' });
+      }
+
+      // Validate price/total - warn about suspicious values
+      if (total) {
+        const totalNum = parseFloat(total);
+
+        // Check for negative prices
+        if (totalNum < 0) {
+          console.warn('⚠️ WARNING: Negative price detected:', totalNum);
+          return reply.code(400).send({
+            error: 'Total cannot be negative',
+            field: 'total',
+            value: totalNum
+          });
+        }
+
+        // Check for suspiciously low prices (less than $1)
+        if (totalNum < 1) {
+          console.warn('⚠️ WARNING: Very low price detected:', totalNum);
+        }
+
+        // If quantity is available, check price per unit
+        if (quantity) {
+          const quantityNum = parseInt(quantity);
+          if (quantityNum > 0) {
+            const pricePerUnit = totalNum / quantityNum;
+
+            // Warn if price per unit is very low (less than 1 cent)
+            if (pricePerUnit < 0.01) {
+              console.warn('⚠️ WARNING: Price per unit is very low:', {
+                total: totalNum,
+                quantity: quantityNum,
+                pricePerUnit: pricePerUnit.toFixed(4),
+                warning: 'This might be a unit price ($/M) instead of total'
+              });
+            }
+          }
+        }
       }
 
       // Generate job number
@@ -220,9 +297,13 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         finishing,
         deliveryDate,
         samples,
+        notes,
+        quantity: quantity ? parseInt(quantity) : undefined,
       };
 
       // Create job
+      // Note: requiredArtworkCount and requiredDataFileCount are optional
+      // When not set, user manually marks sections complete after uploading files
       const job = await prisma.job.create({
         data: {
           jobNo,
@@ -231,8 +312,8 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           customerTotal: String(total || 0),
           customerPONumber: poNumber || undefined,
           deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
-          requiredArtworkCount: requiredArtworkCount ?? 1,
-          requiredDataFileCount: requiredDataFileCount ?? 0,
+          requiredArtworkCount: requiredArtworkCount ? parseInt(requiredArtworkCount) : null,
+          requiredDataFileCount: requiredDataFileCount ? parseInt(requiredDataFileCount) : null,
           specs,
         },
         include: {
@@ -241,6 +322,83 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
       });
 
       console.log(`✅ Created job ${job.jobNo} for customer ${customerId}`);
+
+      // If a PO file was uploaded, save it
+      let poFile = null;
+      if (fileData) {
+        // Create file record for the original PO
+        poFile = await prisma.file.create({
+          data: {
+            kind: 'PO_PDF',
+            jobId: job.id,
+            objectKey: `jobs/${job.id}/po-${Date.now()}.pdf`,
+            fileName: fileData.filename,
+            mimeType: fileData.mimetype,
+            size: fileData.buffer.length,
+            checksum: 'placeholder', // In production: calculate SHA-256
+            uploadedBy: customerId,
+          },
+        });
+
+        console.log(`📄 Stored original PO file for job ${job.jobNo}: ${fileData.filename}`);
+      }
+
+      // Send job creation confirmation email to all stakeholders
+      try {
+        // Map customer ID to email address
+        const customerEmailMap: Record<string, string> = {
+          'jjsa': 'Lorie@jjsainc.com',
+          'ballantine': 'orders@ballantine.com',
+        };
+
+        const customerEmail = customerEmailMap[customerId] || 'nick@jdgraphic.com'; // fallback to internal
+
+        // Build recipient list (all will be in TO field so everyone sees who received it)
+        const recipients = [
+          'nick@jdgraphic.com',
+          customerEmail,
+          'steve.gustafson@bgeltd.com'
+        ].join(',');
+
+        // Get customer company name
+        const customer = await prisma.company.findUnique({
+          where: { id: customerId }
+        });
+
+        // Extract job details from specs JSON
+        const specs = job.specs as any;
+        const emailData = {
+          jobNo: job.jobNo,
+          customerName: customer?.name || customerId,
+          description: specs?.description,
+          quantity: specs?.quantity,
+          total: job.customerTotal || undefined,
+          orderDate: specs?.orderDate,
+          pickupDate: specs?.pickupDate,
+          poolDate: specs?.poolDate,
+          deliveryDate: specs?.deliveryDate,
+          paper: specs?.paper,
+          flatSize: specs?.flatSize,
+          foldedSize: specs?.foldedSize,
+          colors: specs?.colors,
+          finishing: specs?.finishing,
+          sampleRecipients: specs?.sampleRecipients,
+          notes: specs?.notes,
+        };
+
+        const emailContent = emailTemplates.jobCreatedWithDetails(emailData);
+
+        await sendEmail({
+          to: recipients,
+          subject: emailContent.subject,
+          html: emailContent.html,
+        });
+
+        console.log(`✅ Job creation email sent to: ${recipients}`);
+      } catch (emailError) {
+        // Log email errors but don't fail job creation
+        console.error('❌ Failed to send job creation email:', emailError);
+      }
 
       return {
         success: true,
@@ -252,6 +410,10 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           requiredArtworkCount: job.requiredArtworkCount,
           requiredDataFileCount: job.requiredDataFileCount,
         },
+        poFile: poFile ? {
+          id: poFile.id,
+          fileName: poFile.fileName,
+        } : null,
       };
     } catch (error: any) {
       console.error('Job creation failed:', error);
@@ -298,6 +460,44 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           uploadedBy: request.user?.id || 'customer',
         },
       });
+
+      console.log(`📎 File uploaded for job ${job.jobNo}: ${data.filename} (${fileKind})`);
+
+      // Send immediate email notification to Nick for every file upload
+      try {
+        // Get current progress after this file upload
+        const progress = await getJobFileProgress(id);
+
+        // Get customer info
+        const jobWithCustomer = await prisma.job.findUnique({
+          where: { id },
+          include: { customer: true },
+        });
+
+        if (jobWithCustomer) {
+          const emailContent = emailTemplates.fileUploaded({
+            jobNo: job.jobNo,
+            customerName: jobWithCustomer.customer?.name || job.customerId,
+            fileName: data.filename,
+            fileType: fileKind as 'ARTWORK' | 'DATA_FILE',
+            uploadedArtwork: progress.uploadedArtwork,
+            requiredArtwork: progress.requiredArtwork,
+            uploadedDataFiles: progress.uploadedDataFiles,
+            requiredDataFiles: progress.requiredDataFiles,
+          });
+
+          await sendEmail({
+            to: 'nick@jdgraphic.com',
+            subject: emailContent.subject,
+            html: emailContent.html,
+          });
+
+          console.log(`✅ File upload notification sent to nick@jdgraphic.com for job ${job.jobNo}`);
+        }
+      } catch (emailError) {
+        // Log email errors but don't fail the file upload
+        console.error('❌ Failed to send file upload notification:', emailError);
+      }
 
       // Update job readiness status
       const becameReady = await updateJobReadiness(id);

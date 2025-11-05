@@ -5,7 +5,10 @@ import { JobsTable } from '@/components/JobsTable';
 import { JobDetailModal } from '@/components/JobDetailModal';
 import { BradfordDashboard } from '@/components/dashboards/BradfordDashboard';
 import { ImpactDirectDashboard } from '@/components/dashboards/ImpactDirectDashboard';
+import { DeliveryUrgencyBadge, getDeliveryUrgency } from '@/components/jobs/DeliveryUrgencyBadge';
+import { JobStatsBar } from '@/components/jobs/JobStatsBar';
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { jobsAPI } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
@@ -13,6 +16,7 @@ import toast, { Toaster } from 'react-hot-toast';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { user, isCustomer, isBrokerAdmin, isBradfordAdmin } = useUser();
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +59,13 @@ export default function DashboardPage() {
     console.log('🔄 Form data updated:', formData);
   }, [formData]);
 
+  // Redirect customers to their dedicated portal
+  useEffect(() => {
+    if (user && isCustomer) {
+      router.push('/customer-portal');
+    }
+  }, [user, isCustomer, router]);
+
   useEffect(() => {
     loadJobs();
   }, []);
@@ -63,30 +74,69 @@ export default function DashboardPage() {
   const filteredJobs = useMemo(() => {
     if (!user) return [];
 
+    let jobs: any[] = [];
+
     // BROKER_ADMIN sees all jobs
     if (isBrokerAdmin) {
-      return allJobs;
+      jobs = allJobs;
     }
-
     // CUSTOMER sees only their own jobs
-    if (isCustomer) {
-      return allJobs.filter((job) => {
+    else if (isCustomer) {
+      jobs = allJobs.filter((job) => {
         const customerId = typeof job.customer === 'string' ? job.customer : job.customer?.id;
         return customerId === user.companyId;
       });
     }
-
     // BRADFORD_ADMIN sees only jobs with Bradford POs
-    if (isBradfordAdmin) {
-      return allJobs.filter((job) => {
+    else if (isBradfordAdmin) {
+      jobs = allJobs.filter((job) => {
         return job.purchaseOrders?.some(
           (po: any) => po.targetCompany?.id === 'bradford' || po.originCompany?.id === 'bradford'
         );
       });
+    } else {
+      jobs = allJobs;
     }
 
-    return allJobs;
+    // Sort customers' jobs by delivery urgency (late jobs first)
+    if (isCustomer) {
+      return jobs.sort((a, b) => {
+        const urgencyA = getDeliveryUrgency(a.deliveryDate, a.completedAt);
+        const urgencyB = getDeliveryUrgency(b.deliveryDate, b.completedAt);
+        return urgencyA - urgencyB; // Lower urgency value = higher priority
+      });
+    }
+
+    return jobs;
   }, [allJobs, user, isCustomer, isBrokerAdmin, isBradfordAdmin]);
+
+  // Calculate stats for the stats bar
+  const jobStats = useMemo(() => {
+    if (!isCustomer) {
+      return { late: 0, urgent: 0, proofNeeded: 0, inProduction: 0, completed: 0 };
+    }
+
+    const stats = {
+      late: 0,
+      urgent: 0,
+      proofNeeded: 0,
+      inProduction: 0,
+      completed: 0,
+    };
+
+    filteredJobs.forEach((job) => {
+      const urgency = getDeliveryUrgency(job.deliveryDate, job.completedAt);
+
+      if (urgency === -1) stats.late++;
+      else if (urgency === 0) stats.urgent++;
+
+      if (job.status === 'READY_FOR_PROOF') stats.proofNeeded++;
+      if (job.status === 'IN_PRODUCTION' || job.status === 'PROOF_APPROVED') stats.inProduction++;
+      if (job.status === 'COMPLETED') stats.completed++;
+    });
+
+    return stats;
+  }, [filteredJobs, isCustomer]);
 
   const loadJobs = async () => {
     try {
@@ -326,28 +376,28 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       <Toaster position="top-right" />
 
-      <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-[1600px]">
+      <div className="mx-auto px-6 sm:px-8 lg:px-12 py-12 max-w-[1800px]">
         {/* Render role-specific dashboards */}
         {isBrokerAdmin ? (
           <ImpactDirectDashboard />
         ) : (
           <>
-            {/* Customer Dashboard - Simple Job List */}
-            <div className="mb-6 flex justify-between items-center">
+            {/* Customer Dashboard - Enhanced Header */}
+            <div className="mb-8 flex justify-between items-start">
               <div>
-                <h1 className="text-3xl font-bold text-white">
+                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent mb-2">
                   My Jobs
                 </h1>
-                <p className="mt-1 text-sm text-slate-400">
-                  Track your orders and proofs ({filteredJobs.length} {filteredJobs.length === 1 ? 'job' : 'jobs'})
+                <p className="text-base text-slate-400">
+                  Track your orders and proofs • {filteredJobs.length} active {filteredJobs.length === 1 ? 'job' : 'jobs'}
                 </p>
               </div>
               <button
                 onClick={() => setShowNewJobModal(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:shadow-blue-500/20 transition-all duration-300 hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -355,6 +405,9 @@ export default function DashboardPage() {
                 New Order
               </button>
             </div>
+
+            {/* Stats Bar */}
+            <JobStatsBar stats={jobStats} />
 
             {/* Error Display */}
             {error && (
@@ -387,109 +440,143 @@ export default function DashboardPage() {
               </div>
             ) : (
               <>
-                {/* Jobs List with Proof Approval */}
-                <div className="space-y-3">
-                  {filteredJobs.map((job) => (
-                    <div
-                      key={job.id}
-                      className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg p-5 cursor-pointer transition-all"
-                      onClick={() => setSelectedJobId(job.id)}
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-bold text-white mb-1">
-                            {job.customerPONumber || job.jobNo}
-                          </h3>
-                          <p className="text-xs text-slate-500 mb-1">
-                            Job: {job.jobNo}
-                          </p>
-                          <p className="text-sm text-slate-400">
-                            {job.specs?.description || 'No description'}
-                          </p>
-                          {job.customerTotal && (
-                            <div className="mt-2 inline-flex items-center gap-1.5 text-green-400 font-semibold">
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
-                              </svg>
-                              ${Number(job.customerTotal).toFixed(2)}
+                {/* Jobs List with Proof Approval - Responsive Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {filteredJobs.map((job) => {
+                    // Calculate urgency for border color and glow effect
+                    const urgency = getDeliveryUrgency(job.deliveryDate, job.completedAt);
+                    let borderColor = 'border-slate-700/50';
+                    let glowEffect = '';
+
+                    if (urgency === -1) {
+                      borderColor = 'border-red-500/50 border-l-4'; // Late (overdue)
+                      glowEffect = 'shadow-red-500/20';
+                    } else if (urgency === 0) {
+                      borderColor = 'border-orange-500/50 border-l-4'; // Urgent (0-2 days)
+                      glowEffect = 'shadow-orange-500/20';
+                    } else if (urgency === 1) {
+                      borderColor = 'border-yellow-500/50 border-l-4'; // Warning (3-7 days)
+                      glowEffect = 'shadow-yellow-500/10';
+                    } else if (urgency === 2) {
+                      borderColor = 'border-green-500/50 border-l-4'; // Normal (8+ days)
+                      glowEffect = 'shadow-green-500/10';
+                    }
+
+                    return (
+                      <div
+                        key={job.id}
+                        className={`group relative overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 border ${borderColor} hover:border-slate-600 rounded-xl p-6 cursor-pointer shadow-lg hover:shadow-xl ${glowEffect} transition-all duration-300 hover:-translate-y-1`}
+                        onClick={() => setSelectedJobId(job.id)}
+                      >
+                        {/* Subtle background glow */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-700/10 rounded-full blur-3xl group-hover:bg-slate-600/20 transition-all duration-300"></div>
+
+                        {/* Card Content */}
+                        <div className="relative">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="text-xl font-bold tracking-tight text-white">
+                                  {job.customerPONumber || job.jobNo}
+                                </h3>
+                                {job.deliveryDate && !job.completedAt && (
+                                  <DeliveryUrgencyBadge
+                                    deliveryDate={job.deliveryDate}
+                                    completedAt={job.completedAt}
+                                  />
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500 font-medium mb-2">
+                                Job #{job.jobNo}
+                              </p>
+                              <p className="text-sm text-slate-300 leading-relaxed line-clamp-2">
+                                {job.specs?.description || 'No description'}
+                              </p>
+                            {job.customerTotal && (
+                              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 font-bold">
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07-.34-.433.582a2.305 2.305 0 01-.567.267z" />
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
+                                </svg>
+                                ${Number(job.customerTotal).toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                          <span className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${
+                            job.status === 'READY_FOR_PROOF' ? 'bg-gradient-to-r from-yellow-900/40 to-yellow-800/40 text-yellow-300 border border-yellow-700/50 shadow-yellow-500/10' :
+                            job.status === 'PROOF_APPROVED' ? 'bg-gradient-to-r from-green-900/40 to-green-800/40 text-green-300 border border-green-700/50 shadow-green-500/10' :
+                            job.status === 'IN_PRODUCTION' ? 'bg-gradient-to-r from-blue-900/40 to-blue-800/40 text-blue-300 border border-blue-700/50 shadow-blue-500/10' :
+                            job.status === 'COMPLETED' ? 'bg-gradient-to-r from-slate-700 to-slate-600 text-slate-300 border border-slate-600' :
+                            'bg-slate-700 text-slate-400 border border-slate-600'
+                          } shadow-lg`}>
+                            {job.status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+
+                          {/* Proof Approval Section */}
+                          {job.status === 'READY_FOR_PROOF' && job.proofs && job.proofs.length > 0 && (
+                            <div className="mt-4 p-4 bg-gradient-to-r from-yellow-900/30 to-yellow-800/20 border border-yellow-700/50 rounded-xl" onClick={(e) => e.stopPropagation()}>
+                              <h4 className="font-bold text-yellow-300 mb-2 flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                Proof Ready for Your Review
+                              </h4>
+                              <p className="text-sm text-yellow-200/80 mb-3 leading-relaxed">
+                                Your proof is ready! Please review and approve to move forward with production.
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => handleProofApproval(job.id, job.proofs[0].id, true)}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Approve Proof
+                                </button>
+                                <button
+                                  onClick={() => handleProofApproval(job.id, job.proofs[0].id, false)}
+                                  className="px-4 py-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
+                                >
+                                  Request Changes
+                                </button>
+                                <button
+                                  onClick={() => setSelectedJobId(job.id)}
+                                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 hover:-translate-y-0.5"
+                                >
+                                  View Details
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {job.status === 'PROOF_APPROVED' && (
+                            <div className="mt-4 p-4 bg-gradient-to-r from-green-900/30 to-green-800/20 border border-green-700/50 rounded-xl">
+                              <p className="text-green-300 font-semibold flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                                Proof approved! Your order is now in production.
+                              </p>
+                            </div>
+                          )}
+
+                          {job.status === 'COMPLETED' && (
+                            <div className="mt-4 p-4 bg-gradient-to-r from-slate-700/50 to-slate-600/30 border border-slate-600/50 rounded-xl">
+                              <p className="text-slate-300 font-semibold flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                                  <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0015 7h-1z" />
+                                </svg>
+                                Order completed and shipped!
+                              </p>
                             </div>
                           )}
                         </div>
-                        <span className={`px-3 py-1 text-xs font-semibold rounded-md ${
-                          job.status === 'READY_FOR_PROOF' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-700' :
-                          job.status === 'PROOF_APPROVED' ? 'bg-green-900/30 text-green-400 border border-green-700' :
-                          job.status === 'IN_PRODUCTION' ? 'bg-blue-900/30 text-blue-400 border border-blue-700' :
-                          job.status === 'COMPLETED' ? 'bg-slate-700 text-slate-300 border border-slate-600' :
-                          'bg-slate-700 text-slate-400 border border-slate-600'
-                        }`}>
-                          {job.status.replace(/_/g, ' ')}
-                        </span>
                       </div>
-
-                      {/* Proof Approval Section */}
-                      {job.status === 'READY_FOR_PROOF' && job.proofs && job.proofs.length > 0 && (
-                        <div className="mt-3 p-4 bg-yellow-900/20 border border-yellow-700 rounded-lg" onClick={(e) => e.stopPropagation()}>
-                          <h4 className="font-semibold text-yellow-400 mb-2 flex items-center gap-2">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                            </svg>
-                            Proof Ready for Your Review
-                          </h4>
-                          <p className="text-sm text-yellow-200/80 mb-3">
-                            Your proof is ready! Please review and approve to move forward with production.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => handleProofApproval(job.id, job.proofs[0].id, true)}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Approve Proof
-                            </button>
-                            <button
-                              onClick={() => handleProofApproval(job.id, job.proofs[0].id, false)}
-                              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-md transition-colors"
-                            >
-                              Request Changes
-                            </button>
-                            <button
-                              onClick={() => setSelectedJobId(job.id)}
-                              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-md transition-colors"
-                            >
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {job.status === 'PROOF_APPROVED' && (
-                        <div className="mt-3 p-3 bg-green-900/20 border border-green-700 rounded-lg">
-                          <p className="text-green-400 font-medium flex items-center gap-2">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Proof approved! Your order is now in production.
-                          </p>
-                        </div>
-                      )}
-
-                      {job.status === 'COMPLETED' && (
-                        <div className="mt-3 p-3 bg-slate-700/50 border border-slate-600 rounded-lg">
-                          <p className="text-slate-300 font-medium flex items-center gap-2">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0015 7h-1z" />
-                            </svg>
-                            Order completed and shipped!
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    )})}
+                  </div>
               </>
             )}
           </>

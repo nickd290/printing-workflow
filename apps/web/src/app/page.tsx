@@ -2,14 +2,28 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@/contexts/UserContext';
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, isCustomer, loading } = useUser();
 
   useEffect(() => {
-    // For demo: redirect to dashboard
-    router.push('/dashboard');
-  }, [router]);
+    // Wait for auth to load, then redirect based on role
+    if (!loading) {
+      if (user) {
+        // Redirect authenticated users based on role
+        if (isCustomer) {
+          router.push('/customer-portal');
+        } else {
+          router.push('/dashboard');
+        }
+      } else {
+        // Redirect unauthenticated users to login
+        router.push('/login');
+      }
+    }
+  }, [user, isCustomer, loading, router]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-24">
