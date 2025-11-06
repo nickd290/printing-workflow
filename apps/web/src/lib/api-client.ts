@@ -3,7 +3,48 @@
  * Handles all HTTP requests to the Fastify backend
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Initialize API URL with production validation
+const API_URL = (() => {
+  const url = process.env.NEXT_PUBLIC_API_URL;
+  const nodeEnv = process.env.NODE_ENV;
+
+  // In production, NEXT_PUBLIC_API_URL MUST be set
+  if (nodeEnv === 'production' && !url) {
+    throw new Error(
+      '❌ CRITICAL: NEXT_PUBLIC_API_URL is not configured for production deployment.\n\n' +
+      'This environment variable must be set in your Railway web service settings.\n' +
+      'Expected format: https://your-api-service.up.railway.app\n\n' +
+      'To fix:\n' +
+      '1. Go to Railway Dashboard → printing-workflow → web service\n' +
+      '2. Navigate to Variables tab\n' +
+      '3. Add: NEXT_PUBLIC_API_URL=https://api-production-100d.up.railway.app\n' +
+      '4. Railway will automatically rebuild with the new variable'
+    );
+  }
+
+  // In development, warn if using production-like URL
+  if (nodeEnv === 'development' && url && !url.includes('localhost')) {
+    console.warn(
+      '⚠️  WARNING: NEXT_PUBLIC_API_URL is set to a production URL in development mode:',
+      url,
+      '\n   This may cause unexpected behavior. Consider using http://localhost:3001 for local dev.'
+    );
+  }
+
+  // Default to localhost in development only
+  const finalUrl = url || 'http://localhost:3001';
+
+  // Log configuration for debugging
+  console.log('🔗 API Client Configuration:', {
+    environment: nodeEnv,
+    apiUrl: finalUrl,
+    isProduction: nodeEnv === 'production',
+    isConfigured: !!url,
+    usingDefault: !url,
+  });
+
+  return finalUrl;
+})();
 
 class APIError extends Error {
   constructor(
