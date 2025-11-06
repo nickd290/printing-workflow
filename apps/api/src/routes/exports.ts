@@ -1,6 +1,35 @@
 import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '@printing-workflow/db';
 
+/**
+ * Compute payment status from invoice data
+ */
+function getInvoicePaymentStatus(invoice: {
+  paidAt: Date | null;
+  dueAt: Date | null;
+}): string {
+  if (invoice.paidAt) return 'paid';
+  if (invoice.dueAt && new Date(invoice.dueAt) < new Date()) return 'overdue';
+  return 'unpaid';
+}
+
+/**
+ * Compute job payment status from all invoices
+ */
+function getJobPaymentStatus(invoices: Array<{ paidAt: Date | null; dueAt: Date | null }>): string {
+  if (invoices.length === 0) return 'no invoices';
+
+  const paidCount = invoices.filter((inv) => inv.paidAt).length;
+
+  if (paidCount === invoices.length) return 'all paid';
+  if (paidCount > 0) return 'partially paid';
+
+  const hasOverdue = invoices.some((inv) => inv.dueAt && new Date(inv.dueAt) < new Date() && !inv.paidAt);
+  if (hasOverdue) return 'overdue';
+
+  return 'unpaid';
+}
+
 const exportsRoutes: FastifyPluginAsync = async (server) => {
   // Export jobs as CSV
   server.get('/jobs', async (request, reply) => {
@@ -8,6 +37,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
       include: {
         customer: true,
         quote: true,
+        invoices: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -17,6 +47,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
       'Job Number',
       'Customer',
       'Status',
+      'Payment Status',
       'Total Amount',
       'Created Date',
       'Delivery Date',
@@ -28,6 +59,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
       job.jobNo,
       job.customer.name,
       job.status,
+      getJobPaymentStatus(job.invoices),
       Number(job.customerTotal).toFixed(2),
       new Date(job.createdAt).toLocaleDateString(),
       job.deliveryDate ? new Date(job.deliveryDate).toLocaleDateString() : '',
@@ -62,7 +94,8 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
       'From Company',
       'To Company',
       'Amount',
-      'Status',
+      'Payment Status',
+      'Paid Date',
       'Created Date',
       'Due Date',
     ];
@@ -73,9 +106,10 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
       inv.fromCompany.name,
       inv.toCompany?.name || 'Customer',
       Number(inv.amount).toFixed(2),
-      inv.status,
+      getInvoicePaymentStatus(inv),
+      inv.paidAt ? new Date(inv.paidAt).toLocaleDateString() : '',
       new Date(inv.createdAt).toLocaleDateString(),
-      inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '',
+      inv.dueAt ? new Date(inv.dueAt).toLocaleDateString() : '',
     ]);
 
     const csv = [
@@ -247,7 +281,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
         '',
         '=== INVOICES ===',
         ...job.invoices.map(
-          (inv) => `${inv.invoiceNo}: $${Number(inv.amount).toFixed(2)} (${inv.status})`
+          (inv) => `${inv.invoiceNo}: $${Number(inv.amount).toFixed(2)} (${getInvoicePaymentStatus(inv)}${inv.paidAt ? ` - Paid ${new Date(inv.paidAt).toLocaleDateString()}` : ''})`
         ),
         '',
         '=== SHIPMENTS ===',

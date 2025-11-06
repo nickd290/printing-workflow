@@ -13,6 +13,97 @@ const COMPANY_IDS = {
 
 const reportsRoutes: FastifyPluginAsync = async (fastify) => {
   /**
+   * GET /api/reports/bradford/dashboard-metrics
+   * Get overview metrics for Bradford dashboard
+   */
+  fastify.get('/bradford/dashboard-metrics', async (request, reply) => {
+    try {
+      // Get all Bradford-related jobs
+      const allBradfordJobs = await prisma.job.findMany({
+        where: {
+          purchaseOrders: {
+            some: {
+              OR: [
+                { targetCompanyId: COMPANY_IDS.BRADFORD },
+                { originCompanyId: COMPANY_IDS.BRADFORD },
+              ],
+            },
+          },
+        },
+        include: {
+          purchaseOrders: {
+            include: {
+              originCompany: true,
+              targetCompany: true,
+            },
+          },
+        },
+      });
+
+      // Count active jobs (not completed or cancelled)
+      const activeJobs = allBradfordJobs.filter(
+        (job) => !['COMPLETED', 'CANCELLED'].includes(job.status)
+      );
+
+      // Count jobs needing Bradford→JD PO
+      const jobsNeedingPO = allBradfordJobs.filter((job) => {
+        const hasIncomingPO = job.purchaseOrders.some(
+          (po) => po.targetCompanyId === COMPANY_IDS.BRADFORD
+        );
+        const hasOutgoingPO = job.purchaseOrders.some(
+          (po) => po.originCompanyId === COMPANY_IDS.BRADFORD
+        );
+        return hasIncomingPO && !hasOutgoingPO && !['COMPLETED', 'CANCELLED'].includes(job.status);
+      });
+
+      // Calculate current month margin
+      const currentMonthStart = new Date();
+      currentMonthStart.setDate(1);
+      currentMonthStart.setHours(0, 0, 0, 0);
+
+      const currentMonthJobs = await prisma.job.findMany({
+        where: {
+          status: 'COMPLETED',
+          createdAt: {
+            gte: currentMonthStart,
+          },
+          invoices: {
+            some: {
+              OR: [
+                { fromCompanyId: COMPANY_IDS.BRADFORD },
+                { toCompanyId: COMPANY_IDS.BRADFORD },
+              ],
+            },
+          },
+        },
+      });
+
+      const currentMonthMargin = currentMonthJobs.reduce((sum, job) => {
+        const margin = job.bradfordTotalMargin ? parseFloat(job.bradfordTotalMargin.toString()) : 0;
+        return sum + margin;
+      }, 0);
+
+      // Calculate current month paper usage
+      const currentMonthPaperUsage = currentMonthJobs.reduce((sum, job) => {
+        const paperWeight = job.paperWeightTotal ? parseFloat(job.paperWeightTotal.toString()) : 0;
+        return sum + paperWeight;
+      }, 0);
+
+      reply.send({
+        activeJobsCount: activeJobs.length,
+        jobsNeedingPOCount: jobsNeedingPO.length,
+        currentMonthMargin,
+        currentMonthPaperUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating Bradford dashboard metrics:', error);
+      reply.status(500).send({
+        error: error.message || 'Failed to generate metrics',
+      });
+    }
+  });
+
+  /**
    * GET /api/reports/bradford/paper-margins
    * Get paper usage and margin analysis for Bradford
    */

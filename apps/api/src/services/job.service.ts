@@ -260,6 +260,13 @@ export async function listJobs(filters?: {
             targetCompany: true,
           },
         },
+        invoices: {
+          include: {
+            pdfFile: true,
+            fromCompany: true,
+            toCompany: true,
+          },
+        },
         sampleShipments: true,
       },
       orderBy: {
@@ -278,6 +285,13 @@ export async function listJobs(filters?: {
         include: {
           originCompany: true,
           targetCompany: true,
+        },
+      },
+      invoices: {
+        include: {
+          pdfFile: true,
+          fromCompany: true,
+          toCompany: true,
         },
       },
       sampleShipments: true,
