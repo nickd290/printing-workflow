@@ -340,6 +340,21 @@ export const purchaseOrdersAPI = {
 // ============================================================================
 
 export const filesAPI = {
+  parsePO: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/api/files/parse-po`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse<{
+      success: boolean;
+      message?: string;
+      parsed?: any;
+    }>(response);
+  },
+
   upload: async (file: File, kind: string, jobId?: string) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -674,6 +689,27 @@ export const paperInventoryAPI = {
       body: JSON.stringify(settings),
     });
     return handleResponse<{ success: boolean; inventory: PaperInventory }>(response);
+  },
+};
+
+// ============================================================================
+// Reports API
+// ============================================================================
+
+export const reportsAPI = {
+  getBradfordDashboardMetrics: async () => {
+    const response = await fetch(`${API_URL}/api/reports/bradford/dashboard-metrics`);
+    return handleResponse<any>(response);
+  },
+
+  getBradfordPaperMargins: async () => {
+    const response = await fetch(`${API_URL}/api/reports/bradford/paper-margins`);
+    return handleResponse<any>(response);
+  },
+
+  exportBradfordReport: async () => {
+    const response = await fetch(`${API_URL}/api/reports/bradford/export`);
+    return handleResponse<{ success: boolean; error?: string }>(response);
   },
 };
 

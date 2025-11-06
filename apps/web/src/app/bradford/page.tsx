@@ -8,10 +8,8 @@ import { BradfordPOsTab } from '@/components/bradford/BradfordPOsTab';
 import { BradfordInvoicesTab } from '@/components/bradford/BradfordInvoicesTab';
 import { BradfordPaperTab } from '@/components/bradford/BradfordPaperTab';
 import { JobDetailModal } from '@/components/JobDetailModal';
-import { jobsAPI, purchaseOrdersAPI, invoicesAPI } from '@/lib/api-client';
+import { jobsAPI, purchaseOrdersAPI, invoicesAPI, reportsAPI } from '@/lib/api-client';
 import toast, { Toaster } from 'react-hot-toast';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 type TabType = 'jobs' | 'pos' | 'invoices' | 'paper';
 
@@ -36,7 +34,7 @@ export default function BradfordDashboard() {
     try {
       setLoading(true);
       const [metricsData, jobsData, posData, invoicesData] = await Promise.all([
-        fetch(`${API_URL}/api/reports/bradford/dashboard-metrics`).then(r => r.json()),
+        reportsAPI.getBradfordDashboardMetrics(),
         jobsAPI.list(),
         purchaseOrdersAPI.list(),
         invoicesAPI.list(),
@@ -60,7 +58,7 @@ export default function BradfordDashboard() {
       setError(null);
     } catch (err) {
       console.error('Failed to load data:', err);
-      setError('Failed to load dashboard data. Make sure the API is running on port 3001.');
+      setError('Failed to load dashboard data. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -68,25 +66,19 @@ export default function BradfordDashboard() {
 
   const loadPaperMarginsData = async () => {
     try {
-      setLoadingPaperData(true);
-      const response = await fetch(`${API_URL}/api/reports/bradford/paper-margins`);
-      if (!response.ok) throw new Error('Failed to fetch paper/margins data');
-      const data = await response.json();
-      setPaperData(data);
+      const data = await reportsAPI.getBradfordPaperMargins();
+      return data;
     } catch (err) {
       console.error('Failed to load paper/margins data:', err);
       toast.error('Failed to load paper and margins data');
-    } finally {
-      setLoadingPaperData(false);
+      throw err;
     }
   };
 
   const handleDownloadReport = async () => {
     setDownloading(true);
     try {
-      const response = await fetch(`${API_URL}/api/reports/bradford/export`);
-      if (!response.ok) throw new Error('Failed to email report');
-      const result = await response.json();
+      const result = await reportsAPI.exportBradfordReport();
       if (result.success) {
         toast.success('Report emailed to Steve Gustafson and Nick successfully!');
       } else {

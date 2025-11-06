@@ -9,11 +9,9 @@ import { DeliveryUrgencyBadge, getDeliveryUrgency } from '@/components/jobs/Deli
 import { JobStatsBar } from '@/components/jobs/JobStatsBar';
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { jobsAPI } from '@/lib/api-client';
+import { jobsAPI, filesAPI, proofsAPI } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -160,7 +158,7 @@ export default function DashboardPage() {
       setError(null);
     } catch (err) {
       console.error('Failed to load jobs:', err);
-      setError('Failed to load jobs. Make sure the API is running on port 3001.');
+      setError('Failed to load jobs. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -173,16 +171,8 @@ export default function DashboardPage() {
 
     try {
       // Parse the PO file
-      const parseFormData = new FormData();
-      parseFormData.append('file', file);
-
       console.log('🔍 Sending parse request...');
-      const parseResponse = await fetch(`${API_URL}/api/files/parse-po`, {
-        method: 'POST',
-        body: parseFormData,
-      });
-
-      const parseResult = await parseResponse.json();
+      const parseResult = await filesAPI.parsePO(file);
       console.log('📋 Parse result:', parseResult);
       console.log('📋 Parsed data object:', parseResult.parsed);
       console.log('📋 Description field:', parseResult.parsed?.description);
@@ -196,18 +186,8 @@ export default function DashboardPage() {
       }
 
       // Upload the file for storage
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', file);
-      uploadFormData.append('kind', 'PO_PDF');
-
       console.log('📁 Uploading file for storage...');
-      const uploadResponse = await fetch(`${API_URL}/api/files/upload`, {
-        method: 'POST',
-        body: uploadFormData,
-      });
-
-      if (!uploadResponse.ok) throw new Error('Upload failed');
-      const uploadResult = await uploadResponse.json();
+      const uploadResult = await filesAPI.upload(file, 'PO_PDF');
       console.log('✅ Upload result:', uploadResult);
 
       // Set parsed data with extracted values - ensure all fields are strings
@@ -327,20 +307,11 @@ export default function DashboardPage() {
     try {
       toast.loading(approved ? 'Approving proof...' : 'Requesting changes...', { id: 'proof-action' });
 
-      const endpoint = approved
-        ? `${API_URL}/api/proofs/${proofId}/approve`
-        : `${API_URL}/api/proofs/${proofId}/changes`;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          comments: approved ? 'Approved via customer portal' : 'Please make changes',
-          approvedBy: user?.companyId?.toUpperCase(),
-        }),
-      });
-
-      if (!response.ok) throw new Error('Proof action failed');
+      if (approved) {
+        await proofsAPI.approve(proofId, user?.companyId?.toUpperCase() || '', 'Approved via customer portal');
+      } else {
+        await proofsAPI.requestChanges(proofId, user?.companyId?.toUpperCase() || '', 'Please make changes');
+      }
 
       toast.success(
         approved ? 'Proof approved! Order moving to production.' : 'Changes requested',
