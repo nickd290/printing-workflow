@@ -285,7 +285,7 @@ const reportsRoutes: FastifyPluginAsync = async (fastify) => {
         'Job Number': inv.job.jobNo,
         'From Company': inv.fromCompany.name,
         'Amount': parseFloat(inv.amount.toString()),
-        'Status': inv.status,
+        'Paid': inv.paidAt ? 'Yes' : 'No',
         'PO Number': outgoingPOs.find(po => po.jobId === inv.jobId)?.poNumber || 'N/A',
       }));
 
@@ -299,7 +299,7 @@ const reportsRoutes: FastifyPluginAsync = async (fastify) => {
         'Job Number': inv.job.jobNo,
         'To Company': inv.toCompany.name,
         'Amount': parseFloat(inv.amount.toString()),
-        'Status': inv.status,
+        'Paid': inv.paidAt ? 'Yes' : 'No',
         'PO Number': incomingPOs.find(po => po.jobId === inv.jobId && po.originCompanyId === COMPANY_IDS.IMPACT_DIRECT)?.poNumber || 'N/A',
       }));
 
