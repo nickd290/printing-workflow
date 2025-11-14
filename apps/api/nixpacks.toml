@@ -10,7 +10,6 @@ cmds = [
 cmds = [
   'cd ../..',
   'pnpm --filter @printing-workflow/db db:generate',
-  'pnpm --filter @printing-workflow/db db:push',
   'pnpm --filter @printing-workflow/api build'
 ]
 
