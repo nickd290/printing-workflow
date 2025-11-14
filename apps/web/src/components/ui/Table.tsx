@@ -46,15 +46,22 @@ export interface TableRowProps {
   className?: string;
   onClick?: () => void;
   hoverable?: boolean;
+  variant?: 'default' | 'pill';
 }
 
-export function TableRow({ children, className = '', onClick, hoverable = true }: TableRowProps) {
-  const hoverClass = hoverable ? 'table-row' : 'border-b border-border';
+export function TableRow({
+  children,
+  className = '',
+  onClick,
+  hoverable = true,
+  variant = 'default'
+}: TableRowProps) {
+  const variantClass = variant === 'pill' ? 'table-row-pill' : (hoverable ? 'table-row' : 'border-b border-border');
   const clickClass = onClick ? 'cursor-pointer' : '';
 
   return (
     <tr
-      className={`${hoverClass} ${clickClass} ${className}`}
+      className={`${variantClass} ${clickClass} ${className}`}
       onClick={onClick}
     >
       {children}
@@ -100,12 +107,26 @@ export interface TableCellProps {
   children: React.ReactNode;
   className?: string;
   colSpan?: number;
+  align?: 'left' | 'center' | 'right';
+  numeric?: boolean;
 }
 
-export function TableCell({ children, className = '', colSpan }: TableCellProps) {
+export function TableCell({
+  children,
+  className = '',
+  colSpan,
+  align,
+  numeric = false
+}: TableCellProps) {
+  const alignClass = align
+    ? `text-${align}`
+    : numeric
+    ? 'text-right tabular-nums'
+    : 'text-left';
+
   return (
     <td
-      className={`px-4 py-3 text-sm text-foreground ${className}`}
+      className={`px-4 py-3 text-sm text-foreground ${alignClass} ${className}`}
       colSpan={colSpan}
     >
       {children}
@@ -172,16 +193,16 @@ export function Pagination({
   };
 
   return (
-    <div className={`flex items-center justify-between ${className}`}>
+    <div className={`flex items-center justify-between mt-6 ${className}`}>
       <p className="text-sm text-muted-foreground">
         Page {currentPage} of {totalPages}
       </p>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="btn btn-ghost px-3 py-1 text-sm"
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-border bg-card hover:bg-muted transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Previous
         </button>
@@ -193,10 +214,10 @@ export function Pagination({
             ) : (
               <button
                 onClick={() => onPageChange(page as number)}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                className={`min-w-[40px] px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                   currentPage === page
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'border border-border bg-card hover:bg-muted'
                 }`}
               >
                 {page}
@@ -208,7 +229,7 @@ export function Pagination({
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="btn btn-ghost px-3 py-1 text-sm"
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-border bg-card hover:bg-muted transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Next
         </button>

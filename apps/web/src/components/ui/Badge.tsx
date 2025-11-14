@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'dark-success' | 'dark-warning' | 'dark-danger' | 'dark-info';
+  variant?: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'dark-success' | 'dark-warning' | 'dark-danger' | 'dark-info';
   className?: string;
   icon?: React.ReactNode;
 }
@@ -14,6 +14,7 @@ export function Badge({
   icon,
 }: BadgeProps) {
   const variantClasses = {
+    primary: 'bg-primary/10 text-primary border border-primary/20',
     success: 'badge-success',
     warning: 'badge-warning',
     danger: 'badge-danger',

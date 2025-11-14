@@ -9,7 +9,7 @@ interface JobEditModalProps {
   job: any;
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: () => Promise<void>;
 }
 
 interface PricingRule {
@@ -30,6 +30,8 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
     quantity: job.quantity || 0,
     sizeName: job.sizeName || '',
     paperType: job.paperType || '',
+    jdSuppliesPaper: job.jdSuppliesPaper || false,
+    bradfordWaivesPaperMargin: job.bradfordWaivesPaperMargin || false,
 
     // Financial
     customerTotal: job.customerTotal?.toString() || '0',
@@ -60,6 +62,44 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
     loadPricingRules();
   }, []);
 
+  // Sync formData when job prop changes (fixes toggle persistence issue)
+  useEffect(() => {
+    if (job) {
+      console.log('[JobEditModal] Job prop changed, syncing formData:', {
+        bradfordWaivesPaperMargin: job.bradfordWaivesPaperMargin,
+        jdSuppliesPaper: job.jdSuppliesPaper,
+      });
+
+      setFormData({
+        // Basic
+        quantity: job.quantity || 0,
+        sizeName: job.sizeName || '',
+        paperType: job.paperType || '',
+        jdSuppliesPaper: job.jdSuppliesPaper || false,
+        bradfordWaivesPaperMargin: job.bradfordWaivesPaperMargin || false,
+
+        // Financial
+        customerTotal: job.customerTotal?.toString() || '0',
+        jdTotal: job.jdTotal?.toString() || '0',
+        paperChargedTotal: job.paperChargedTotal?.toString() || '0',
+        paperCostTotal: job.paperCostTotal?.toString() || '0',
+        impactMargin: job.impactMargin?.toString() || '0',
+        bradfordTotal: job.bradfordTotal?.toString() || '0',
+        bradfordPrintMargin: job.bradfordPrintMargin?.toString() || '0',
+        bradfordPaperMargin: job.bradfordPaperMargin?.toString() || '0',
+        bradfordTotalMargin: job.bradfordTotalMargin?.toString() || '0',
+
+        // CPM
+        printCPM: job.printCPM?.toString() || '0',
+        paperCostCPM: job.paperCostCPM?.toString() || '0',
+        paperChargedCPM: job.paperChargedCPM?.toString() || '0',
+
+        // Paper
+        paperWeightPer1000: job.paperWeightPer1000?.toString() || '0',
+      });
+    }
+  }, [job]);
+
   const loadPricingRules = async () => {
     try {
       const response = await fetch(`${API_URL}/api/pricing-rules`);
@@ -75,29 +115,64 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const calculateMarginsFrom5050 = () => {
+  const handleBradfordWaiverChange = (checked: boolean) => {
+    console.log('[JobEditModal] Bradford Waiver toggled:', checked);
+    setFormData(prev => ({ ...prev, bradfordWaivesPaperMargin: checked }));
+    // Trigger recalculation with the new checked value
+    setTimeout(() => calculateMarginsFrom5050(checked), 0);
+  };
+
+  const calculateMarginsFrom5050 = (overrideWaiver?: boolean) => {
     const customerTotal = parseFloat(formData.customerTotal) || 0;
     const paperCharged = parseFloat(formData.paperChargedTotal) || 0;
+    const paperCost = parseFloat(formData.paperCostTotal) || 0;
     const jdTotal = parseFloat(formData.jdTotal) || 0;
 
-    const profitPool = customerTotal - paperCharged - jdTotal;
+    // Use override value if provided, otherwise read from form state
+    const isWaiver = overrideWaiver !== undefined ? overrideWaiver : formData.bradfordWaivesPaperMargin;
 
-    if (profitPool < 0) {
-      toast.error(`Negative profit pool: $${profitPool.toFixed(2)}. Customer total is less than costs!`);
+    let updates: any = {};
+
+    // If Bradford waives paper margin, set paper charged = paper cost (no markup)
+    if (isWaiver) {
+      updates.paperChargedTotal = paperCost.toFixed(2);
+
+      const profitPool = customerTotal - paperCost - jdTotal;
+
+      if (profitPool < 0) {
+        toast.error(`Negative profit pool: $${profitPool.toFixed(2)}. Customer total is less than costs!`);
+      }
+
+      const impactMargin = profitPool / 2;
+      const bradfordMargin = profitPool / 2;
+      const bradfordTotal = bradfordMargin + paperCost + jdTotal;
+
+      updates.impactMargin = impactMargin.toFixed(2);
+      updates.bradfordTotalMargin = bradfordMargin.toFixed(2);
+      updates.bradfordTotal = bradfordTotal.toFixed(2);
+
+      setFormData(prev => ({ ...prev, ...updates }));
+      toast.success(`Bradford waives paper margin - 50/50 split: Impact $${impactMargin.toFixed(2)}, Bradford $${bradfordMargin.toFixed(2)}`);
+    } else {
+      // Normal case: Bradford keeps paper markup
+      const profitPool = customerTotal - paperCharged - jdTotal;
+
+      if (profitPool < 0) {
+        toast.error(`Negative profit pool: $${profitPool.toFixed(2)}. Customer total is less than costs!`);
+      }
+
+      const impactMargin = profitPool / 2;
+      const paperMarkup = paperCharged - paperCost;
+      const bradfordMargin = profitPool / 2 + paperMarkup;
+      const bradfordTotal = bradfordMargin + paperCharged + jdTotal;
+
+      updates.impactMargin = impactMargin.toFixed(2);
+      updates.bradfordTotalMargin = bradfordMargin.toFixed(2);
+      updates.bradfordTotal = bradfordTotal.toFixed(2);
+
+      setFormData(prev => ({ ...prev, ...updates }));
+      toast.success(`Margins calculated: Impact $${impactMargin.toFixed(2)}, Bradford $${bradfordMargin.toFixed(2)}`);
     }
-
-    const impactMargin = profitPool / 2;
-    const bradfordMargin = profitPool / 2;
-    const bradfordTotal = bradfordMargin + paperCharged + jdTotal;
-
-    setFormData(prev => ({
-      ...prev,
-      impactMargin: impactMargin.toFixed(2),
-      bradfordTotalMargin: bradfordMargin.toFixed(2),
-      bradfordTotal: bradfordTotal.toFixed(2),
-    }));
-
-    toast.success(`Margins calculated: Impact $${impactMargin.toFixed(2)}, Bradford $${bradfordMargin.toFixed(2)}`);
   };
 
   const applyPricingRule = () => {
@@ -165,6 +240,8 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
         quantity: parseInt(formData.quantity.toString()),
         sizeName: formData.sizeName,
         paperType: formData.paperType,
+        jdSuppliesPaper: formData.jdSuppliesPaper,
+        bradfordWaivesPaperMargin: formData.bradfordWaivesPaperMargin,
         customerTotal: parseFloat(formData.customerTotal),
         jdTotal: parseFloat(formData.jdTotal),
         paperChargedTotal: parseFloat(formData.paperChargedTotal),
@@ -182,6 +259,11 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
         changedByRole: 'BROKER_ADMIN',
       };
 
+      console.log('[JobEditModal] Saving job with payload:', {
+        bradfordWaivesPaperMargin: updates.bradfordWaivesPaperMargin,
+        jdSuppliesPaper: updates.jdSuppliesPaper,
+      });
+
       const response = await fetch(`${API_URL}/api/jobs/${job.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -190,8 +272,22 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
 
       if (!response.ok) throw new Error('Failed to update job');
 
+      const responseData = await response.json();
+      console.log('[JobEditModal] Job saved successfully, response:', {
+        bradfordWaivesPaperMargin: responseData.job?.bradfordWaivesPaperMargin,
+        jdSuppliesPaper: responseData.job?.jdSuppliesPaper,
+      });
+
       toast.success('Job updated successfully!');
-      onSave();
+
+      console.log('[JobEditModal] Awaiting parent data refresh...');
+      await onSave();
+      console.log('[JobEditModal] Parent data refreshed, waiting for React to re-render...');
+
+      // Wait for React to re-render and propagate the updated job prop
+      await new Promise(resolve => setTimeout(resolve, 100));
+      console.log('[JobEditModal] React re-render complete, closing modal');
+
       onClose();
     } catch (error: any) {
       console.error('Error saving job:', error);
@@ -254,6 +350,32 @@ export function JobEditModal({ job, isOpen, onClose, onSave }: JobEditModalProps
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="e.g., 100# Gloss Text"
                 />
+              </div>
+              <div className="col-span-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.jdSuppliesPaper}
+                    onChange={(e) => setFormData(prev => ({ ...prev, jdSuppliesPaper: e.target.checked }))}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    JD Supplies Paper (10/10 margin split, no Bradford markup)
+                  </span>
+                </label>
+              </div>
+              <div className="col-span-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.bradfordWaivesPaperMargin}
+                    onChange={(e) => handleBradfordWaiverChange(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    Bradford Waives Paper Margin (50/50 split of total margin)
+                  </span>
+                </label>
               </div>
             </div>
           </section>

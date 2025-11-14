@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Package, DollarSign, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { JobEditModal } from '@/components/jobs/JobEditModal';
+import { PricingBreakdown } from '@/components/PricingBreakdown';
 
 interface Invoice {
   id: string;
@@ -29,7 +31,24 @@ interface Job {
   jobNo: string;
   customer: { name: string };
   customerPONumber?: string;
+  quantity?: number;
+  sizeName?: string;
   customerTotal: number;
+  customerCPM?: number;
+  bradfordTotal?: number | string;
+  bradfordTotalCPM?: number;
+  bradfordTotalMargin?: number;
+  bradfordPaperMargin?: number;
+  jdTotal?: number | string;
+  printCPM?: number;
+  impactMargin?: number | string;
+  impactMarginCPM?: number;
+  paperCostTotal?: number;
+  paperCostCPM?: number;
+  paperWeightTotal?: number;
+  paperWeightPer1000?: number;
+  jdSuppliesPaper?: boolean | number;
+  bradfordWaivesPaperMargin?: boolean | number;
   status: string;
   createdAt: Date;
   invoices: Invoice[];
@@ -42,6 +61,8 @@ interface JobFinancialRowProps {
   onMarkInvoicePaid?: (invoiceId: string) => void;
   selectedInvoiceIds?: Set<string>;
   onInvoiceSelectionChange?: (invoiceId: string, selected: boolean) => void;
+  isAdmin?: boolean;
+  onReloadData?: () => void;
 }
 
 export function JobFinancialRow({
@@ -49,9 +70,12 @@ export function JobFinancialRow({
   onViewJob,
   onMarkInvoicePaid,
   selectedInvoiceIds = new Set(),
-  onInvoiceSelectionChange
+  onInvoiceSelectionChange,
+  isAdmin = false,
+  onReloadData
 }: JobFinancialRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Helper to compute payment status
   const getPaymentStatus = (invoice: Invoice) => {
@@ -84,11 +108,25 @@ export function JobFinancialRow({
   const paymentStatus = getJobPaymentStatus();
   const PaymentIcon = paymentStatus.icon;
 
+  // Helper to safely parse number values (handles string|number|null|undefined)
+  const parseAmount = (value: number | string | null | undefined): number => {
+    if (value === null || value === undefined) return 0;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(num) ? 0 : num;
+  };
+
+  const bradfordPayAmount = parseAmount(job.bradfordTotal);
+  const jdPayAmount = parseAmount(job.jdTotal);
+  const impactProfitAmount = parseAmount(job.impactMargin);
+  const profitMarginPercent = job.customerTotal > 0
+    ? (impactProfitAmount / job.customerTotal) * 100
+    : 0;
+
   return (
     <div className="border-b border-gray-200 hover:bg-gray-50">
       {/* Main Row */}
       <div
-        className="flex items-center gap-4 p-4 cursor-pointer"
+        className="flex items-center gap-3 p-4 cursor-pointer overflow-x-auto"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Expand/Collapse Icon */}
@@ -101,35 +139,98 @@ export function JobFinancialRow({
         </button>
 
         {/* Job Number */}
-        <div className="min-w-[140px]">
-          <span className="font-semibold text-gray-900">{job.jobNo}</span>
+        <div className="min-w-[100px] flex-shrink-0">
+          <span className="font-semibold text-gray-900 text-sm">{job.jobNo}</span>
         </div>
 
-        {/* Customer */}
-        <div className="flex-1 min-w-[200px]">
-          <span className="text-gray-700">{job.customer.name}</span>
-          {job.customerPONumber && (
-            <span className="ml-2 text-sm text-gray-500">PO: {job.customerPONumber}</span>
-          )}
+        {/* Customer PO# */}
+        <div className="min-w-[120px] flex-shrink-0">
+          <span className="text-sm text-gray-700">{job.customerPONumber || 'N/A'}</span>
         </div>
 
-        {/* Amount */}
-        <div className="min-w-[120px] text-right">
-          <span className="text-lg font-semibold text-gray-900">
-            ${job.customerTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        {/* Size - Hidden on screens < 1280px */}
+        <div className="min-w-[130px] flex-shrink-0 hidden xl:block">
+          <span className="text-sm text-gray-700">{job.sizeName || 'N/A'}</span>
+        </div>
+
+        {/* Quantity - Hidden on screens < 1280px */}
+        <div className="min-w-[90px] flex-shrink-0 text-right hidden xl:block">
+          <span className="text-sm text-gray-900">
+            {job.quantity?.toLocaleString() || 'N/A'}
+          </span>
+        </div>
+
+        {/* Impact Charge */}
+        <div className="min-w-[110px] flex-shrink-0 text-right">
+          <div className="text-xs text-gray-500">Impact Charge</div>
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-semibold text-gray-900">
+              ${job.customerTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {job.customerCPM && (
+              <span className="text-xs text-gray-500 font-normal">
+                ${Number(job.customerCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Bradford Pay - Hidden on screens < 1024px */}
+        <div className="min-w-[110px] flex-shrink-0 text-right hidden lg:block">
+          <div className="text-xs text-gray-500">Bradford Pay</div>
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-semibold text-gray-900">
+              ${bradfordPayAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {job.bradfordTotalCPM && (
+              <span className="text-xs text-gray-500 font-normal">
+                ${Number(job.bradfordTotalCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* JD Pay - Hidden on screens < 1024px */}
+        <div className="min-w-[110px] flex-shrink-0 text-right hidden lg:block">
+          <div className="text-xs text-gray-500">JD Pay</div>
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-semibold text-gray-900">
+              ${jdPayAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {job.printCPM && (
+              <span className="text-xs text-gray-500 font-normal">
+                ${Number(job.printCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Impact Profit */}
+        <div className="min-w-[110px] flex-shrink-0 text-right">
+          <div className="text-xs text-gray-500">Impact Profit</div>
+          <span className="text-sm font-semibold text-green-600">
+            ${impactProfitAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+
+        {/* Profit Margin % */}
+        <div className="min-w-[90px] flex-shrink-0 text-right">
+          <div className="text-xs text-gray-500">Margin %</div>
+          <span className={`text-sm font-semibold ${profitMarginPercent >= 20 ? 'text-green-600' : profitMarginPercent >= 10 ? 'text-yellow-600' : 'text-red-600'}`}>
+            {profitMarginPercent.toFixed(1)}%
           </span>
         </div>
 
         {/* Payment Status */}
-        <div className="min-w-[140px]">
+        <div className="min-w-[130px] flex-shrink-0">
           <div className={`flex items-center gap-2 ${paymentStatus.color}`}>
             {PaymentIcon && <PaymentIcon className="h-4 w-4" />}
-            <span className="font-medium">{paymentStatus.label}</span>
+            <span className="font-medium text-sm">{paymentStatus.label}</span>
           </div>
         </div>
 
-        {/* Document Counts */}
-        <div className="flex items-center gap-4 min-w-[140px]">
+        {/* Document Counts - Hidden on screens < 1280px */}
+        <div className="flex items-center gap-3 min-w-[100px] flex-shrink-0 hidden xl:flex">
           <div className="flex items-center gap-1 text-sm text-gray-600">
             <FileText className="h-4 w-4" />
             <span>{job.invoices?.length || 0}</span>
@@ -144,6 +245,11 @@ export function JobFinancialRow({
       {/* Expanded View - Invoices and POs */}
       {isExpanded && (
         <div className="bg-white border-t border-gray-100 px-4 py-6">
+          {/* Pricing Breakdown Section */}
+          <div className="ml-9 mb-6">
+            <PricingBreakdown job={job} userRole="BROKER_ADMIN" />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 ml-9">
             {/* Invoices Section */}
             <div>
@@ -250,18 +356,48 @@ export function JobFinancialRow({
             </div>
           </div>
 
-          {/* View Job Button */}
-          {onViewJob && (
-            <div className="mt-4 ml-9">
+          {/* Action Buttons */}
+          <div className="mt-4 ml-9 flex gap-3">
+            {isAdmin && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditModalOpen(true);
+                }}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Job
+              </button>
+            )}
+            {onViewJob && (
               <button
                 onClick={() => onViewJob(job.id)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
               >
                 View Full Job Details
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+      )}
+
+      {/* Job Edit Modal */}
+      {isEditModalOpen && (
+        <JobEditModal
+          job={job}
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={async () => {
+            console.log('[JobFinancialRow] Reloading data after save...');
+            if (onReloadData) {
+              await onReloadData();
+            }
+            console.log('[JobFinancialRow] Data reloaded successfully');
+          }}
+        />
       )}
     </div>
   );

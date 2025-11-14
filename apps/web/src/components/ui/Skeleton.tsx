@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface SkeletonProps {
   className?: string;
-  variant?: 'text' | 'title' | 'avatar' | 'card' | 'button' | 'custom';
+  variant?: 'text' | 'title' | 'avatar' | 'card' | 'button' | 'metric' | 'custom';
   dark?: boolean;
 }
 
@@ -19,6 +19,7 @@ export function Skeleton({
     avatar: 'skeleton-avatar',
     card: dark ? 'dark-skeleton-card' : 'skeleton-card',
     button: 'skeleton-button',
+    metric: 'skeleton h-32 w-full rounded-xl',
     custom: baseClass,
   };
 

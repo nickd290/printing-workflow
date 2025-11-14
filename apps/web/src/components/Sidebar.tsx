@@ -75,22 +75,23 @@ export function Sidebar() {
       }`}
       onMouseEnter={() => isCollapsed && setIsHovering(true)}
       onMouseLeave={() => isCollapsed && setIsHovering(false)}
+      style={{ boxShadow: 'var(--shadow-sm)' }}
     >
       {/* Collapse/Expand Toggle */}
       <button
         onClick={toggleSidebar}
-        className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-muted transition-colors shadow-sm"
+        className="absolute -right-3 top-6 w-7 h-7 bg-card border border-border rounded-full flex items-center justify-center hover:bg-muted hover:border-border-strong transition-all duration-200 shadow-md hover:shadow-lg"
         title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         <ChevronDownIcon
-          className={`w-3 h-3 text-muted-foreground transition-transform duration-300 ${
+          className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-300 ${
             isCollapsed ? 'rotate-90' : '-rotate-90'
           }`}
         />
       </button>
 
       {/* Logo Area */}
-      <div className="h-16 flex items-center px-4 border-b border-border">
+      <div className="h-16 flex items-center px-4 border-b border-border/50">
         <Link href="/dashboard" className="flex items-center gap-3 group transition-all duration-200">
           {isExpanded ? (
             <Logo variant="full" size="md" className="text-primary group-hover:scale-105 transition-transform" />
@@ -101,7 +102,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation Items */}
-      <nav className="p-2 space-y-1">
+      <nav className="p-3 space-y-2 sidebar-scrollbar overflow-y-auto">
         {navigation.map((item) => {
           const Icon = item.Icon;
           const active = isActive(item.href);
@@ -110,14 +111,14 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 group relative ${
-                active
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              className={`sidebar-nav-item group relative ${
+                active ? 'active' : ''
               }`}
               title={!isExpanded ? item.name : undefined}
             >
-              <Icon className={`w-5 h-5 flex-shrink-0 ${active ? 'text-primary-foreground' : ''}`} />
+              <Icon className={`w-5 h-5 flex-shrink-0 transition-colors duration-200 ${
+                active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
+              }`} />
 
               {isExpanded && (
                 <>
@@ -127,10 +128,10 @@ export function Sidebar() {
 
                   {/* Badge Count */}
                   {item.badge > 0 && (
-                    <span className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold rounded-full ${
+                    <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-semibold rounded-full transition-colors duration-200 ${
                       active
-                        ? 'bg-primary-foreground/20 text-primary-foreground'
-                        : 'bg-primary/10 text-primary'
+                        ? 'bg-primary/20 text-primary'
+                        : 'bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'
                     }`}>
                       {item.badge}
                     </span>
@@ -140,7 +141,7 @@ export function Sidebar() {
 
               {/* Badge Dot (Collapsed State) */}
               {!isExpanded && item.badge > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full border-2 border-card" />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full ring-2 ring-card" />
               )}
             </Link>
           );

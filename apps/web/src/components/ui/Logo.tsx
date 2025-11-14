@@ -29,42 +29,48 @@ export const Logo: React.FC<LogoProps> = ({
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* Modern minimalist logo representing layered printing with workflow path */}
+      {/* Clean modern logo - Stacked documents with forward flow arrow */}
 
-      {/* Bottom layer - lightest */}
-      <path
-        d="M8 20 L24 20 L24 22 L8 22 Z"
+      {/* Circular background */}
+      <circle
+        cx="16"
+        cy="16"
+        r="14"
         fill="currentColor"
-        opacity="0.3"
+        opacity="0.1"
       />
 
-      {/* Middle layer */}
-      <path
-        d="M6 15 L26 15 L26 17 L6 17 Z"
+      {/* Document stack - 3 sheets */}
+      <rect
+        x="8"
+        y="10"
+        width="10"
+        height="12"
+        rx="1"
         fill="currentColor"
-        opacity="0.5"
+        opacity="0.9"
       />
-
-      {/* Top layer - most prominent */}
-      <path
-        d="M4 10 L28 10 L28 12 L4 12 Z"
+      <rect
+        x="9"
+        y="9"
+        width="10"
+        height="12"
+        rx="1"
         fill="currentColor"
-        opacity="0.8"
+        opacity="0.95"
+      />
+      <rect
+        x="10"
+        y="8"
+        width="10"
+        height="12"
+        rx="1"
+        fill="currentColor"
       />
 
-      {/* Workflow arrow - curved path through layers */}
+      {/* Forward flow arrow */}
       <path
-        d="M16 6 L16 11 M16 11 L16 16 M16 16 L16 21 M16 21 L16 26"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray="0 4"
-        opacity="1"
-      />
-
-      {/* Arrow head */}
-      <path
-        d="M16 26 L13 23 M16 26 L19 23"
+        d="M20 14 L24 16 L20 18"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
@@ -75,10 +81,10 @@ export const Logo: React.FC<LogoProps> = ({
 
   const LogoText = () => (
     <span className={`font-semibold tracking-tight ${dimensions.fontSize}`}>
-      <span className="bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+      <span className="text-primary">
         Print
       </span>
-      <span className="text-foreground/90">Flow</span>
+      <span className="text-foreground">Flow</span>
     </span>
   );
 

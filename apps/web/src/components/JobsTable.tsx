@@ -11,6 +11,9 @@ interface Job {
   createdAt: string;
   deliveryDate?: string;
   customerTotal: number;
+  sizeName?: string;
+  quantity?: number;
+  customerCPM?: number;
 }
 
 interface JobsTableProps {
@@ -79,9 +82,9 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
       bVal = getCustomerName(b.customer);
     }
 
-    if (sortColumn === 'customerTotal') {
-      aVal = Number(aVal);
-      bVal = Number(bVal);
+    if (sortColumn === 'customerTotal' || sortColumn === 'quantity') {
+      aVal = Number(aVal || 0);
+      bVal = Number(bVal || 0);
     }
 
     if (sortColumn === 'createdAt' || sortColumn === 'deliveryDate') {
@@ -199,6 +202,24 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
                 </div>
               </th>
               <th
+                onClick={() => handleSort('sizeName')}
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+              >
+                <div className="flex items-center gap-2">
+                  Size
+                  <SortIcon column="sizeName" />
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('quantity')}
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+              >
+                <div className="flex items-center gap-2">
+                  Quantity
+                  <SortIcon column="quantity" />
+                </div>
+              </th>
+              <th
                 onClick={() => handleSort('status')}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
               >
@@ -256,6 +277,12 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
                   <span className="text-sm text-gray-900">{getCustomerName(job.customer)}</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-900">{job.sizeName || '—'}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-sm text-gray-900">{job.quantity ? Number(job.quantity).toLocaleString('en-US') : '—'}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
                     {job.status.replace(/_/g, ' ')}
                   </span>
@@ -267,7 +294,14 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
                   {job.deliveryDate ? new Date(job.deliveryDate).toLocaleDateString() : '—'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  ${Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <div className="flex flex-col">
+                    <span>${Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    {job.customerCPM && (
+                      <span className="text-xs text-gray-500 font-normal">
+                        ${Number(job.customerCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <button

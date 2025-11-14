@@ -36,17 +36,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 relative overflow-hidden">
-      {/* Subtle background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
-
-      {/* Decorative elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
-
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
       {/* Login card */}
-      <div className="relative max-w-md w-full">
-        <div className="card-elevated p-8 md:p-10 bg-card/95 backdrop-blur-sm animate-fade-in">
+      <div className="max-w-md w-full">
+        <div className="card-elevated p-8 md:p-10 animate-fade-in">
           {/* Logo and header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">

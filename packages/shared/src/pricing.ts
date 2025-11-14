@@ -298,7 +298,8 @@ export interface CustomJobPricing extends JobPricing {
 export function calculateCustomPricing(
   sizeId: string,
   quantity: number,
-  customCustomerPrice?: number
+  customCustomerPrice?: number,
+  customPaperCPM?: number
 ): CustomJobPricing {
   const size = PRODUCT_SIZES[sizeId];
   if (!size) {
@@ -308,8 +309,38 @@ export function calculateCustomPricing(
   const quantityInThousands = quantity / 1000;
   const standardPricing = calculateJobPricing(sizeId, quantity);
 
-  // If no custom price provided, return standard pricing
+  // Use custom paper CPM if provided, otherwise use standard
+  const paperChargedCPM = customPaperCPM ?? size.paperChargedCPM;
+  const paperMarginCPM = paperChargedCPM - size.paperCostCPM;
+
+  // If no custom price provided, return standard pricing (with potential custom paper CPM)
   if (customCustomerPrice === undefined || customCustomerPrice === null) {
+    // Recalculate if paper CPM was customized
+    if (customPaperCPM !== undefined) {
+      const bradfordBaseCostCPM = size.printCPM + paperChargedCPM;
+      const marginPoolCPM = size.customerCPM - bradfordBaseCostCPM;
+      const impactMarginCPM = marginPoolCPM / 2;
+      const bradfordPrintMarginCPM = marginPoolCPM / 2;
+      const bradfordTotalMarginCPM = bradfordPrintMarginCPM + paperMarginCPM;
+      const bradfordTotalCPM = bradfordBaseCostCPM + bradfordTotalMarginCPM;
+
+      return {
+        ...standardPricing,
+        paperChargedCPM,
+        bradfordPaperMarginCPM: paperMarginCPM,
+        bradfordTotalMarginCPM,
+        bradfordTotalCPM,
+        bradfordTotal: bradfordTotalCPM * quantityInThousands,
+        bradfordPaperMargin: paperMarginCPM * quantityInThousands,
+        bradfordTotalMargin: bradfordTotalMarginCPM * quantityInThousands,
+        paperChargedTotal: paperChargedCPM * quantityInThousands,
+        isCustomPricing: true,
+        isLoss: false,
+        lossAmount: 0,
+        standardCustomerPrice: standardPricing.customerTotal,
+      };
+    }
+
     return {
       ...standardPricing,
       isCustomPricing: false,
@@ -321,7 +352,7 @@ export function calculateCustomPricing(
 
   // Bradford's fixed cost = JD print cost + Bradford's paper charge
   // This includes Bradford's paper markup but NOT their share of the margin
-  const bradfordBaseCostCPM = size.printCPM + size.paperChargedCPM;
+  const bradfordBaseCostCPM = size.printCPM + paperChargedCPM;
   const bradfordBaseCostTotal = bradfordBaseCostCPM * quantityInThousands;
 
   // Calculate new margin based on custom customer price
@@ -353,22 +384,22 @@ export function calculateCustomPricing(
     impactMarginCPM,
     bradfordTotalCPM,
     bradfordPrintMarginCPM: bradfordMarginCPM, // Bradford's share of margin
-    bradfordPaperMarginCPM: size.paperMarginCPM, // Paper markup stays same
-    bradfordTotalMarginCPM: bradfordMarginCPM + size.paperMarginCPM, // Total Bradford profit
+    bradfordPaperMarginCPM: paperMarginCPM, // Paper markup (uses custom if provided)
+    bradfordTotalMarginCPM: bradfordMarginCPM + paperMarginCPM, // Total Bradford profit
     printCPM: size.printCPM,
     paperCostCPM: size.paperCostCPM,
-    paperChargedCPM: size.paperChargedCPM,
+    paperChargedCPM: paperChargedCPM, // Uses custom if provided
 
     // Total amounts (custom)
     customerTotal: customCustomerPrice,
     impactMargin,
     bradfordTotal,
     bradfordPrintMargin: bradfordMargin, // Bradford's share of margin
-    bradfordPaperMargin: size.paperMarginCPM * quantityInThousands, // Paper markup
-    bradfordTotalMargin: bradfordMargin + (size.paperMarginCPM * quantityInThousands), // Total
+    bradfordPaperMargin: paperMarginCPM * quantityInThousands, // Paper markup (uses custom)
+    bradfordTotalMargin: bradfordMargin + (paperMarginCPM * quantityInThousands), // Total
     jdTotal: size.printCPM * quantityInThousands,
     paperCostTotal: size.paperCostCPM * quantityInThousands,
-    paperChargedTotal: size.paperChargedCPM * quantityInThousands,
+    paperChargedTotal: paperChargedCPM * quantityInThousands, // Uses custom if provided
 
     // Paper details
     paperType: size.paperType,

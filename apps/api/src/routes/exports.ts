@@ -38,34 +38,97 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
         customer: true,
         quote: true,
         invoices: true,
+        purchaseOrders: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Build CSV
+    // Build CSV - matches UI "All Jobs" table columns + CPMs + Paper Usage
     const headers = [
       'Job Number',
+      'Customer PO Number',
       'Customer',
-      'Status',
+      'Size',
+      'Quantity',
+      'Paper Type',
+      'Paper Weight Per 1000 (lbs)',
+      'Paper Weight Total (lbs)',
+      'Impact Charge ($)',
+      'Impact CPM ($/M)',
+      'Bradford Pay ($)',
+      'Bradford CPM ($/M)',
+      'Bradford Print Margin CPM ($/M)',
+      'Bradford Paper Margin CPM ($/M)',
+      'Bradford Total Margin CPM ($/M)',
+      'JD Pay ($)',
+      'JD CPM ($/M)',
+      'Paper Cost CPM ($/M)',
+      'Paper Charged CPM ($/M)',
+      'Impact Profit ($)',
+      'Impact Profit CPM ($/M)',
+      'Margin %',
+      'Job Status',
       'Payment Status',
-      'Total Amount',
       'Created Date',
       'Delivery Date',
-      'Quantity',
-      'Size',
+      'Invoice Count',
+      'PO Count',
     ];
 
-    const rows = jobs.map((job) => [
-      job.jobNo,
-      job.customer.name,
-      job.status,
-      getJobPaymentStatus(job.invoices),
-      Number(job.customerTotal).toFixed(2),
-      new Date(job.createdAt).toLocaleDateString(),
-      job.deliveryDate ? new Date(job.deliveryDate).toLocaleDateString() : '',
-      job.quantity?.toString() || '',
-      job.sizeName || '',
-    ]);
+    const rows = jobs.map((job) => {
+      const customerTotal = Number(job.customerTotal || 0);
+      const bradfordTotal = Number(job.bradfordTotal || 0);
+      const jdTotal = Number(job.jdTotal || 0);
+      const impactMargin = Number(job.impactMargin || 0);
+      const marginPercent = customerTotal > 0 ? (impactMargin / customerTotal) * 100 : 0;
+
+      // Extract all CPM values
+      const customerCPM = Number(job.customerCPM || 0);
+      const bradfordTotalCPM = Number(job.bradfordTotalCPM || 0);
+      const bradfordPrintMarginCPM = Number(job.bradfordPrintMarginCPM || 0);
+      const bradfordPaperMarginCPM = Number(job.bradfordPaperMarginCPM || 0);
+      const bradfordTotalMarginCPM = Number(job.bradfordTotalMarginCPM || 0);
+      const printCPM = Number(job.printCPM || 0);
+      const paperCostCPM = Number(job.paperCostCPM || 0);
+      const paperChargedCPM = Number(job.paperChargedCPM || 0);
+      const impactMarginCPM = Number(job.impactMarginCPM || 0);
+
+      // Extract paper usage values
+      const paperType = job.paperType || '';
+      const paperWeightPer1000 = Number(job.paperWeightPer1000 || 0);
+      const paperWeightTotal = Number(job.paperWeightTotal || 0);
+
+      return [
+        job.jobNo,
+        job.customerPONumber || '',
+        job.customer.name,
+        job.sizeName || '',
+        job.quantity?.toString() || '',
+        paperType,
+        paperWeightPer1000.toFixed(2),
+        paperWeightTotal.toFixed(2),
+        customerTotal.toFixed(2),
+        customerCPM.toFixed(2),
+        bradfordTotal.toFixed(2),
+        bradfordTotalCPM.toFixed(2),
+        bradfordPrintMarginCPM.toFixed(2),
+        bradfordPaperMarginCPM.toFixed(2),
+        bradfordTotalMarginCPM.toFixed(2),
+        jdTotal.toFixed(2),
+        printCPM.toFixed(2),
+        paperCostCPM.toFixed(2),
+        paperChargedCPM.toFixed(2),
+        impactMargin.toFixed(2),
+        impactMarginCPM.toFixed(2),
+        marginPercent.toFixed(1),
+        job.status,
+        getJobPaymentStatus(job.invoices),
+        new Date(job.createdAt).toLocaleDateString(),
+        job.deliveryDate ? new Date(job.deliveryDate).toLocaleDateString() : '',
+        job.invoices?.length.toString() || '0',
+        job.purchaseOrders?.length.toString() || '0',
+      ];
+    });
 
     const csv = [
       headers.join(','),

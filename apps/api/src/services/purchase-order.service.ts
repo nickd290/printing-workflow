@@ -229,8 +229,183 @@ export async function findPOByExternalRef(externalRef: string) {
 }
 
 /**
+ * Find the related invoice for a given purchase order
+ * The invoice direction is the OPPOSITE of the PO direction
+ * E.g., Impact→Bradford PO corresponds to Bradford→Impact Invoice
+ */
+export async function findRelatedInvoiceForPO(po: {
+  jobId: string | null;
+  originCompanyId: string;
+  targetCompanyId: string;
+}) {
+  if (!po.jobId) {
+    return null; // PO not linked to a job
+  }
+
+  // Invoice direction is opposite: from = PO target, to = PO origin
+  const invoice = await prisma.invoice.findFirst({
+    where: {
+      jobId: po.jobId,
+      fromCompanyId: po.targetCompanyId,  // Invoice FROM = PO TO
+      toCompanyId: po.originCompanyId,    // Invoice TO = PO FROM
+    },
+  });
+
+  return invoice;
+}
+
+/**
+ * Find the related purchase order for a given invoice
+ * The PO direction is the OPPOSITE of the invoice direction
+ * E.g., Bradford→Impact Invoice corresponds to Impact→Bradford PO
+ */
+export async function findRelatedPOForInvoice(invoice: {
+  jobId: string | null;
+  fromCompanyId: string;
+  toCompanyId: string;
+}) {
+  if (!invoice.jobId) {
+    return null; // Invoice not linked to a job
+  }
+
+  // PO direction is opposite: origin = Invoice to, target = Invoice from
+  const po = await prisma.purchaseOrder.findFirst({
+    where: {
+      jobId: invoice.jobId,
+      originCompanyId: invoice.toCompanyId,      // PO FROM = Invoice TO
+      targetCompanyId: invoice.fromCompanyId,    // PO TO = Invoice FROM
+    },
+  });
+
+  return po;
+}
+
+/**
+ * Create a sync log entry to track PO-Invoice synchronization
+ */
+export async function createSyncLog(data: {
+  trigger: 'PO_UPDATE' | 'INVOICE_UPDATE';
+  purchaseOrderId?: string;
+  invoiceId?: string;
+  jobId?: string;
+  field: string;
+  oldValue?: number;
+  newValue: number;
+  changedBy?: string;
+  notes?: string;
+}) {
+  await prisma.syncLog.create({
+    data: {
+      trigger: data.trigger,
+      purchaseOrderId: data.purchaseOrderId,
+      invoiceId: data.invoiceId,
+      jobId: data.jobId,
+      field: data.field,
+      oldValue: data.oldValue,
+      newValue: data.newValue,
+      changedBy: data.changedBy,
+      notes: data.notes,
+    },
+  });
+}
+
+/**
+ * Recalculate job financial totals from all related purchase orders
+ * Called after PO updates to keep Job totals in sync
+ * (Exported for use in invoice.service.ts)
+ */
+export async function recalculateJobFromPOs(jobId: string) {
+  // Fetch all POs for this job
+  const allPOs = await prisma.purchaseOrder.findMany({
+    where: { jobId },
+    include: {
+      originCompany: true,
+      targetCompany: true,
+    },
+  });
+
+  // Calculate bradfordTotal: sum of all Impact→Bradford POs
+  const bradfordTotal = allPOs
+    .filter(po =>
+      po.originCompany.id === 'impact-direct' &&
+      po.targetCompany.id === 'bradford'
+    )
+    .reduce((sum, po) => sum + Number(po.vendorAmount || 0), 0);
+
+  // Calculate jdTotal: sum of all Bradford→JD POs
+  const jdTotal = allPOs
+    .filter(po =>
+      po.originCompany.id === 'bradford' &&
+      po.targetCompany.id === 'jd-graphic'
+    )
+    .reduce((sum, po) => sum + Number(po.vendorAmount || 0), 0);
+
+  // Fetch job to get necessary fields for margin calculation
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: {
+      customerTotal: true,
+      jdSuppliesPaper: true,
+      bradfordWaivesPaperMargin: true,
+      paperChargedTotal: true,
+      paperCostTotal: true,
+    },
+  });
+
+  if (!job) {
+    throw new Error(`Job ${jobId} not found`);
+  }
+
+  // Calculate margins based on paper supplier and margin waiver
+  let impactMargin: number;
+  let bradfordTotalMargin: number;
+  const customerTotal = Number(job.customerTotal || 0);
+  const paperChargedTotal = Number(job.paperChargedTotal || 0);
+  const paperCostTotal = Number(job.paperCostTotal || 0);
+
+  if (job.jdSuppliesPaper) {
+    // JD supplies paper: Impact gets 10% of customer total, Bradford gets 10%
+    impactMargin = customerTotal * 0.10;
+    bradfordTotalMargin = bradfordTotal - jdTotal; // Bradford keeps all margin when JD supplies paper
+  } else if (job.bradfordWaivesPaperMargin) {
+    // Bradford waives paper margin: 50/50 split of total margin
+    const totalMargin = customerTotal - jdTotal - paperChargedTotal;
+    impactMargin = totalMargin / 2;
+    bradfordTotalMargin = totalMargin / 2;
+  } else {
+    // Bradford supplies paper normally:
+    // Total Margin = customerTotal - jdTotal - paperChargedTotal
+    // Impact Margin = totalMargin / 2
+    // Bradford Margin = customerTotal - jdTotal - paperCostTotal - (totalMargin / 2)
+    const totalMargin = customerTotal - jdTotal - paperChargedTotal;
+    impactMargin = totalMargin / 2;
+    bradfordTotalMargin = customerTotal - jdTotal - paperCostTotal - (totalMargin / 2);
+  }
+
+  // Update job with recalculated totals
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      bradfordTotal,
+      jdTotal,
+      bradfordTotalMargin,
+      impactMargin,
+    },
+  });
+
+  console.log(`✅ Recalculated Job ${jobId}:`, {
+    bradfordTotal,
+    jdTotal,
+    bradfordTotalMargin,
+    impactMargin,
+  });
+}
+
+/**
  * Update purchase order
  * Allows editing amounts, status, and other fields
+ * Automatically recalculates linked Job totals
+ * Auto-syncs related invoice amounts when vendorAmount changes
  */
 export async function updatePurchaseOrder(
   poId: string,
@@ -240,8 +415,24 @@ export async function updatePurchaseOrder(
     marginAmount?: number;
     status?: POStatus;
     externalRef?: string;
-  }
+  },
+  changedBy?: string
 ) {
+  // Get the old PO to detect vendorAmount changes
+  const oldPO = await prisma.purchaseOrder.findUnique({
+    where: { id: poId },
+    select: {
+      vendorAmount: true,
+      jobId: true,
+      originCompanyId: true,
+      targetCompanyId: true,
+    },
+  });
+
+  if (!oldPO) {
+    throw new Error(`Purchase order ${poId} not found`);
+  }
+
   const po = await prisma.purchaseOrder.update({
     where: { id: poId },
     data,
@@ -255,6 +446,45 @@ export async function updatePurchaseOrder(
       },
     },
   });
+
+  // Auto-sync related invoice if vendorAmount changed
+  if (data.vendorAmount !== undefined && data.vendorAmount !== Number(oldPO.vendorAmount)) {
+    const relatedInvoice = await findRelatedInvoiceForPO({
+      jobId: po.jobId,
+      originCompanyId: po.originCompanyId,
+      targetCompanyId: po.targetCompanyId,
+    });
+
+    if (relatedInvoice) {
+      const oldInvoiceAmount = Number(relatedInvoice.amount);
+
+      // Update invoice amount to match new PO vendorAmount
+      await prisma.invoice.update({
+        where: { id: relatedInvoice.id },
+        data: { amount: data.vendorAmount },
+      });
+
+      // Log the sync for PO update
+      await createSyncLog({
+        trigger: 'PO_UPDATE',
+        purchaseOrderId: po.id,
+        invoiceId: relatedInvoice.id,
+        jobId: po.jobId || undefined,
+        field: 'vendorAmount',
+        oldValue: Number(oldPO.vendorAmount),
+        newValue: data.vendorAmount,
+        changedBy,
+        notes: `PO vendorAmount updated from $${oldPO.vendorAmount} to $${data.vendorAmount}, synced Invoice ${relatedInvoice.invoiceNo} from $${oldInvoiceAmount} to $${data.vendorAmount}`,
+      });
+
+      console.log(`✅ Auto-synced Invoice ${relatedInvoice.invoiceNo}: $${oldInvoiceAmount} → $${data.vendorAmount} (PO vendorAmount changed)`);
+    }
+  }
+
+  // Recalculate job totals if PO is linked to a job
+  if (po.jobId) {
+    await recalculateJobFromPOs(po.jobId);
+  }
 
   return po;
 }

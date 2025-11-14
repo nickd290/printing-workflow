@@ -85,7 +85,9 @@ export async function calculateDynamicPricing(
   prisma: PrismaClient,
   sizeName: string,
   quantity: number,
-  overrides?: PricingOverrides
+  overrides?: PricingOverrides,
+  jdSuppliesPaper: boolean = false,
+  bradfordWaivesPaperMargin: boolean = false
 ): Promise<DynamicPricingResult> {
   // Load pricing rule from database
   const pricingRule = await prisma.pricingRule.findUnique({
@@ -104,14 +106,19 @@ export async function calculateDynamicPricing(
   // printCPM = what Bradford pays JD for printing (jdInvoicePerM in CSV)
   const printCPM = overrides?.printCPM ?? Number(pricingRule.jdInvoicePerM || pricingRule.printCPM);
   const paperCostCPM = overrides?.paperCostCPM ?? Number(pricingRule.paperCPM || 0);
-  const paperChargedCPM = overrides?.paperChargedCPM ?? Number(pricingRule.paperChargedCPM || 0);
+
+  // When JD supplies paper, no Bradford markup on paper
+  let paperChargedCPM = overrides?.paperChargedCPM ?? Number(pricingRule.paperChargedCPM || 0);
+  if (jdSuppliesPaper) {
+    paperChargedCPM = paperCostCPM; // No markup when JD supplies paper
+  }
 
   // Calculate paper markup
   const paperMarkupCPM = paperChargedCPM - paperCostCPM;
 
-  // Standard customer rate = what Impact charges customer (bradfordInvoicePerM in CSV)
-  // This matches the old hardcoded customerCPM values
-  const standardCustomerCPM = Number(pricingRule.bradfordInvoicePerM || pricingRule.baseCPM || 0);
+  // Standard customer rate = what Impact charges customer (impactInvoicePerM in CSV)
+  // This is the baseline rate that the customer should be charged
+  const standardCustomerCPM = Number(pricingRule.impactInvoicePerM || pricingRule.baseCPM || 0);
 
   // Baseline minimum rate for undercharge detection (impactInvoicePerM in CSV)
   const minimumCustomerCPM = Number(pricingRule.impactInvoicePerM || 0);
@@ -119,22 +126,80 @@ export async function calculateDynamicPricing(
   // Actual customer price (use override or standard)
   const customerCPM = overrides?.customerCPM ?? standardCustomerCPM;
 
-  // Bradford's base cost = JD print + paper charged
-  // This is what Bradford pays out (excluding their margin share)
-  const bradfordBaseCostCPM = printCPM + paperChargedCPM;
+  // Calculate margins based on paper supply and waiver flags
+  let impactMarginCPM: number;
+  let bradfordPrintMarginCPM: number;
+  let bradfordBaseCostCPM: number;
+  let bradfordTotalCPM: number;
+  let bradfordTotalMarginCPM: number;
+  let jdTotalCPM: number;
 
-  // Calculate margin pool from customer revenue
-  const marginPoolCPM = customerCPM - bradfordBaseCostCPM;
+  if (jdSuppliesPaper) {
+    // JD supplies paper: Pure percentage split (10% Impact, 10% Bradford, 80% JD)
+    // Example: $1000 customer → $100 Impact (10%), $900 to Bradford, Bradford keeps $100 (10%), $800 to JD
 
-  // 50/50 margin split between Impact and Bradford
-  const impactMarginCPM = marginPoolCPM / 2;
-  const bradfordPrintMarginCPM = marginPoolCPM / 2;
+    // Impact's margin = 10% of customer total
+    impactMarginCPM = customerCPM * 0.10;
 
-  // Bradford's total = base cost + their margin share
-  const bradfordTotalCPM = bradfordBaseCostCPM + bradfordPrintMarginCPM;
+    // Bradford receives 90% of customer total (customer - Impact's 10%)
+    bradfordTotalCPM = customerCPM * 0.90;
 
-  // Bradford's total margin = print margin + paper markup
-  const bradfordTotalMarginCPM = bradfordPrintMarginCPM + paperMarkupCPM;
+    // Bradford's margin = 10% of customer total
+    bradfordPrintMarginCPM = customerCPM * 0.10;
+
+    // JD receives 80% of customer total (Bradford's 90% - Bradford's 10%)
+    jdTotalCPM = customerCPM * 0.80;
+
+    // Bradford's base cost is what they pay to JD (80% of customer)
+    bradfordBaseCostCPM = jdTotalCPM;
+
+    // Bradford's total margin = their 10% only (no paper markup when JD supplies)
+    bradfordTotalMarginCPM = bradfordPrintMarginCPM;
+  } else if (bradfordWaivesPaperMargin) {
+    // Bradford Waives Paper Margin: 50/50 split of total margin, no paper markup
+    // Bradford charges paper at cost (no markup)
+    paperChargedCPM = paperCostCPM;
+
+    // JD receives print cost
+    jdTotalCPM = printCPM;
+
+    // Total margin = customer revenue - JD print cost - paper cost
+    const totalMarginCPM = customerCPM - printCPM - paperCostCPM;
+
+    // 50/50 split of total margin
+    impactMarginCPM = totalMarginCPM / 2;
+    bradfordPrintMarginCPM = totalMarginCPM / 2;
+
+    // Bradford's base cost = JD print + paper at cost (no markup)
+    bradfordBaseCostCPM = printCPM + paperCostCPM;
+
+    // Bradford's total = base cost + their margin share
+    bradfordTotalCPM = bradfordBaseCostCPM + bradfordPrintMarginCPM;
+
+    // Bradford's total margin = print margin only (no paper markup when waived)
+    bradfordTotalMarginCPM = bradfordPrintMarginCPM;
+  } else {
+    // Bradford supplies paper: 50/50 margin split (standard logic)
+    // Bradford's base cost = JD print + paper charged (with markup)
+    bradfordBaseCostCPM = printCPM + paperChargedCPM;
+
+    // Calculate margin pool: remaining profit after Bradford's full cost
+    // This is split 50/50, while Bradford also keeps the paper markup separately
+    const marginPoolCPM = customerCPM - bradfordBaseCostCPM;
+
+    // 50/50 margin split of the remaining pool between Impact and Bradford
+    impactMarginCPM = marginPoolCPM / 2;
+    bradfordPrintMarginCPM = marginPoolCPM / 2;
+
+    // Bradford's total = base cost + their margin share
+    bradfordTotalCPM = bradfordBaseCostCPM + bradfordPrintMarginCPM;
+
+    // Bradford's total margin = print margin + paper markup
+    bradfordTotalMarginCPM = bradfordPrintMarginCPM + paperMarkupCPM;
+
+    // JD receives actual print cost for 50/50 split
+    jdTotalCPM = printCPM;
+  }
 
   // Calculate totals
   const customerTotal = customerCPM * quantityInThousands;
@@ -143,7 +208,7 @@ export async function calculateDynamicPricing(
   const bradfordPrintMargin = bradfordPrintMarginCPM * quantityInThousands;
   const bradfordPaperMargin = paperMarkupCPM * quantityInThousands;
   const bradfordTotalMargin = bradfordTotalMarginCPM * quantityInThousands;
-  const jdTotal = printCPM * quantityInThousands;
+  const jdTotal = jdTotalCPM * quantityInThousands;
   const paperCostTotal = paperCostCPM * quantityInThousands;
   const paperChargedTotal = paperChargedCPM * quantityInThousands;
 
@@ -209,6 +274,46 @@ export async function calculateDynamicPricing(
     standardCustomerCPM,
     underchargeAmount,
   };
+}
+
+/**
+ * Calculate Bradford and JD totals from a given customer total (reverse calculation)
+ *
+ * This function is used when you have the customerTotal already set (from a quote)
+ * and need to calculate the Bradford/JD split based on pricing rules.
+ *
+ * @param prisma - Prisma client instance
+ * @param customerTotal - The total price charged to the customer
+ * @param quantity - The quantity ordered
+ * @param sizeName - The size name to use for pricing rule lookup
+ * @param jdSuppliesPaper - Whether JD supplies paper (10/10 split instead of 50/50)
+ * @returns Complete pricing breakdown with all CPMs and totals
+ */
+export async function calculateFromCustomerTotal(
+  prisma: PrismaClient,
+  customerTotal: number,
+  quantity: number,
+  sizeName: string,
+  jdSuppliesPaper: boolean = false,
+  bradfordWaivesPaperMargin: boolean = false
+): Promise<DynamicPricingResult> {
+  // Calculate customer CPM from the given total
+  const quantityInThousands = quantity / 1000;
+  const customerCPM = customerTotal / quantityInThousands;
+
+  // Use the existing calculateDynamicPricing with customerCPM override
+  const overrides: PricingOverrides = {
+    customerCPM: customerCPM,
+  };
+
+  return await calculateDynamicPricing(
+    prisma,
+    sizeName,
+    quantity,
+    overrides,
+    jdSuppliesPaper,
+    bradfordWaivesPaperMargin
+  );
 }
 
 /**

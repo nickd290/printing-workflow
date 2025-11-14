@@ -96,17 +96,13 @@ export function CardFooter({ children, className = '' }: CardFooterProps) {
   );
 }
 
-// Metric Card for dashboards
+// Modern Metric Card for dashboards
 export interface MetricCardProps {
   title: string;
   value: string | number;
   icon?: React.ReactNode;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
   description?: string;
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'primary';
   className?: string;
 }
 
@@ -114,44 +110,42 @@ export function MetricCard({
   title,
   value,
   icon,
-  trend,
   description,
   variant = 'default',
   className = '',
 }: MetricCardProps) {
   const variantStyles = {
-    default: 'border-border',
-    success: 'border-success/20 bg-success-light/10',
-    warning: 'border-warning/20 bg-warning-light/10',
-    danger: 'border-danger/20 bg-danger-light/10',
-    info: 'border-info/20 bg-info-light/10',
+    default: '',
+    success: 'gradient-success',
+    warning: 'gradient-warning',
+    danger: 'gradient-danger',
+    info: 'gradient-info',
+    primary: 'gradient-primary',
+  };
+
+  const iconColorClasses = {
+    default: 'text-muted-foreground/60',
+    success: 'text-success/80',
+    warning: 'text-warning/80',
+    danger: 'text-danger/80',
+    info: 'text-info/80',
+    primary: 'text-primary/80',
   };
 
   return (
-    <Card className={`${variantStyles[variant]} ${className}`}>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <CardDescription className="uppercase tracking-wide font-medium">
-              {title}
-            </CardDescription>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-foreground">{value}</span>
-              {trend && (
-                <span className={`text-sm font-medium ${trend.isPositive ? 'text-success' : 'text-danger'}`}>
-                  {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}%
-                </span>
-              )}
-            </div>
-            {description && (
-              <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-            )}
+    <div className={`metric-card ${variantStyles[variant]} ${className}`}>
+      <div className="flex items-start justify-between mb-4">
+        <span className="kpi-label">{title}</span>
+        {icon && (
+          <div className={`flex-shrink-0 ${iconColorClasses[variant]}`}>
+            {icon}
           </div>
-          {icon && (
-            <div className="flex-shrink-0">{icon}</div>
-          )}
-        </div>
-      </CardHeader>
-    </Card>
+        )}
+      </div>
+      <div className="kpi-number">{value}</div>
+      {description && (
+        <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      )}
+    </div>
   );
 }

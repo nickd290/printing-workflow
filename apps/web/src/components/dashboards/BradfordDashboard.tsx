@@ -390,16 +390,44 @@ export function BradfordDashboard() {
                           {job.quantity ? Number(job.quantity).toLocaleString('en-US') : '—'}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-blue-600">
-                          ${job.customerTotal ? Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                          <div className="flex flex-col">
+                            <span>${job.customerTotal ? Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                            {job.customerCPM && (
+                              <span className="text-xs text-gray-500 font-normal">
+                                ${Number(job.customerCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
-                          ${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                          <div className="flex flex-col">
+                            <span>${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                            {job.bradfordTotalCPM && (
+                              <span className="text-xs text-gray-500 font-normal">
+                                ${Number(job.bradfordTotalCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-orange-600">
-                          ${job.jdTotal ? Number(job.jdTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                          <div className="flex flex-col">
+                            <span>${job.jdTotal ? Number(job.jdTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                            {job.printCPM && (
+                              <span className="text-xs text-gray-500 font-normal">
+                                ${Number(job.printCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-red-600">
-                          ${job.paperCostTotal ? Number(job.paperCostTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                          <div className="flex flex-col">
+                            <span>${job.paperCostTotal ? Number(job.paperCostTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                            {job.paperCostCPM && (
+                              <span className="text-xs text-gray-500 font-normal">
+                                ${Number(job.paperCostCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900">
                           {job.paperWeightTotal ? Number(job.paperWeightTotal).toLocaleString('en-US', { minimumFractionDigits: 0 }) : '—'}

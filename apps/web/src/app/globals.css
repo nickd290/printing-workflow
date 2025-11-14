@@ -4,83 +4,83 @@
 
 @layer base {
   :root {
-    /* Modern Minimalist Light Theme - Clean & Professional */
-    --background: 0 0% 99%;
-    --background-subtle: 210 40% 97%;
+    /* Modern SaaS Light Theme - Professional & Clean */
+    --background: 210 20% 98%; /* #F7F8FA */
+    --background-subtle: 210 20% 96%;
     --foreground: 222 47% 11%;
 
-    /* Card variants - Enhanced with better contrast */
-    --card: 0 0% 100%;
+    /* Card variants - Pure white with soft shadows */
+    --card: 0 0% 100%; /* #FFFFFF */
     --card-foreground: 222 47% 11%;
-    --card-hover: 210 40% 98.5%;
+    --card-hover: 210 20% 99%;
 
-    /* Primary brand color - Refined blue with gradient support */
-    --primary: 217 89% 61%;
+    /* Primary brand color - Electric Blue (#4D7CFF) */
+    --primary: 225 100% 65%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 217 89% 55%;
-    --primary-light: 217 89% 97%;
+    --primary-hover: 225 100% 60%;
+    --primary-light: 225 100% 97%;
 
     /* Secondary colors - Softer tones */
     --secondary: 214 27% 93%;
     --secondary-foreground: 222 47% 11%;
     --secondary-hover: 214 27% 88%;
 
-    /* Status colors - Refined for modern aesthetic */
-    --success: 142 69% 48%;
+    /* Status colors - Muted for modern aesthetic */
+    --success: 142 60% 45%;
     --success-foreground: 0 0% 100%;
-    --success-light: 142 69% 97%;
+    --success-light: 142 60% 96%;
 
-    --warning: 38 88% 52%;
+    --warning: 38 80% 50%;
     --warning-foreground: 0 0% 100%;
-    --warning-light: 38 88% 96%;
+    --warning-light: 38 80% 96%;
 
-    --danger: 0 70% 54%;
+    --danger: 0 65% 52%;
     --danger-foreground: 0 0% 100%;
-    --danger-light: 0 70% 97%;
+    --danger-light: 0 65% 96%;
 
-    --info: 199 87% 50%;
+    --info: 199 80% 48%;
     --info-foreground: 0 0% 100%;
-    --info-light: 199 87% 97%;
+    --info-light: 199 80% 96%;
 
     /* Neutral colors - Refined grayscale */
-    --muted: 210 35% 96.5%;
-    --muted-foreground: 215 14% 50%;
+    --muted: 210 20% 95%;
+    --muted-foreground: 215 14% 48%;
 
-    --accent: 210 35% 96.5%;
+    --accent: 210 20% 95%;
     --accent-foreground: 222 47% 11%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 210 20% 98%;
 
-    /* Borders - Softer, less prominent */
-    --border: 214 27% 92%;
-    --border-light: 214 27% 95%;
-    --border-strong: 214 27% 85%;
+    /* Borders - Soft and subtle */
+    --border: 210 20% 92%;
+    --border-light: 210 20% 94%;
+    --border-strong: 210 20% 85%;
 
     /* Input - Enhanced focus states */
-    --input: 214 27% 92%;
-    --input-hover: 214 27% 90%;
-    --input-focus: 217 89% 61%;
+    --input: 210 20% 92%;
+    --input-hover: 210 20% 90%;
+    --input-focus: 225 100% 65%;
 
-    /* Ring for focus states - Softer */
-    --ring: 217 89% 61%;
+    /* Ring for focus states - Electric blue */
+    --ring: 225 100% 65%;
     --ring-offset: 0 0% 100%;
 
-    /* Radius - Modern, slightly more pronounced */
-    --radius: 0.5rem;
-    --radius-sm: 0.375rem;
-    --radius-lg: 0.75rem;
-    --radius-xl: 1rem;
-    --radius-2xl: 1.5rem;
+    /* Radius - Modern, 12-16px default (0.75-1rem) */
+    --radius: 0.75rem; /* 12px */
+    --radius-sm: 0.5rem; /* 8px */
+    --radius-lg: 1rem; /* 16px */
+    --radius-xl: 1.25rem; /* 20px */
+    --radius-2xl: 1.5rem; /* 24px */
 
-    /* Shadows - Softer, more natural elevation system */
-    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-    --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 2px 3px -1px rgba(0, 0, 0, 0.04);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.09), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
-    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+    /* Shadows - Soft, elevated effect */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+    --shadow-sm: 0 2px 4px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 6px 12px -2px rgba(0, 0, 0, 0.10), 0 3px 6px -2px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.12), 0 6px 12px -4px rgba(0, 0, 0, 0.08);
+    --shadow-xl: 0 20px 32px -6px rgba(0, 0, 0, 0.14), 0 10px 16px -6px rgba(0, 0, 0, 0.10);
+    --shadow-2xl: 0 32px 64px -12px rgba(0, 0, 0, 0.16);
 
     /* Spacing scale - Consistent spacing system */
     --spacing-xs: 0.25rem;
@@ -90,20 +90,20 @@
     --spacing-xl: 2rem;
     --spacing-2xl: 3rem;
 
-    /* Dark theme variants (for dashboard/summary sections) */
-    --dark-background: 222 47% 5%;
-    --dark-background-elevated: 222 47% 9%;
-    --dark-foreground: 210 40% 98%;
+    /* Dark mode colors - Modern dark theme */
+    --dark-background: 270 10% 7%; /* #111013 */
+    --dark-background-elevated: 270 10% 9%;
+    --dark-foreground: 210 20% 98%;
 
-    --dark-card: 222 47% 9%;
-    --dark-card-hover: 222 47% 11%;
-    --dark-card-foreground: 210 40% 98%;
+    --dark-card: 270 10% 11%; /* #1A1A1D */
+    --dark-card-hover: 270 10% 13%;
+    --dark-card-foreground: 210 20% 98%;
 
-    --dark-border: 215 20% 22%;
-    --dark-border-strong: 215 20% 32%;
+    --dark-border: 270 10% 20%;
+    --dark-border-strong: 270 10% 28%;
 
-    --dark-muted: 215 20% 16%;
-    --dark-muted-foreground: 217 10% 66%;
+    --dark-muted: 270 10% 15%;
+    --dark-muted-foreground: 270 5% 65%;
   }
 }
 
@@ -127,12 +127,12 @@
 @layer components {
   /* Modern card components with refined shadows */
   .card {
-    @apply bg-card rounded-lg border border-border;
+    @apply bg-card rounded-xl border border-border;
     box-shadow: var(--shadow-sm);
   }
 
   .card-hover {
-    @apply bg-card rounded-lg border border-border transition-all duration-300 ease-out;
+    @apply bg-card rounded-xl border border-border transition-all duration-300 ease-out;
     box-shadow: var(--shadow-sm);
   }
 
@@ -140,17 +140,17 @@
     background-color: hsl(var(--card-hover));
     border-color: hsl(var(--border-strong));
     box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    transform: translateY(-2px) scale(1.005);
   }
 
   .card-elevated {
-    @apply bg-card rounded-lg border border-border;
+    @apply bg-card rounded-xl border border-border;
     box-shadow: var(--shadow-md);
   }
 
   /* Button variants - Modern with subtle enhancements */
   .btn {
-    @apply inline-flex items-center justify-center rounded-md text-sm font-medium;
+    @apply inline-flex items-center justify-center rounded-lg text-sm font-medium;
     @apply transition-all duration-200 ease-out;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
     @apply disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed;
@@ -158,13 +158,14 @@
 
   .btn-primary {
     @apply btn;
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-hover)) 100%);
+    background-color: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
-    box-shadow: var(--shadow-sm), 0 1px 0 0 rgba(255, 255, 255, 0.2) inset;
+    box-shadow: var(--shadow-sm);
   }
 
   .btn-primary:hover:not(:disabled) {
-    box-shadow: var(--shadow-md), 0 1px 0 0 rgba(255, 255, 255, 0.2) inset;
+    background-color: hsl(var(--primary-hover));
+    box-shadow: var(--shadow-md);
     transform: translateY(-1px);
   }
 
@@ -198,12 +199,13 @@
 
   .btn-danger {
     @apply btn;
-    background: linear-gradient(135deg, hsl(var(--danger)) 0%, hsl(var(--danger) / 0.9) 100%);
+    background-color: hsl(var(--danger));
     color: hsl(var(--danger-foreground));
     box-shadow: var(--shadow-sm);
   }
 
   .btn-danger:hover:not(:disabled) {
+    background-color: hsl(var(--danger) / 0.9);
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
   }
@@ -269,11 +271,20 @@
 
   /* Table styles */
   .table-header {
-    @apply bg-muted/50 border-b border-border;
+    @apply bg-muted/30 border-b border-border;
   }
 
   .table-row {
-    @apply border-b border-border transition-colors hover:bg-muted/50;
+    @apply border-b border-border transition-all duration-200 hover:bg-muted/40;
+  }
+
+  /* Zebra striping for tables */
+  .table-zebra tbody tr:nth-child(even) {
+    background-color: hsl(var(--muted) / 0.3);
+  }
+
+  .table-zebra tbody tr:hover {
+    background-color: hsl(var(--muted) / 0.5);
   }
 
   /* Empty state */
@@ -306,7 +317,7 @@
 
   /* Dark theme variants for dashboard/summary sections */
   .dark-section {
-    background: linear-gradient(135deg, hsl(var(--dark-background)) 0%, hsl(var(--dark-background-elevated)) 100%);
+    background-color: hsl(var(--dark-background));
     color: hsl(var(--dark-foreground));
   }
 
@@ -430,5 +441,84 @@
   /* Smooth transitions for all interactive elements */
   .transition-smooth {
     @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Glassmorphism effect - subtle blur with transparency */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .glass-dark {
+    background: rgba(26, 26, 29, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Pill-style table row variant */
+  .table-row-pill {
+    @apply rounded-xl my-1 border border-border transition-all duration-200;
+    box-shadow: var(--shadow-xs);
+  }
+
+  .table-row-pill:hover {
+    @apply bg-card-hover border-border-strong;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  /* Modern metric card */
+  .metric-card {
+    @apply bg-card rounded-xl border border-border p-6 transition-all duration-300;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .metric-card:hover {
+    @apply border-border-strong;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  /* Status pill (for job statuses, etc.) */
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium;
+    @apply transition-all duration-200;
+  }
+
+  /* Typography utilities for large KPI numbers */
+  .kpi-number {
+    @apply text-4xl font-bold tracking-tight;
+    line-height: 1.1;
+  }
+
+  .kpi-label {
+    @apply text-xs font-medium text-muted-foreground uppercase tracking-wider;
+  }
+
+  /* Hover scale effect for cards */
+  .hover-lift {
+    @apply transition-all duration-200 ease-out;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  /* Modern sidebar nav item */
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium;
+    @apply transition-all duration-200;
+  }
+
+  .sidebar-nav-item:hover {
+    @apply bg-muted/70;
+  }
+
+  .sidebar-nav-item.active {
+    @apply bg-primary/10 text-primary;
+    box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.2);
   }
 }

@@ -57,8 +57,11 @@ export const createJobSchema = z.object({
   customerId: z.string(),
   sizeId: z.string(), // 'SM_7_25_16_375', 'SM_8_5_17_5', etc.
   quantity: z.number().int().positive(),
+  customerPONumber: z.string(),
   description: z.string().optional(),
   specs: z.record(z.any()).optional(), // Optional flexible JSON object
+  customPrice: z.number().positive().optional(), // Custom customer price (optional)
+  customPaperCPM: z.number().positive().optional(), // Custom Bradford paper CPM (optional)
 });
 
 // ============================================================================

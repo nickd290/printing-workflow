@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
+import { Logo } from '@/components/ui/Logo';
 import {
   HomeIcon,
   DocumentIcon,
@@ -12,7 +13,6 @@ import {
   ChartBarIcon,
   SparklesIcon,
   CurrencyDollarIcon,
-  PrinterIcon,
 } from '@/components/ui/Icons';
 
 export function Navigation() {
@@ -60,16 +60,8 @@ export function Navigation() {
           <div className="flex items-center">
             {/* Logo */}
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/dashboard" className="flex items-center gap-3 group">
-                <div className="bg-primary p-2 rounded-lg group-hover:bg-primary-hover transition-colors">
-                  <PrinterIcon className="w-6 h-6 text-primary-foreground" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold text-foreground">
-                    Printing Workflow
-                  </h1>
-                  <p className="text-xs text-muted-foreground -mt-0.5">Production System</p>
-                </div>
+              <Link href="/dashboard" className="group">
+                <Logo variant="full" size="lg" className="text-primary group-hover:text-primary-hover transition-colors" />
               </Link>
             </div>
 
@@ -100,8 +92,8 @@ export function Navigation() {
           {/* User Info & Actions */}
           <div className="flex items-center gap-4">
             {user && (
-              <div className="hidden md:flex items-center gap-3 px-4 py-2 rounded-lg bg-muted border border-border">
-                <div className="text-right">
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-muted border border-border">
+                <div className="hidden md:block text-right">
                   <div className="text-sm font-semibold text-foreground">{user.name}</div>
                   <div className="text-xs text-muted-foreground">{user.companyName}</div>
                 </div>

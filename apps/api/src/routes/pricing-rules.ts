@@ -35,7 +35,7 @@ export const pricingRulesRoutes: FastifyPluginAsync = async (fastify) => {
     const body = request.body as {
       sizeName: string;
       baseCPM: number;
-      jdPrintCPM: number;
+      printCPM: number;
       notes?: string;
       isActive?: boolean;
     };
@@ -55,7 +55,7 @@ export const pricingRulesRoutes: FastifyPluginAsync = async (fastify) => {
       data: {
         sizeName: body.sizeName,
         baseCPM: body.baseCPM,
-        jdPrintCPM: body.jdPrintCPM,
+        printCPM: body.printCPM,
         notes: body.notes,
         isActive: body.isActive ?? true,
       },
@@ -69,7 +69,7 @@ export const pricingRulesRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
       baseCPM?: number;
-      jdPrintCPM?: number;
+      printCPM?: number;
       notes?: string;
       isActive?: boolean;
     };
@@ -81,7 +81,7 @@ export const pricingRulesRoutes: FastifyPluginAsync = async (fastify) => {
         where: { id },
         data: {
           baseCPM: body.baseCPM,
-          jdPrintCPM: body.jdPrintCPM,
+          printCPM: body.printCPM,
           notes: body.notes,
           isActive: body.isActive,
         },

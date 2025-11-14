@@ -925,7 +925,19 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
             {job.purchaseOrders && job.purchaseOrders.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="border-b border-slate-200 px-6 py-4">
-                  <h2 className="text-lg font-semibold text-slate-900">Purchase Orders</h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-semibold text-slate-900">Purchase Orders</h2>
+                    {job.bradfordWaivesPaperMargin && (
+                      <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                        Bradford Waived Paper Margin (50/50 Split)
+                      </span>
+                    )}
+                    {job.jdSuppliesPaper && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                        JD Supplies Paper (10/10 Split)
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="p-6 space-y-3">

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -216,6 +216,8 @@ model Job {
   paperType             String?
   paperWeightTotal      Decimal?  // Total lbs for this job
   paperWeightPer1000    Decimal?  // Lbs per thousand pieces
+  jdSuppliesPaper       Boolean   @default(false) // True if JD supplies paper (no Bradford markup, 10/10 split)
+  bradfordWaivesPaperMargin Boolean @default(false) // True if Bradford waives paper margin (50/50 split of total margin)
 
   // Production & Delivery
   deliveryDate   DateTime?
@@ -457,6 +459,43 @@ model Invoice {
   @@index([jobId])
   @@index([toCompanyId])
   @@index([fromCompanyId])
+}
+
+// ============================================================================
+// PO-Invoice Sync Logging
+// ============================================================================
+
+enum SyncTrigger {
+  PO_UPDATE
+  INVOICE_UPDATE
+}
+
+model SyncLog {
+  id              String      @id @default(cuid())
+
+  // What triggered the sync
+  trigger         SyncTrigger
+
+  // Related records
+  purchaseOrderId String?     // PO that was updated or synced
+  invoiceId       String?     // Invoice that was updated or synced
+  jobId           String?     // Related job (for context)
+
+  // Change tracking
+  field           String      // "vendorAmount" or "amount"
+  oldValue        Decimal?    // Previous value
+  newValue        Decimal     // New value
+
+  // Metadata
+  changedBy       String?     // User email/ID who triggered the change
+  notes           String?     // Additional context
+
+  createdAt       DateTime    @default(now())
+
+  @@index([purchaseOrderId])
+  @@index([invoiceId])
+  @@index([jobId])
+  @@index([createdAt])
 }
 
 // ============================================================================

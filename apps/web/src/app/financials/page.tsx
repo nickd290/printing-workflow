@@ -19,6 +19,9 @@ export default function FinancialsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
 
+  // Check if user is admin (BROKER_ADMIN or MANAGER)
+  const isAdmin = user && (user.role === 'BROKER_ADMIN' || user.role === 'MANAGER');
+
   useEffect(() => {
     loadAllData();
   }, []);
@@ -45,6 +48,7 @@ export default function FinancialsPage() {
 
   const loadAllData = async () => {
     try {
+      console.log('[Financials Page] Loading all data...');
       setLoading(true);
       const [metricsData, jobsData] = await Promise.all([
         revenueAPI.getMetrics(),
@@ -52,6 +56,7 @@ export default function FinancialsPage() {
       ]);
       setMetrics(metricsData);
       setAllJobs(jobsData.jobs);
+      console.log('[Financials Page] Data loaded, jobs updated:', jobsData.jobs.length, 'jobs');
       setError(null);
     } catch (err) {
       console.error('Failed to load financials:', err);
@@ -125,12 +130,12 @@ export default function FinancialsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
-            {isCustomer ? 'My Invoices' : 'Financials'}
+            {isCustomer ? 'My Invoices' : 'Financial Dashboard'}
           </h1>
           <p className="mt-2 text-sm text-gray-600">
             {isCustomer
               ? 'View and track your invoices from Impact Direct'
-              : 'Job-by-job financial breakdown with invoices and purchase orders'}
+              : 'Revenue metrics, profit margins, and job-by-job financial breakdown'}
           </p>
         </div>
 
@@ -183,6 +188,150 @@ export default function FinancialsPage() {
               </div>
             </div>
 
+            {/* Revenue by Customer */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900">JJSA Revenue</h2>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Invoices</span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        {metrics.invoices.byCustomer.jjsa.count}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Amount</span>
+                      <span className="text-lg font-semibold text-green-600">
+                        ${metrics.invoices.byCustomer.jjsa.total.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                      <span className="text-sm text-gray-600">Paid</span>
+                      <span className="text-sm font-medium text-green-600">
+                        {metrics.invoices.byCustomer.jjsa.paid}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Unpaid</span>
+                      <span className="text-sm font-medium text-yellow-600">
+                        {metrics.invoices.byCustomer.jjsa.unpaid}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900">Ballantine Revenue</h2>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Invoices</span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        {metrics.invoices.byCustomer.ballantine.count}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Amount</span>
+                      <span className="text-lg font-semibold text-green-600">
+                        ${metrics.invoices.byCustomer.ballantine.total.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                      <span className="text-sm text-gray-600">Paid</span>
+                      <span className="text-sm font-medium text-green-600">
+                        {metrics.invoices.byCustomer.ballantine.paid}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Unpaid</span>
+                      <span className="text-sm font-medium text-yellow-600">
+                        {metrics.invoices.byCustomer.ballantine.unpaid}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Purchase Orders Summary */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Purchase Orders</h2>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <div className="text-sm text-gray-600 mb-2">Total POs</div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {metrics.purchaseOrders.total}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-2">Impact → Bradford</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {metrics.purchaseOrders.byCompany.impactToBradford.count}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      ${metrics.purchaseOrders.byCompany.impactToBradford.total.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-2">Bradford → JD Graphic</div>
+                    <div className="text-2xl font-bold text-purple-600">
+                      {metrics.purchaseOrders.byCompany.bradfordToJD.count}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      ${metrics.purchaseOrders.byCompany.bradfordToJD.total.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Status Summary */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Invoice Status</h2>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <div className="text-sm text-gray-600 mb-2">Total Invoices</div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {metrics.invoices.total}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      ${metrics.invoices.totalAmount.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-2">Paid</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {metrics.invoices.paid}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      ${metrics.invoices.paidAmount.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-2">Unpaid</div>
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {metrics.invoices.unpaid}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      ${metrics.invoices.unpaidAmount.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Jobs List */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
               <div className="p-6">
@@ -200,6 +349,22 @@ export default function FinancialsPage() {
                   <p className="text-center text-gray-500 py-8">No jobs found</p>
                 ) : (
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* Header Row */}
+                    <div className="bg-gray-100 border-b border-gray-300 flex items-center gap-3 p-4 overflow-x-auto">
+                      <div className="w-[40px] flex-shrink-0"></div> {/* Expand button space */}
+                      <div className="min-w-[100px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase">Job #</div>
+                      <div className="min-w-[120px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase">PO#</div>
+                      <div className="min-w-[130px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase hidden xl:block">Size</div>
+                      <div className="min-w-[90px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase hidden xl:block">Quantity</div>
+                      <div className="min-w-[110px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase">Impact Charge</div>
+                      <div className="min-w-[110px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase hidden lg:block">Bradford Pay</div>
+                      <div className="min-w-[110px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase hidden lg:block">JD Pay</div>
+                      <div className="min-w-[110px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase">Impact Profit</div>
+                      <div className="min-w-[90px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase">Margin %</div>
+                      <div className="min-w-[130px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase">Status</div>
+                      <div className="min-w-[100px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase hidden xl:block">Docs</div>
+                    </div>
+
                     {filteredJobs.map((job) => (
                       <JobFinancialRow
                         key={job.id}
@@ -208,6 +373,8 @@ export default function FinancialsPage() {
                         onMarkInvoicePaid={handleMarkInvoicePaid}
                         selectedInvoiceIds={selectedInvoiceIds}
                         onInvoiceSelectionChange={handleInvoiceSelectionChange}
+                        isAdmin={isAdmin}
+                        onReloadData={loadAllData}
                       />
                     ))}
                   </div>
@@ -234,6 +401,8 @@ export default function FinancialsPage() {
                       onMarkInvoicePaid={handleMarkInvoicePaid}
                       selectedInvoiceIds={selectedInvoiceIds}
                       onInvoiceSelectionChange={handleInvoiceSelectionChange}
+                      isAdmin={isAdmin}
+                      onReloadData={loadAllData}
                     />
                   ))}
                 </div>

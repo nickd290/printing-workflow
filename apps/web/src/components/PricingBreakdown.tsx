@@ -19,6 +19,8 @@ interface PricingBreakdownProps {
     paperCostCPM?: number;
     paperWeightTotal?: number;
     paperWeightPer1000?: number;
+    jdSuppliesPaper?: boolean | number;
+    bradfordWaivesPaperMargin?: boolean | number;
   };
   userRole?: 'BROKER_ADMIN' | 'BRADFORD_ADMIN' | 'CUSTOMER';
 }
@@ -29,6 +31,23 @@ export function PricingBreakdown({ job, userRole }: PricingBreakdownProps) {
   // Calculate derived values
   const hasQuantity = job.quantity && job.quantity > 0;
   const quantityInThousands = hasQuantity ? job.quantity! / 1000 : 0;
+
+  // Determine margin calculation mode
+  const isJDPaper = Boolean(job.jdSuppliesPaper);
+  const isWaiver = Boolean(job.bradfordWaivesPaperMargin);
+
+  // Get margin labels based on mode
+  const impactMarginLabel = isJDPaper
+    ? "Impact Direct Margin (10% of Revenue)"
+    : isWaiver
+    ? "Impact Direct Margin (50% of Total Margin)"
+    : "Impact Direct Margin (50% of Profit)";
+
+  const bradfordMarginLabel = isJDPaper
+    ? "Bradford Margin (10% of Revenue)"
+    : isWaiver
+    ? "Bradford Margin (50% of Total Margin - Paper Markup Waived)"
+    : "Bradford Margin (50% of Profit)";
 
   // Format currency
   const fmt = (value: number | null | undefined) => {
@@ -136,7 +155,7 @@ export function PricingBreakdown({ job, userRole }: PricingBreakdownProps) {
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                  Impact Direct Margin (50% of Profit)
+                  {impactMarginLabel}
                 </h4>
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -269,7 +288,7 @@ export function PricingBreakdown({ job, userRole }: PricingBreakdownProps) {
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                  Bradford Margin (50% of Profit)
+                  {bradfordMarginLabel}
                 </h4>
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                   <div className="grid grid-cols-1 gap-2">

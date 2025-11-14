@@ -49,6 +49,7 @@ export default function JobsPage() {
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [customPricing, setCustomPricing] = useState<CustomJobPricing | null>(null);
+  const [customPaperCPM, setCustomPaperCPM] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'grouped'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('jobsViewMode');
@@ -174,20 +175,31 @@ export default function JobsPage() {
 
     const formData = new FormData(e.currentTarget);
     const customerId = formData.get('customerId') as string;
+    const customerPONumber = formData.get('customerPONumber') as string;
     const description = formData.get('description') as string;
+
+    // Validate customerPONumber is provided
+    if (!customerPONumber || customerPONumber.trim() === '') {
+      toast.error('Customer PO Number is required');
+      setSubmitting(false);
+      return;
+    }
 
     try {
       await jobsAPI.createDirect({
         customerId,
         sizeId: customPricing.sizeId,
         quantity: customPricing.quantity,
+        customerPONumber: customerPONumber.trim(),
         description,
         customPrice: customPricing.isCustomPricing ? customPricing.customerTotal : undefined,
+        customPaperCPM,
       });
 
       toast.success('Job created successfully!');
       setShowNewJobModal(false);
       setCustomPricing(null);
+      setCustomPaperCPM(undefined);
       await loadJobs();
       setError(null);
     } catch (err) {
@@ -490,6 +502,20 @@ export default function JobsPage() {
                   </select>
                 </div>
 
+                {/* Customer PO Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Customer PO Number *
+                  </label>
+                  <input
+                    type="text"
+                    name="customerPONumber"
+                    required
+                    placeholder="e.g., PO-12345"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
                 {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -506,7 +532,10 @@ export default function JobsPage() {
 
                 {/* Pricing Calculator with Size, Quantity, and Custom Pricing */}
                 <PricingCalculator
-                  onPricingChange={setCustomPricing}
+                  onPricingChange={(pricing, paperCPM) => {
+                    setCustomPricing(pricing);
+                    setCustomPaperCPM(paperCPM);
+                  }}
                   initialQuantity={10000}
                 />
 

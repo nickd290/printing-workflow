@@ -159,9 +159,11 @@ export interface CreateDirectJobBody {
   customerId: string;
   sizeId: string;
   quantity: number;
+  customerPONumber: string;
   description?: string;
   specs?: Record<string, any>;
   customPrice?: number; // Custom customer price (if different from standard pricing)
+  customPaperCPM?: number; // Custom Bradford paper CPM (per job override)
 }
 
 export const jobsAPI = {
@@ -205,6 +207,29 @@ export const jobsAPI = {
     const query = new URLSearchParams(params as any).toString();
     const response = await fetch(`${API_URL}/api/jobs?${query}`);
     return handleResponse<{ jobs: any[] }>(response);
+  },
+
+  approve: async (jobId: string, approvedBy: string, reason?: string) => {
+    const response = await fetch(`${API_URL}/api/jobs/${jobId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvedBy, reason }),
+    });
+    return handleResponse(response);
+  },
+
+  reject: async (jobId: string, rejectedBy: string, reason: string) => {
+    const response = await fetch(`${API_URL}/api/jobs/${jobId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rejectedBy, reason }),
+    });
+    return handleResponse(response);
+  },
+
+  getPendingApproval: async () => {
+    const response = await fetch(`${API_URL}/api/jobs/pending-approval`);
+    return handleResponse<{ jobs: any[]; count: number }>(response);
   },
 };
 
@@ -590,6 +615,62 @@ export const revenueAPI = {
 };
 
 // ============================================================================
+// Reports API
+// ============================================================================
+
+export const reportsAPI = {
+  /**
+   * Download daily summary Excel report
+   * @param date Optional date in YYYY-MM-DD format, defaults to today
+   * @returns Promise that resolves when download starts
+   */
+  downloadDailySummary: async (date?: string) => {
+    const url = date
+      ? `${API_URL}/api/reports/daily-summary?date=${date}`
+      : `${API_URL}/api/reports/daily-summary`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to download report' }));
+      throw new APIError(
+        error.error || `HTTP ${response.status}`,
+        response.status,
+        error
+      );
+    }
+
+    // Get the blob from response
+    const blob = await response.blob();
+
+    // Create download link
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `Daily_Summary_${date || new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  },
+
+  getBradfordDashboardMetrics: async () => {
+    const response = await fetch(`${API_URL}/api/reports/bradford/dashboard-metrics`);
+    return handleResponse<any>(response);
+  },
+
+  getBradfordPaperMargins: async () => {
+    const response = await fetch(`${API_URL}/api/reports/bradford/paper-margins`);
+    return handleResponse<any>(response);
+  },
+
+  exportBradfordReport: async () => {
+    const response = await fetch(`${API_URL}/api/reports/bradford/export`);
+    return handleResponse<{ success: boolean; error?: string }>(response);
+  },
+};
+
+// ============================================================================
 // Paper Inventory API
 // ============================================================================
 
@@ -730,27 +811,6 @@ export const paperInventoryAPI = {
       body: JSON.stringify(settings),
     });
     return handleResponse<{ success: boolean; inventory: PaperInventory }>(response);
-  },
-};
-
-// ============================================================================
-// Reports API
-// ============================================================================
-
-export const reportsAPI = {
-  getBradfordDashboardMetrics: async () => {
-    const response = await fetch(`${API_URL}/api/reports/bradford/dashboard-metrics`);
-    return handleResponse<any>(response);
-  },
-
-  getBradfordPaperMargins: async () => {
-    const response = await fetch(`${API_URL}/api/reports/bradford/paper-margins`);
-    return handleResponse<any>(response);
-  },
-
-  exportBradfordReport: async () => {
-    const response = await fetch(`${API_URL}/api/reports/bradford/export`);
-    return handleResponse<{ success: boolean; error?: string }>(response);
   },
 };
 

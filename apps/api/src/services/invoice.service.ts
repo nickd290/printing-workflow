@@ -6,6 +6,11 @@ import { queueEmail } from '../lib/queue.js';
 import { emailTemplates } from '../lib/email.js';
 import { COMPANY_IDS } from '@printing-workflow/shared';
 import { sendEmail } from '../lib/email.js';
+import {
+  findRelatedPOForInvoice,
+  createSyncLog,
+  recalculateJobFromPOs,
+} from './purchase-order.service.js';
 
 export async function createInvoiceForJob(data: {
   jobId: string;
@@ -429,6 +434,7 @@ export async function createInvoiceManual(data: {
 /**
  * Update invoice
  * Allows editing amounts, status, dates
+ * Auto-syncs related PO vendorAmount when invoice amount changes
  */
 export async function updateInvoice(
   invoiceId: string,
@@ -437,8 +443,25 @@ export async function updateInvoice(
     dueAt?: Date;
     issuedAt?: Date;
     paidAt?: Date;
-  }
+  },
+  changedBy?: string
 ) {
+  // Get the old invoice to detect amount changes
+  const oldInvoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      amount: true,
+      jobId: true,
+      fromCompanyId: true,
+      toCompanyId: true,
+      invoiceNo: true,
+    },
+  });
+
+  if (!oldInvoice) {
+    throw new Error(`Invoice ${invoiceId} not found`);
+  }
+
   const invoice = await prisma.invoice.update({
     where: { id: invoiceId },
     data,
@@ -453,6 +476,45 @@ export async function updateInvoice(
       pdfFile: true,
     },
   });
+
+  // Auto-sync related PO if invoice amount changed
+  if (data.amount !== undefined && data.amount !== Number(oldInvoice.amount)) {
+    const relatedPO = await findRelatedPOForInvoice({
+      jobId: invoice.jobId,
+      fromCompanyId: invoice.fromCompanyId,
+      toCompanyId: invoice.toCompanyId,
+    });
+
+    if (relatedPO) {
+      const oldPOAmount = Number(relatedPO.vendorAmount);
+
+      // Update PO vendorAmount to match new invoice amount
+      await prisma.purchaseOrder.update({
+        where: { id: relatedPO.id },
+        data: { vendorAmount: data.amount },
+      });
+
+      // Recalculate job totals since PO vendorAmount changed
+      if (relatedPO.jobId) {
+        await recalculateJobFromPOs(relatedPO.jobId);
+      }
+
+      // Log the sync for invoice update
+      await createSyncLog({
+        trigger: 'INVOICE_UPDATE',
+        invoiceId: invoice.id,
+        purchaseOrderId: relatedPO.id,
+        jobId: invoice.jobId || undefined,
+        field: 'amount',
+        oldValue: Number(oldInvoice.amount),
+        newValue: data.amount,
+        changedBy,
+        notes: `Invoice ${oldInvoice.invoiceNo} amount updated from $${oldInvoice.amount} to $${data.amount}, synced PO vendorAmount from $${oldPOAmount} to $${data.amount}`,
+      });
+
+      console.log(`✅ Auto-synced PO vendorAmount: $${oldPOAmount} → $${data.amount} (Invoice ${oldInvoice.invoiceNo} amount changed)`);
+    }
+  }
 
   return invoice;
 }

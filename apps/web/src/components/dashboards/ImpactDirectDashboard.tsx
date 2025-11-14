@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { revenueAPI, jobsAPI, type POFlowMetrics } from '@/lib/api-client';
+import { revenueAPI, jobsAPI, reportsAPI, type POFlowMetrics } from '@/lib/api-client';
 import { JobDetailModal } from '@/components/JobDetailModal';
+import { JobApprovalSection } from '@/components/JobApprovalSection';
 import { MetricCard } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { GenericError } from '@/components/ui/EmptyState';
@@ -17,6 +18,7 @@ export function ImpactDirectDashboard() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -39,6 +41,18 @@ export function ImpactDirectDashboard() {
       setError('Failed to load dashboard data. Make sure the API is running on port 3001.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    try {
+      setDownloadingReport(true);
+      await reportsAPI.downloadDailySummary();
+    } catch (err) {
+      console.error('Failed to download report:', err);
+      alert('Failed to download report. Please try again.');
+    } finally {
+      setDownloadingReport(false);
     }
   };
 
@@ -66,6 +80,23 @@ export function ImpactDirectDashboard() {
             Complete operations overview
           </p>
         </div>
+        <button
+          onClick={handleDownloadReport}
+          disabled={downloadingReport}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {downloadingReport ? (
+            <>
+              <LoadingSpinner size="sm" />
+              <span>Generating...</span>
+            </>
+          ) : (
+            <>
+              <DocumentIcon className="w-5 h-5" />
+              <span>Download Daily Report</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Financial Overview Cards */}
@@ -156,6 +187,9 @@ export function ImpactDirectDashboard() {
         />
       </div>
 
+      {/* Jobs Requiring Approval */}
+      <JobApprovalSection onJobUpdated={loadData} />
+
       {/* PO Flow Chart */}
       {poFlowData && <POFlowChart data={poFlowData} />}
 
@@ -172,6 +206,8 @@ export function ImpactDirectDashboard() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer PO#</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Job #</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Quantity</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Margin</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Owed to Bradford</th>
@@ -195,14 +231,41 @@ export function ImpactDirectDashboard() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                     {typeof job.customer === 'string' ? job.customer : job.customer?.name || 'Unknown'}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                    {job.sizeName || '—'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                    {job.quantity ? Number(job.quantity).toLocaleString('en-US') : '—'}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-foreground">
-                    ${Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    <div className="flex flex-col">
+                      <span>${Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      {job.customerCPM && (
+                        <span className="text-xs text-gray-500 font-normal">
+                          ${Number(job.customerCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-success">
-                    ${job.impactMargin ? Number(job.impactMargin).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                    <div className="flex flex-col">
+                      <span>${job.impactMargin ? Number(job.impactMargin).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                      {job.impactMarginCPM && (
+                        <span className="text-xs text-gray-500 font-normal">
+                          ${Number(job.impactMarginCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-orange-600">
-                    ${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                    <div className="flex flex-col">
+                      <span>${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                      {job.bradfordTotalCPM && (
+                        <span className="text-xs text-gray-500 font-normal">
+                          ${Number(job.bradfordTotalCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <StatusBadge status={job.status} />

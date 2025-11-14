@@ -11,6 +11,7 @@ interface Job {
   sizeName?: string;
   quantity?: number;
   customerTotal: number;
+  customerCPM?: number;
   bradfordPrintMargin?: number;
   bradfordPaperMargin?: number;
   bradfordTotalMargin?: number;
@@ -182,7 +183,14 @@ export function GroupedJobsTable({ jobs, isInternalTeam }: GroupedJobsTableProps
                             {job.quantity ? job.quantity.toLocaleString() : '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ${Number(job.customerTotal).toFixed(2)}
+                            <div className="flex flex-col">
+                              <span>${Number(job.customerTotal).toFixed(2)}</span>
+                              {job.customerCPM && (
+                                <span className="text-xs text-gray-500 font-normal">
+                                  ${Number(job.customerCPM).toFixed(2)}/M
+                                </span>
+                              )}
+                            </div>
                           </td>
                           {isInternalTeam && (
                             <td className="px-6 py-4 whitespace-nowrap text-sm">

@@ -9,7 +9,7 @@ import {
 } from '@printing-workflow/shared';
 
 interface PricingCalculatorProps {
-  onPricingChange?: (pricing: CustomJobPricing) => void;
+  onPricingChange?: (pricing: CustomJobPricing, customPaperCPM?: number) => void;
   initialSizeId?: string;
   initialQuantity?: number;
   initialCustomPrice?: number;
@@ -26,6 +26,8 @@ export function PricingCalculator({
   const [sizeId, setSizeId] = useState(initialSizeId || sizes[0]?.id || '');
   const [quantity, setQuantity] = useState(initialQuantity || 10000);
   const [customPrice, setCustomPrice] = useState<number | undefined>(initialCustomPrice);
+  const [customPaperCPM, setCustomPaperCPM] = useState<number | undefined>(undefined);
+  const [enablePaperOverride, setEnablePaperOverride] = useState(false);
   const [pricing, setPricing] = useState<CustomJobPricing | null>(null);
 
   // Calculate pricing whenever inputs change
@@ -36,14 +38,20 @@ export function PricingCalculator({
     }
 
     try {
-      const calculatedPricing = calculateCustomPricing(sizeId, quantity, customPrice);
+      const effectivePaperCPM = enablePaperOverride ? customPaperCPM : undefined;
+      const calculatedPricing = calculateCustomPricing(
+        sizeId,
+        quantity,
+        customPrice,
+        effectivePaperCPM
+      );
       setPricing(calculatedPricing);
-      onPricingChange?.(calculatedPricing);
+      onPricingChange?.(calculatedPricing, effectivePaperCPM);
     } catch (error) {
       console.error('Pricing calculation error:', error);
       setPricing(null);
     }
-  }, [sizeId, quantity, customPrice, onPricingChange]);
+  }, [sizeId, quantity, customPrice, customPaperCPM, enablePaperOverride, onPricingChange]);
 
   const bradfordCost = sizeId ? getBradfordBaseCost(sizeId) : null;
 
@@ -162,9 +170,58 @@ export function PricingCalculator({
                 )}
               </div>
 
+              {/* Paper CPM Override Section */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="enablePaperOverride"
+                    checked={enablePaperOverride}
+                    onChange={(e) => setEnablePaperOverride(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="enablePaperOverride" className="text-sm font-medium text-gray-700">
+                    Override Bradford Paper CPM (per job adjustment)
+                  </label>
+                </div>
+
+                {enablePaperOverride && (
+                  <div className="ml-6">
+                    <label className="block text-sm text-gray-600 mb-2">
+                      Bradford Paper CPM ($/M)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600">$</span>
+                      <input
+                        type="number"
+                        value={customPaperCPM ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '') {
+                            setCustomPaperCPM(undefined);
+                          } else {
+                            const numValue = parseFloat(value);
+                            if (!isNaN(numValue)) {
+                              setCustomPaperCPM(numValue);
+                            }
+                          }
+                        }}
+                        placeholder={pricing ? pricing.paperChargedCPM.toFixed(2) : ''}
+                        step="0.01"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <span className="text-sm text-gray-500">/M</span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Standard: ${pricing?.paperChargedCPM.toFixed(2)}/M
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Custom Pricing Results */}
               {pricing.isCustomPricing && (
-                <div>
+                <div className="mt-4">
                   {/* Loss Warning */}
                   {pricing.isLoss && (
                     <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">

@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { PrismaClient } from '@printing-workflow/db';
 import XLSX from 'xlsx';
 import { sendEmail } from '../lib/email.js';
+import { sendDailySummaryEmail } from '../scripts/daily-report-scheduler.js';
 
 const prisma = new PrismaClient();
 
@@ -498,6 +499,258 @@ const reportsRoutes: FastifyPluginAsync = async (fastify) => {
       reply.status(500).send({
         success: false,
         error: error.message || 'Failed to generate report',
+      });
+    }
+  });
+
+  /**
+   * GET /api/reports/daily-summary?date=YYYY-MM-DD
+   * Download daily summary Excel report showing all jobs and entity profits
+   * Date is optional, defaults to today
+   */
+  fastify.get('/daily-summary', async (request, reply) => {
+    try {
+      const { date } = request.query as { date?: string };
+      const reportDate = date || new Date().toISOString().split('T')[0];
+
+      console.log('\n========================================');
+      console.log('📊 [DAILY SUMMARY] Generating report for:', reportDate);
+      console.log('========================================\n');
+
+      // Fetch ALL jobs with related data
+      const allJobs = await prisma.job.findMany({
+        include: {
+          customer: true,
+          purchaseOrders: {
+            include: {
+              originCompany: true,
+              targetCompany: true,
+            },
+          },
+          invoices: {
+            include: {
+              fromCompany: true,
+              toCompany: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      console.log(`[DAILY SUMMARY] Found ${allJobs.length} total jobs`);
+
+      // Create Excel workbook
+      const workbook = XLSX.utils.book_new();
+
+      // ============================================
+      // SHEET 1: ALL JOBS
+      // ============================================
+      const allJobsData = allJobs.map((job) => ({
+        'Job Number': job.jobNo,
+        'Customer': job.customer.name,
+        'Status': job.status,
+        'Created Date': job.createdAt.toLocaleDateString(),
+        'Completed Date': job.completedAt ? job.completedAt.toLocaleDateString() : 'In Progress',
+        'Size': job.sizeName || '',
+        'Quantity': job.quantity || 0,
+        'Paper Type': job.paperType || '',
+        'Paper Weight (lbs)': job.paperWeightTotal ? Number(job.paperWeightTotal).toFixed(2) : '',
+        'JD Supplies Paper': job.jdSuppliesPaper ? 'Yes' : 'No',
+        'Customer Total': job.customerTotal ? Number(job.customerTotal).toFixed(2) : '',
+        'Bradford Total': job.bradfordTotal ? Number(job.bradfordTotal).toFixed(2) : '',
+        'JD Total': job.jdTotal ? Number(job.jdTotal).toFixed(2) : '',
+        'Impact Margin': job.impactMargin ? Number(job.impactMargin).toFixed(2) : '',
+        'Bradford Margin': job.bradfordTotalMargin ? Number(job.bradfordTotalMargin).toFixed(2) : '',
+      }));
+
+      const allJobsSheet = XLSX.utils.json_to_sheet(allJobsData);
+      XLSX.utils.book_append_sheet(workbook, allJobsSheet, 'All Jobs');
+
+      // ============================================
+      // SHEET 2: IMPACT DIRECT SUMMARY
+      // ============================================
+      const impactJobs = allJobs.filter(j => j.customerTotal && Number(j.customerTotal) > 0);
+      const totalRevenue = impactJobs.reduce((sum, j) => sum + Number(j.customerTotal || 0), 0);
+      const totalCosts = impactJobs.reduce((sum, j) => sum + Number(j.bradfordTotal || 0), 0);
+      const totalImpactMargin = impactJobs.reduce((sum, j) => sum + Number(j.impactMargin || 0), 0);
+      const marginPercent = totalRevenue > 0 ? ((totalImpactMargin / totalRevenue) * 100).toFixed(2) : '0.00';
+
+      // Count by status
+      const jobsByStatus = allJobs.reduce((acc: any, job) => {
+        acc[job.status] = (acc[job.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const impactSummaryData = [
+        { 'Metric': 'IMPACT DIRECT SUMMARY', 'Value': '' },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Total Revenue (Customer Invoices)', 'Value': `$${totalRevenue.toFixed(2)}` },
+        { 'Metric': 'Total Costs (Bradford Invoices)', 'Value': `$${totalCosts.toFixed(2)}` },
+        { 'Metric': 'Total Margin', 'Value': `$${totalImpactMargin.toFixed(2)}` },
+        { 'Metric': 'Margin %', 'Value': `${marginPercent}%` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Jobs with Revenue', 'Value': impactJobs.length },
+        { 'Metric': 'Average Margin per Job', 'Value': `$${(totalImpactMargin / (impactJobs.length || 1)).toFixed(2)}` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'JOB COUNT BY STATUS', 'Value': '' },
+        ...Object.entries(jobsByStatus).map(([status, count]) => ({
+          'Metric': status,
+          'Value': count,
+        })),
+      ];
+
+      const impactSummarySheet = XLSX.utils.json_to_sheet(impactSummaryData);
+      XLSX.utils.book_append_sheet(workbook, impactSummarySheet, 'Impact Direct Summary');
+
+      // ============================================
+      // SHEET 3: BRADFORD SUMMARY
+      // ============================================
+      const bradfordJobs = allJobs.filter(j => j.bradfordTotal && Number(j.bradfordTotal) > 0);
+      const totalBradfordRevenue = bradfordJobs.reduce((sum, j) => sum + Number(j.bradfordTotal || 0), 0);
+      const totalBradfordCosts = bradfordJobs.reduce((sum, j) => sum + Number(j.jdTotal || 0), 0);
+      const totalBradfordPrintMargin = bradfordJobs.reduce((sum, j) => sum + Number(j.bradfordPrintMargin || 0), 0);
+      const totalBradfordPaperMargin = bradfordJobs.reduce((sum, j) => sum + Number(j.bradfordPaperMargin || 0), 0);
+      const totalBradfordMargin = bradfordJobs.reduce((sum, j) => sum + Number(j.bradfordTotalMargin || 0), 0);
+      const bradfordMarginPercent = totalBradfordRevenue > 0 ? ((totalBradfordMargin / totalBradfordRevenue) * 100).toFixed(2) : '0.00';
+      const totalPaperUsage = allJobs.reduce((sum, j) => sum + Number(j.paperWeightTotal || 0), 0);
+
+      // Paper by type
+      const paperByType: any = {};
+      allJobs.forEach(job => {
+        if (job.paperType && job.paperWeightTotal) {
+          paperByType[job.paperType] = (paperByType[job.paperType] || 0) + Number(job.paperWeightTotal);
+        }
+      });
+
+      // JD Supplies Paper breakdown
+      const jdSuppliedJobs = allJobs.filter(j => j.jdSuppliesPaper);
+      const bradfordSuppliedJobs = allJobs.filter(j => !j.jdSuppliesPaper && j.paperWeightTotal);
+
+      const bradfordSummaryData = [
+        { 'Metric': 'BRADFORD SUMMARY', 'Value': '' },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Total Revenue (Impact Invoices)', 'Value': `$${totalBradfordRevenue.toFixed(2)}` },
+        { 'Metric': 'Total Costs (JD Invoices)', 'Value': `$${totalBradfordCosts.toFixed(2)}` },
+        { 'Metric': 'Print Margin', 'Value': `$${totalBradfordPrintMargin.toFixed(2)}` },
+        { 'Metric': 'Paper Markup', 'Value': `$${totalBradfordPaperMargin.toFixed(2)}` },
+        { 'Metric': 'Total Margin', 'Value': `$${totalBradfordMargin.toFixed(2)}` },
+        { 'Metric': 'Margin %', 'Value': `${bradfordMarginPercent}%` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'PAPER USAGE', 'Value': '' },
+        { 'Metric': 'Total Paper (lbs)', 'Value': totalPaperUsage.toFixed(2) },
+        { 'Metric': 'Jobs with Paper', 'Value': allJobs.filter(j => j.paperWeightTotal).length },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'PAPER SUPPLIER BREAKDOWN', 'Value': '' },
+        { 'Metric': 'Bradford Supplied Jobs', 'Value': bradfordSuppliedJobs.length },
+        { 'Metric': 'JD Supplied Jobs', 'Value': jdSuppliedJobs.length },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'PAPER BY TYPE', 'Value': '' },
+        ...Object.entries(paperByType)
+          .sort(([, a]: any, [, b]: any) => b - a)
+          .map(([type, weight]) => ({
+            'Metric': type,
+            'Value': `${Number(weight).toFixed(2)} lbs`,
+          })),
+      ];
+
+      const bradfordSummarySheet = XLSX.utils.json_to_sheet(bradfordSummaryData);
+      XLSX.utils.book_append_sheet(workbook, bradfordSummarySheet, 'Bradford Summary');
+
+      // ============================================
+      // SHEET 4: JD GRAPHIC SUMMARY
+      // ============================================
+      const jdJobs = allJobs.filter(j => j.jdTotal && Number(j.jdTotal) > 0);
+      const totalJDRevenue = jdJobs.reduce((sum, j) => sum + Number(j.jdTotal || 0), 0);
+
+      const jdSummaryData = [
+        { 'Metric': 'JD GRAPHIC SUMMARY', 'Value': '' },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'Total Revenue (Bradford POs)', 'Value': `$${totalJDRevenue.toFixed(2)}` },
+        { 'Metric': 'Total Jobs', 'Value': jdJobs.length },
+        { 'Metric': 'Average per Job', 'Value': `$${(totalJDRevenue / (jdJobs.length || 1)).toFixed(2)}` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'PAPER SUPPLY', 'Value': '' },
+        { 'Metric': 'JD Supplied Paper Jobs', 'Value': jdSuppliedJobs.length },
+        { 'Metric': 'Bradford Supplied Paper Jobs', 'Value': bradfordSuppliedJobs.length },
+      ];
+
+      const jdSummarySheet = XLSX.utils.json_to_sheet(jdSummaryData);
+      XLSX.utils.book_append_sheet(workbook, jdSummarySheet, 'JD Graphic Summary');
+
+      // ============================================
+      // SHEET 5: OVERALL SUMMARY
+      // ============================================
+      const overallSummaryData = [
+        { 'Metric': 'DAILY SUMMARY REPORT', 'Value': reportDate },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'REVENUE FLOW', 'Value': '' },
+        { 'Metric': 'Customer → Impact Direct', 'Value': `$${totalRevenue.toFixed(2)}` },
+        { 'Metric': 'Impact Direct → Bradford', 'Value': `$${totalBradfordRevenue.toFixed(2)}` },
+        { 'Metric': 'Bradford → JD Graphic', 'Value': `$${totalJDRevenue.toFixed(2)}` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'MARGINS BY ENTITY', 'Value': '' },
+        { 'Metric': 'Impact Direct Margin', 'Value': `$${totalImpactMargin.toFixed(2)}` },
+        { 'Metric': 'Bradford Margin', 'Value': `$${totalBradfordMargin.toFixed(2)}` },
+        { 'Metric': 'Total System Margin', 'Value': `$${(totalImpactMargin + totalBradfordMargin).toFixed(2)}` },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'JOB STATISTICS', 'Value': '' },
+        { 'Metric': 'Total Jobs', 'Value': allJobs.length },
+        { 'Metric': 'Jobs with Revenue', 'Value': impactJobs.length },
+        { 'Metric': 'Completed Jobs', 'Value': allJobs.filter(j => j.status === 'COMPLETED').length },
+        { 'Metric': 'Active Jobs', 'Value': allJobs.filter(j => j.status === 'IN_PROGRESS').length },
+        { 'Metric': '', 'Value': '' },
+        { 'Metric': 'PAPER STATISTICS', 'Value': '' },
+        { 'Metric': 'Total Paper Used', 'Value': `${totalPaperUsage.toFixed(2)} lbs` },
+        { 'Metric': 'Jobs with Paper', 'Value': allJobs.filter(j => j.paperWeightTotal).length },
+        { 'Metric': 'Bradford Supplied', 'Value': bradfordSuppliedJobs.length },
+        { 'Metric': 'JD Supplied', 'Value': jdSuppliedJobs.length },
+      ];
+
+      const overallSummarySheet = XLSX.utils.json_to_sheet(overallSummaryData);
+      XLSX.utils.book_append_sheet(workbook, overallSummarySheet, 'Overall Summary');
+
+      // Generate Excel file
+      const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const filename = `Daily_Summary_${reportDate}.xlsx`;
+
+      console.log('[DAILY SUMMARY] Excel file generated:', filename);
+      console.log('[DAILY SUMMARY] File size:', excelBuffer.length, 'bytes');
+
+      // Set headers for file download
+      reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      reply.send(Buffer.from(excelBuffer));
+
+    } catch (error: any) {
+      console.error('Error generating daily summary:', error);
+      reply.status(500).send({
+        success: false,
+        error: error.message || 'Failed to generate daily summary',
+      });
+    }
+  });
+
+  /**
+   * POST /api/reports/daily-summary/send-email
+   * Manually trigger the daily summary email (for testing)
+   */
+  fastify.post('/daily-summary/send-email', async (request, reply) => {
+    try {
+      console.log('[MANUAL TRIGGER] Daily summary email triggered manually');
+
+      // Call the email sending function
+      await sendDailySummaryEmail();
+
+      reply.send({
+        success: true,
+        message: 'Daily summary email sent successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[MANUAL TRIGGER] Error sending daily summary email:', error);
+      reply.status(500).send({
+        success: false,
+        error: error.message || 'Failed to send daily summary email',
       });
     }
   });

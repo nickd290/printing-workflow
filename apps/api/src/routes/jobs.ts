@@ -322,6 +322,9 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       paperType?: string;
       paperWeightPer1000?: number | string;
       paperWeightTotal?: number | string;
+      // Margin calculation flags
+      jdSuppliesPaper?: boolean;
+      bradfordWaivesPaperMargin?: boolean;
       // User context for activity tracking
       changedBy?: string;
       changedByRole?: string;
@@ -367,6 +370,10 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     if (body.paperType !== undefined) updates.paperType = body.paperType;
     if (body.paperWeightPer1000 !== undefined) updates.paperWeightPer1000 = body.paperWeightPer1000;
     if (body.paperWeightTotal !== undefined) updates.paperWeightTotal = body.paperWeightTotal;
+
+    // Margin calculation flags
+    if (body.jdSuppliesPaper !== undefined) updates.jdSuppliesPaper = body.jdSuppliesPaper;
+    if (body.bradfordWaivesPaperMargin !== undefined) updates.bradfordWaivesPaperMargin = body.bradfordWaivesPaperMargin;
 
     const job = await updateJob(id, updates, {
       changedBy,
@@ -449,5 +456,180 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return { sampleShipment };
+  });
+
+  // POST /api/jobs/:id/approve - Approve job with custom pricing
+  fastify.post('/:id/approve', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { reason, approvedBy } = request.body as { reason?: string; approvedBy: string };
+
+    const { prisma } = await import('@printing-workflow/db');
+
+    // Verify job exists and requires approval
+    const job = await prisma.job.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+
+    if (!job) {
+      return reply.status(404).send({ error: 'Job not found' });
+    }
+
+    if (!job.requiresApproval) {
+      return reply.status(400).send({ error: 'Job does not require approval' });
+    }
+
+    // Update job approval status
+    const updatedJob = await prisma.job.update({
+      where: { id },
+      data: {
+        approvedBy,
+        approvedAt: new Date(),
+      },
+      include: {
+        customer: true,
+        files: true,
+        proofs: true,
+        purchaseOrders: {
+          include: {
+            originCompany: true,
+            targetCompany: true,
+          },
+        },
+        invoices: true,
+        shipments: true,
+      },
+    });
+
+    // Log approval activity
+    await prisma.jobActivity.create({
+      data: {
+        jobId: id,
+        action: 'JOB_APPROVED',
+        description: reason || 'Custom pricing approved',
+        userId: approvedBy,
+        oldValue: JSON.stringify({ requiresApproval: true, approvedBy: null }),
+        newValue: JSON.stringify({ requiresApproval: true, approvedBy, approvedAt: new Date() }),
+      },
+    });
+
+    // Create notification for customer
+    await prisma.notification.create({
+      data: {
+        type: 'JOB_READY_FOR_PRODUCTION',
+        jobId: id,
+        userId: job.customer.id,
+        title: `Job ${job.jobNo} Approved`,
+        message: `Your custom pricing for job ${job.jobNo} has been approved and is ready for production.`,
+      },
+    });
+
+    fastify.log.info(`✅ Job ${job.jobNo} approved by ${approvedBy}`);
+
+    return updatedJob;
+  });
+
+  // POST /api/jobs/:id/reject - Reject job with custom pricing
+  fastify.post('/:id/reject', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { reason, rejectedBy } = request.body as { reason: string; rejectedBy: string };
+
+    const { prisma } = await import('@printing-workflow/db');
+
+    // Verify job exists and requires approval
+    const job = await prisma.job.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+
+    if (!job) {
+      return reply.status(404).send({ error: 'Job not found' });
+    }
+
+    if (!job.requiresApproval) {
+      return reply.status(400).send({ error: 'Job does not require approval' });
+    }
+
+    if (!reason || reason.trim() === '') {
+      return reply.status(400).send({ error: 'Rejection reason is required' });
+    }
+
+    // Update job status to cancelled
+    const updatedJob = await prisma.job.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+      },
+      include: {
+        customer: true,
+        files: true,
+        proofs: true,
+        purchaseOrders: {
+          include: {
+            originCompany: true,
+            targetCompany: true,
+          },
+        },
+        invoices: true,
+        shipments: true,
+      },
+    });
+
+    // Log rejection activity
+    await prisma.jobActivity.create({
+      data: {
+        jobId: id,
+        action: 'JOB_REJECTED',
+        description: `Custom pricing rejected: ${reason}`,
+        userId: rejectedBy,
+        oldValue: JSON.stringify({ status: job.status, requiresApproval: true }),
+        newValue: JSON.stringify({ status: 'CANCELLED', requiresApproval: true }),
+      },
+    });
+
+    // Create notification for customer
+    await prisma.notification.create({
+      data: {
+        type: 'JOB_READY_FOR_PRODUCTION',
+        jobId: id,
+        userId: job.customer.id,
+        title: `Job ${job.jobNo} Rejected`,
+        message: `Your job ${job.jobNo} has been rejected. Reason: ${reason}`,
+      },
+    });
+
+    fastify.log.warn(`❌ Job ${job.jobNo} rejected by ${rejectedBy}: ${reason}`);
+
+    return updatedJob;
+  });
+
+  // GET /api/jobs/pending-approval - List jobs requiring approval
+  fastify.get('/pending-approval', async (request, reply) => {
+    const { prisma } = await import('@printing-workflow/db');
+
+    const jobs = await prisma.job.findMany({
+      where: {
+        requiresApproval: true,
+        approvedBy: null,
+        status: {
+          not: 'CANCELLED',
+        },
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        files: true,
+      },
+      orderBy: {
+        createdAt: 'asc', // Oldest first
+      },
+    });
+
+    return { jobs, count: jobs.length };
   });
 };

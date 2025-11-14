@@ -79,12 +79,19 @@ const config: Config = {
         DEFAULT: 'var(--radius)',
         md: 'var(--radius)',
         sm: 'var(--radius-sm)',
+        xl: 'var(--radius-xl)',
+        '2xl': 'var(--radius-2xl)',
+        'full': '9999px',
       },
       boxShadow: {
+        xs: 'var(--shadow-xs)',
         sm: 'var(--shadow-sm)',
         DEFAULT: 'var(--shadow)',
         md: 'var(--shadow-md)',
         lg: 'var(--shadow-lg)',
+        xl: 'var(--shadow-xl)',
+        '2xl': 'var(--shadow-2xl)',
+        'inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
       },
       fontSize: {
         'xs': ['0.75rem', { lineHeight: '1rem' }],
@@ -110,6 +117,8 @@ const config: Config = {
         'scale-in': 'scaleIn 0.2s ease-out',
         'shimmer': 'shimmer 2s linear infinite',
         'spin-slow': 'spin 1.5s linear infinite',
+        'hover-lift': 'hoverLift 0.2s ease-out',
+        'pulse-subtle': 'pulseSubtle 2s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -132,6 +141,14 @@ const config: Config = {
           '0%': { backgroundPosition: '-1000px 0' },
           '100%': { backgroundPosition: '1000px 0' },
         },
+        hoverLift: {
+          '0%': { transform: 'translateY(0) scale(1)' },
+          '100%': { transform: 'translateY(-2px) scale(1.01)' },
+        },
+        pulseSubtle: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.8' },
+        },
       },
       transitionDuration: {
         '0': '0ms',
@@ -143,6 +160,16 @@ const config: Config = {
         '500': '500ms',
         '700': '700ms',
         '1000': '1000ms',
+      },
+      backdropBlur: {
+        xs: '2px',
+        sm: '4px',
+        DEFAULT: '8px',
+        md: '12px',
+        lg: '16px',
+        xl: '24px',
+        '2xl': '40px',
+        '3xl': '64px',
       },
     },
   },

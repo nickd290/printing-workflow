@@ -35,6 +35,8 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     packingSlipNotes: '',
     customerPONumber: '',
     status: '',
+    customerTotal: '',
+    paperChargedCPM: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -99,6 +101,8 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
         packingSlipNotes: jobData.packingSlipNotes || '',
         customerPONumber: jobData.customerPONumber || '',
         status: jobData.status || '',
+        customerTotal: jobData.customerTotal?.toString() || '',
+        paperChargedCPM: jobData.paperChargedCPM?.toString() || '',
       });
     } catch (err) {
       console.error('Failed to load job:', err);
@@ -121,6 +125,8 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
           deliveryDate: editFormData.deliveryDate || undefined,
           packingSlipNotes: editFormData.packingSlipNotes || undefined,
           customerPONumber: editFormData.customerPONumber || undefined,
+          customerTotal: editFormData.customerTotal ? parseFloat(editFormData.customerTotal) : undefined,
+          paperChargedCPM: editFormData.paperChargedCPM ? parseFloat(editFormData.paperChargedCPM) : undefined,
           // User context for activity tracking
           changedBy: user?.email || 'Unknown User',
           changedByRole: user?.role || 'CUSTOMER',
@@ -157,8 +163,26 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
         packingSlipNotes: job.packingSlipNotes || '',
         customerPONumber: job.customerPONumber || '',
         status: job.status || '',
+        customerTotal: job.customerTotal?.toString() || '',
+        paperChargedCPM: job.paperChargedCPM?.toString() || '',
       });
     }
+  };
+
+  const handleStartEdit = () => {
+    // Re-initialize form with current job data before entering edit mode
+    if (job) {
+      setEditFormData({
+        quantity: job.quantity?.toString() || '',
+        deliveryDate: job.deliveryDate ? new Date(job.deliveryDate).toISOString().split('T')[0] : '',
+        packingSlipNotes: job.packingSlipNotes || '',
+        customerPONumber: job.customerPONumber || '',
+        status: job.status || '',
+        customerTotal: job.customerTotal?.toString() || '',
+        paperChargedCPM: job.paperChargedCPM?.toString() || '',
+      });
+    }
+    setIsEditingJob(true);
   };
 
   const handleEditPO = (po: any) => {
@@ -479,7 +503,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
           <div className="flex items-center gap-3">
             {canEditJob && activeTab === 'overview' && !isEditingJob && (
               <button
-                onClick={() => setIsEditingJob(true)}
+                onClick={handleStartEdit}
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -642,6 +666,34 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                   {/* Pricing Breakdown */}
                   <PricingBreakdown job={job} userRole={user?.role} />
 
+                  {/* Key Pricing Fields */}
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <div className="w-1 h-6 bg-purple-600 rounded-full"></div>
+                      Pricing Details
+                    </h3>
+                    <div className="bg-purple-50 rounded-lg p-5 border border-purple-200">
+                      <div className="grid grid-cols-2 gap-6">
+                        <div>
+                          <label className="text-sm font-medium text-gray-600 block mb-1">Customer Total</label>
+                          <p className="text-2xl font-bold text-purple-900">
+                            ${Number(job.customerTotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">Total amount charged to customer</p>
+                        </div>
+                        {job.paperChargedCPM && (
+                          <div>
+                            <label className="text-sm font-medium text-gray-600 block mb-1">Bradford Paper CPM</label>
+                            <p className="text-2xl font-bold text-purple-900">
+                              ${Number(job.paperChargedCPM || 0).toFixed(2)}/M
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Paper cost per thousand pieces</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Notes */}
                   {job.packingSlipNotes && (
                     <div>
@@ -758,8 +810,48 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                     </div>
                   </div>
 
+                  {/* Pricing Section - Editable */}
+                  <div className="border-t border-gray-200 pt-6 mt-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Pricing</h3>
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Editable: Customer Total */}
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          Customer Total ($)
+                        </label>
+                        <input
+                          type="number"
+                          value={editFormData.customerTotal}
+                          onChange={(e) => setEditFormData({ ...editFormData, customerTotal: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Total amount charged to customer</p>
+                      </div>
+
+                      {/* Editable: Bradford Paper CPM */}
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          Bradford Paper CPM ($/M)
+                        </label>
+                        <input
+                          type="number"
+                          value={editFormData.paperChargedCPM}
+                          onChange={(e) => setEditFormData({ ...editFormData, paperChargedCPM: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Paper cost per thousand pieces</p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Editable: Packing Slip Notes */}
-                  <div>
+                  <div className="mt-6">
                     <label className="text-sm font-medium text-gray-700 mb-2 block">Special Instructions / Notes</label>
                     <textarea
                       value={editFormData.packingSlipNotes}
