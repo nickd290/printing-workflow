@@ -2,10 +2,10 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "pnpm install --frozen-lockfile && pnpm db:generate && pnpm build --filter=@printing-workflow/web..."
+    "buildCommand": "pnpm install --frozen-lockfile && DATABASE_URL=\"postgresql://localhost/temp\" pnpm db:generate && pnpm --filter @printing-workflow/web build"
   },
   "deploy": {
-    "startCommand": "cd apps/web && pnpm start",
+    "startCommand": "cd apps/web && NODE_ENV=production pnpm start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
