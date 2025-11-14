@@ -16,51 +16,78 @@ console.log('----------------------------------------');
 console.log('');
 console.log('🔍 Validating environment configuration...');
 
-const requiredEnvVars = {
+// Only NEXT_PUBLIC_* variables are truly required at BUILD time
+// because they get embedded into the client-side bundle.
+// Runtime variables (DATABASE_URL, NEXTAUTH_*, etc.) should be validated at app startup.
+const requiredBuildTimeVars = {
   production: [
-    { name: 'DATABASE_URL', example: 'postgresql://user:password@host:5432/database' },
-    { name: 'NEXTAUTH_URL', example: 'https://web-production-851ca.up.railway.app' },
-    { name: 'NEXTAUTH_SECRET', example: 'generate-with-openssl-rand-base64-32' },
     { name: 'NEXT_PUBLIC_API_URL', example: 'https://api-production-100d.up.railway.app' },
   ],
   development: [], // No strict requirements in dev
 };
 
-const currentEnv = process.env.NODE_ENV || 'development';
-const required = requiredEnvVars[currentEnv] || [];
-const missing = required.filter(({ name }) => !process.env[name]);
+// These are checked but only produce warnings at build time.
+// They MUST be present at runtime for the app to function.
+const requiredRuntimeVars = {
+  production: [
+    { name: 'DATABASE_URL', example: 'postgresql://user:password@host:5432/database' },
+    { name: 'NEXTAUTH_URL', example: 'https://web-production-851ca.up.railway.app' },
+    { name: 'NEXTAUTH_SECRET', example: 'generate-with-openssl-rand-base64-32' },
+  ],
+  development: [],
+};
 
-if (missing.length > 0) {
+const currentEnv = process.env.NODE_ENV || 'development';
+const requiredAtBuild = requiredBuildTimeVars[currentEnv] || [];
+const requiredAtRuntime = requiredRuntimeVars[currentEnv] || [];
+
+const missingBuildTime = requiredAtBuild.filter(({ name }) => !process.env[name]);
+const missingRuntime = requiredAtRuntime.filter(({ name }) => !process.env[name]);
+
+// CRITICAL: Block build if build-time variables are missing
+if (missingBuildTime.length > 0) {
   console.error('');
-  console.error('❌ CRITICAL: Missing required environment variables for PRODUCTION build:');
+  console.error('❌ CRITICAL: Missing required BUILD-TIME environment variables:');
   console.error('');
-  missing.forEach(({ name, example }) => {
+  missingBuildTime.forEach(({ name, example }) => {
     console.error(`   ❌ ${name}`);
     console.error(`      Example: ${example}`);
     console.error('');
   });
+  console.error('These variables are embedded into the client bundle and MUST be set before build.');
+  console.error('');
   console.error('To fix this in Railway:');
   console.error('1. Go to Railway Dashboard → printing-workflow project');
-  console.error('2. Select the "web" service (NOT api)');
+  console.error('2. Select the "web" service');
   console.error('3. Navigate to the "Variables" tab');
   console.error('4. Add the missing variables listed above');
-  console.error('5. Railway will automatically rebuild with the new variables');
-  console.error('');
-  console.error('See .env.example for more details');
   console.error('========================================');
   console.error('');
 
   if (currentEnv === 'production') {
     throw new Error(
-      `❌ Production build failed: Missing required environment variables: ${missing.map(v => v.name).join(', ')}\n\n` +
-      'These variables must be set in Railway before deployment can succeed.'
+      `❌ Production build failed: Missing required build-time variables: ${missingBuildTime.map(v => v.name).join(', ')}`
     );
-  } else {
-    console.warn('⚠️  WARNING: Missing production variables, but allowing build to continue in development mode');
   }
 }
 
-console.log('✅ Environment validation passed');
+// WARNING: Runtime variables missing, but allow build to continue
+if (missingRuntime.length > 0 && currentEnv === 'production') {
+  console.warn('');
+  console.warn('⚠️  WARNING: Missing RUNTIME environment variables (build will succeed, but app will fail at startup):');
+  console.warn('');
+  missingRuntime.forEach(({ name, example }) => {
+    console.warn(`   ⚠️  ${name}`);
+    console.warn(`      Example: ${example}`);
+  });
+  console.warn('');
+  console.warn('These variables are NOT needed for build, but MUST be set in Railway for the app to run.');
+  console.warn('Make sure to add them to the Railway dashboard before deploying.');
+  console.warn('========================================');
+  console.warn('');
+}
+
+console.log('✅ Build-time environment validation passed');
 console.log('========================================');
 
 /** @type {import('next').NextConfig} */
