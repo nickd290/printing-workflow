@@ -443,15 +443,45 @@ export async function getJobFileProgress(jobId: string): Promise<{
 
 interface JobUpdateData {
   quantity?: number;
+  sizeId?: string;
   deliveryDate?: Date | string;
   packingSlipNotes?: string;
   customerPONumber?: string;
   specs?: any;
+  // Custom pricing override (optional)
+  customPrice?: number;
 }
 
 interface UpdateContext {
   changedBy: string;       // User email or ID
   changedByRole: string;   // CUSTOMER, BROKER_ADMIN, BRADFORD_ADMIN
+}
+
+/**
+ * Validate that no calculated pricing fields are being directly manipulated
+ * Only quantity, sizeId, and customPrice should trigger pricing changes
+ */
+function validateNoPricingManipulation(updates: any): { valid: boolean; error?: string } {
+  const calculatedFields = [
+    'customerTotal', 'impactMargin', 'bradfordTotal', 'bradfordPrintMargin',
+    'bradfordPaperMargin', 'bradfordTotalMargin', 'jdTotal', 'paperCostTotal',
+    'paperChargedTotal', 'customerCPM', 'printCPM', 'paperChargedCPM',
+    'paperCostCPM', 'impactMarginCPM', 'bradfordTotalCPM', 'bradfordPrintMarginCPM',
+    'bradfordPaperMarginCPM', 'bradfordTotalMarginCPM', 'paperType',
+    'paperWeightPer1000', 'paperWeightTotal', 'sizeName'
+  ];
+
+  const manipulatedFields = calculatedFields.filter(field => updates[field] !== undefined);
+
+  if (manipulatedFields.length > 0) {
+    return {
+      valid: false,
+      error: `Cannot directly update calculated pricing fields: ${manipulatedFields.join(', ')}. ` +
+             `Please update quantity, sizeId, or customPrice instead to recalculate pricing automatically.`
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -462,6 +492,12 @@ export async function updateJob(
   updates: JobUpdateData,
   context: UpdateContext
 ) {
+  // Validate that no calculated pricing fields are being directly manipulated
+  const validation = validateNoPricingManipulation(updates);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
   // Get current job state
   const currentJob = await prisma.job.findUnique({
     where: { id: jobId },
@@ -486,14 +522,89 @@ export async function updateJob(
   // Build update data and track changes
   const updateData: any = {};
 
-  // Quantity
-  if (updates.quantity !== undefined && updates.quantity !== currentJob.quantity) {
+  // Check if quantity or sizeId is changing (requires pricing recalculation)
+  const quantityChanged = updates.quantity !== undefined && updates.quantity !== currentJob.quantity;
+  const sizeIdChanged = updates.sizeId !== undefined && updates.sizeId !== currentJob.sizeId;
+  const customPriceChanged = updates.customPrice !== undefined;
+  const needsPricingRecalculation = quantityChanged || sizeIdChanged || customPriceChanged;
+
+  // If pricing needs recalculation, do it now
+  if (needsPricingRecalculation) {
+    const newQuantity = updates.quantity ?? currentJob.quantity;
+    const newSizeId = updates.sizeId ?? currentJob.sizeId;
+
+    if (!newSizeId) {
+      throw new Error('Cannot recalculate pricing: sizeId is missing from job');
+    }
+
+    if (!newQuantity) {
+      throw new Error('Cannot recalculate pricing: quantity is missing from job');
+    }
+
+    // Determine custom price to use
+    // Priority: 1) updates.customPrice, 2) existing customerTotal (if set), 3) undefined (use standard)
+    let customPrice: number | undefined = undefined;
+    if (updates.customPrice !== undefined) {
+      customPrice = updates.customPrice;
+    } else if (currentJob.customerTotal !== null && !sizeIdChanged) {
+      // Preserve existing custom price only if size hasn't changed
+      customPrice = Number(currentJob.customerTotal);
+    }
+
+    // Recalculate all pricing
+    const pricing = calculateCustomPricing(newSizeId, newQuantity, customPrice);
+
+    // Add ALL pricing fields to updateData
+    updateData.sizeId = pricing.sizeId;
+    updateData.sizeName = pricing.sizeName;
+    updateData.quantity = pricing.quantity;
+
+    // CPM rates
+    updateData.customerCPM = pricing.customerCPM;
+    updateData.impactMarginCPM = pricing.impactMarginCPM;
+    updateData.bradfordTotalCPM = pricing.bradfordTotalCPM;
+    updateData.bradfordPrintMarginCPM = pricing.bradfordPrintMarginCPM;
+    updateData.bradfordPaperMarginCPM = pricing.bradfordPaperMarginCPM;
+    updateData.bradfordTotalMarginCPM = pricing.bradfordTotalMarginCPM;
+    updateData.printCPM = pricing.printCPM;
+    updateData.paperCostCPM = pricing.paperCostCPM;
+    updateData.paperChargedCPM = pricing.paperChargedCPM;
+
+    // Total amounts
+    updateData.customerTotal = pricing.customerTotal;
+    updateData.impactMargin = pricing.impactMargin;
+    updateData.bradfordTotal = pricing.bradfordTotal;
+    updateData.bradfordPrintMargin = pricing.bradfordPrintMargin;
+    updateData.bradfordPaperMargin = pricing.bradfordPaperMargin;
+    updateData.bradfordTotalMargin = pricing.bradfordTotalMargin;
+    updateData.jdTotal = pricing.jdTotal;
+    updateData.paperCostTotal = pricing.paperCostTotal;
+    updateData.paperChargedTotal = pricing.paperChargedTotal;
+
+    // Paper specifications
+    updateData.paperType = pricing.paperType;
+    updateData.paperWeightTotal = pricing.paperWeightTotal;
+    updateData.paperWeightPer1000 = pricing.paperWeightPer1000;
+
+    // Approval workflow (required if pricing is below cost)
+    updateData.requiresApproval = pricing.isLoss;
+
+    // Track pricing recalculation in activity log
     changes.push({
-      field: 'quantity',
-      oldValue: currentJob.quantity?.toString() || 'None',
-      newValue: updates.quantity.toString(),
+      field: 'pricing',
+      oldValue: `Quantity: ${currentJob.quantity}, Total: $${currentJob.customerTotal}`,
+      newValue: `Quantity: ${pricing.quantity}, Total: $${pricing.customerTotal.toFixed(2)} ${pricing.isLoss ? '(LOSS - Requires Approval)' : ''}`,
     });
-    updateData.quantity = updates.quantity;
+  } else {
+    // Quantity (only track if no pricing recalculation)
+    if (updates.quantity !== undefined && updates.quantity !== currentJob.quantity) {
+      changes.push({
+        field: 'quantity',
+        oldValue: currentJob.quantity?.toString() || 'None',
+        newValue: updates.quantity.toString(),
+      });
+      updateData.quantity = updates.quantity;
+    }
   }
 
   // Delivery Date
