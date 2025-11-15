@@ -10,12 +10,14 @@ import { GenericError } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/Badge';
 import { CurrencyDollarIcon, TrendingUpIcon, ChartBarIcon, ReceiptIcon, DocumentIcon } from '@/components/ui/Icons';
 import { POFlowChart } from './POFlowChart';
+import { BradfordOwedBreakdownModal } from '@/components/BradfordOwedBreakdownModal';
 
 export function ImpactDirectDashboard() {
   const [metrics, setMetrics] = useState<any>(null);
   const [poFlowData, setPoFlowData] = useState<POFlowMetrics | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [breakdownJob, setBreakdownJob] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
@@ -257,9 +259,21 @@ export function ImpactDirectDashboard() {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-orange-600">
+                  <td
+                    className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-orange-600 cursor-help hover:bg-orange-50 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBreakdownJob(job);
+                    }}
+                    title="Click to see breakdown"
+                  >
                     <div className="flex flex-col">
-                      <span>${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                      <div className="flex items-center gap-1">
+                        <span>${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
+                        <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
                       {job.bradfordTotalCPM && (
                         <span className="text-xs text-gray-500 font-normal">
                           ${Number(job.bradfordTotalCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
@@ -293,6 +307,15 @@ export function ImpactDirectDashboard() {
             setSelectedJobId(null);
             loadData();
           }}
+        />
+      )}
+
+      {/* Bradford Owed Breakdown Modal */}
+      {breakdownJob && (
+        <BradfordOwedBreakdownModal
+          job={breakdownJob}
+          isOpen={true}
+          onClose={() => setBreakdownJob(null)}
         />
       )}
     </div>
