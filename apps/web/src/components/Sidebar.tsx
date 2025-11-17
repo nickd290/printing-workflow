@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
 import { Logo } from '@/components/ui/Logo';
 import {
@@ -15,11 +15,13 @@ import {
   SparklesIcon,
   CurrencyDollarIcon,
   ChevronDownIcon,
+  BuildingOfficeIcon,
 } from '@/components/ui/Icons';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { user } = useUser();
+  const router = useRouter();
+  const { user, loading, logout } = useUser();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
@@ -38,7 +40,7 @@ export function Sidebar() {
     localStorage.setItem('sidebarCollapsed', String(newState));
   };
 
-  // Navigation items - role-based (same as before)
+  // Navigation items - role-based
   const navigation = user?.role === 'CUSTOMER'
     ? [
         { name: 'My Jobs', href: '/dashboard', Icon: DocumentIcon, badge: 0 },
@@ -49,28 +51,45 @@ export function Sidebar() {
     ? [
         { name: 'Dashboard', href: '/dashboard', Icon: HomeIcon, badge: 0 },
       ]
-    : user?.role === 'BROKER_ADMIN'
-    ? [
-        { name: 'Dashboard', href: '/dashboard', Icon: HomeIcon, badge: 0 },
-        { name: 'Pricing Rules', href: '/pricing-rules', Icon: CurrencyDollarIcon, badge: 0 },
-        { name: 'Financials', href: '/financials', Icon: ChartBarIcon, badge: 0 },
-      ]
     : [
+        // Clean menu for BROKER_ADMIN and other admin roles
         { name: 'Dashboard', href: '/dashboard', Icon: HomeIcon, badge: 0 },
-        { name: 'Jobs', href: '/jobs', Icon: DocumentIcon, badge: 5 }, // Example badge
-        { name: 'Quotes', href: '/quotes', Icon: SparklesIcon, badge: 2 },
+        { name: 'Quotes', href: '/quotes', Icon: SparklesIcon, badge: 0 },
         { name: 'Files', href: '/files', Icon: FolderIcon, badge: 0 },
-        { name: 'Purchase Orders', href: '/purchase-orders', Icon: ShoppingCartIcon, badge: 0 },
-        { name: 'Invoices', href: '/invoices', Icon: ReceiptIcon, badge: 3 },
         { name: 'Financials', href: '/financials', Icon: ChartBarIcon, badge: 0 },
+        { name: 'Vendors', href: '/vendors', Icon: BuildingOfficeIcon, badge: 0 },
       ];
 
   const isActive = (href: string) => pathname === href;
   const isExpanded = isCollapsed ? isHovering : true;
 
+  // Show loading state while user data is being fetched
+  if (loading) {
+    return (
+      <aside
+        className={`fixed left-0 top-0 bottom-0 bg-card border-r border-border transition-all duration-300 ease-in-out z-40 ${
+          isExpanded ? 'w-[280px]' : 'w-[64px]'
+        }`}
+        style={{ boxShadow: 'var(--shadow-sm)' }}
+      >
+        <div className="h-16 flex items-center px-4 border-b border-border/50">
+          <Logo variant="icon" size="md" className="text-primary" />
+        </div>
+        <div className="p-4 flex items-center justify-center">
+          <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+        </div>
+      </aside>
+    );
+  }
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
+
   return (
     <aside
-      className={`fixed left-0 top-[48px] bottom-0 bg-card border-r border-border transition-all duration-300 ease-in-out z-40 ${
+      className={`fixed left-0 top-0 bottom-0 bg-card border-r border-border transition-all duration-300 ease-in-out z-40 ${
         isExpanded ? 'w-[280px]' : 'w-[64px]'
       }`}
       onMouseEnter={() => isCollapsed && setIsHovering(true)}
@@ -102,7 +121,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation Items */}
-      <nav className="p-3 space-y-2 sidebar-scrollbar overflow-y-auto">
+      <nav className="p-3 space-y-2 sidebar-scrollbar overflow-y-auto pb-[180px]">
         {navigation.map((item) => {
           const Icon = item.Icon;
           const active = isActive(item.href);
@@ -148,14 +167,58 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer (Optional - Version or Help Link) */}
-      {isExpanded && (
-        <div className="absolute bottom-4 left-0 right-0 px-4">
-          <div className="text-xs text-muted-foreground text-center">
-            v1.0.0
+      {/* User Info & Logout */}
+      <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-card">
+        {user && isExpanded && (
+          <div className="p-4 space-y-3">
+            {/* User Info */}
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <span className="text-sm font-semibold text-primary">
+                  {user.name?.charAt(0).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-foreground truncate">
+                  {user.name}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {user.companyName}
+                </div>
+                <span className="inline-flex mt-1.5 px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                  {user.role.replace(/_/g, ' ')}
+                </span>
+              </div>
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-danger-foreground bg-danger hover:opacity-90 transition-opacity"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sign Out
+            </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Collapsed state - just logout icon */}
+        {user && !isExpanded && (
+          <div className="p-3">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center p-2 rounded-md text-danger-foreground bg-danger hover:opacity-90 transition-opacity"
+              title="Sign Out"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
     </aside>
   );
 }

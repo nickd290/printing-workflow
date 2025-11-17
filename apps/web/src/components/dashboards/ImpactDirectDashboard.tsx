@@ -1,18 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { revenueAPI, jobsAPI, reportsAPI, type POFlowMetrics } from '@/lib/api-client';
 import { JobDetailModal } from '@/components/JobDetailModal';
 import { JobApprovalSection } from '@/components/JobApprovalSection';
-import { MetricCard } from '@/components/ui/Card';
+import { StatsBar, type Stat } from '@/components/ui/StatsBar';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { GenericError } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/Badge';
-import { CurrencyDollarIcon, TrendingUpIcon, ChartBarIcon, ReceiptIcon, DocumentIcon } from '@/components/ui/Icons';
+import {
+  CurrencyDollarIcon,
+  TrendingUpIcon,
+  ChartBarIcon,
+  DocumentIcon,
+  ReceiptIcon
+} from '@/components/ui/Icons';
+import { ClipboardList as ClipboardListIcon, FileText as FileTextIcon } from 'lucide-react';
 import { POFlowChart } from './POFlowChart';
 import { BradfordOwedBreakdownModal } from '@/components/BradfordOwedBreakdownModal';
 
 export function ImpactDirectDashboard() {
+  const router = useRouter();
   const [metrics, setMetrics] = useState<any>(null);
   const [poFlowData, setPoFlowData] = useState<POFlowMetrics | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -72,122 +82,103 @@ export function ImpactDirectDashboard() {
 
   if (!metrics) return null;
 
+  // Prepare stats for horizontal bar
+  const pendingProofs = jobs.filter(job => job.proofs?.some((proof: any) => proof.status === 'PENDING')).length;
+  const inProduction = jobs.filter(job => job.status === 'IN_PRODUCTION').length;
+
+  const stats: Stat[] = [
+    {
+      label: 'Revenue',
+      value: `$${metrics.profitMargins.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      icon: <CurrencyDollarIcon className="h-4 w-4" />,
+      valueClassName: 'text-success',
+    },
+    {
+      label: 'Costs',
+      value: `$${metrics.profitMargins.totalCosts.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      icon: <ChartBarIcon className="h-4 w-4" />,
+      valueClassName: 'text-danger',
+    },
+    {
+      label: 'Profit',
+      value: `$${metrics.profitMargins.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      icon: <TrendingUpIcon className="h-4 w-4" />,
+      valueClassName: 'text-info',
+    },
+    {
+      label: 'Margin',
+      value: `${metrics.profitMargins.profitMargin.toFixed(1)}%`,
+      icon: <ChartBarIcon className="h-4 w-4" />,
+      delta: {
+        value: metrics.profitMargins.profitMargin >= 20 ? 'Healthy' : 'Monitor',
+        type: metrics.profitMargins.profitMargin >= 20 ? 'positive' : 'neutral',
+      },
+    },
+    {
+      label: 'Total Jobs',
+      value: jobs.length.toString(),
+      icon: <ClipboardListIcon className="h-4 w-4" />,
+    },
+    {
+      label: 'Pending Proofs',
+      value: pendingProofs.toString(),
+      icon: <FileTextIcon className="h-4 w-4" />,
+      valueClassName: pendingProofs > 0 ? 'text-warning' : '',
+    },
+    {
+      label: 'In Production',
+      value: inProduction.toString(),
+      icon: <ChartBarIcon className="h-4 w-4" />,
+      valueClassName: 'text-info',
+    },
+    {
+      label: 'Revenue MTD',
+      value: `$${(metrics.profitMargins.totalRevenue / 1000).toFixed(1)}K`,
+      icon: <TrendingUpIcon className="h-4 w-4" />,
+      valueClassName: 'text-success',
+    },
+  ];
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Impact Direct Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Complete operations overview
-          </p>
-        </div>
-        <button
-          onClick={handleDownloadReport}
-          disabled={downloadingReport}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {downloadingReport ? (
-            <>
-              <LoadingSpinner size="sm" />
-              <span>Generating...</span>
-            </>
-          ) : (
-            <>
-              <DocumentIcon className="w-5 h-5" />
-              <span>Download Daily Report</span>
-            </>
-          )}
-        </button>
-      </div>
+    <div className="flex-1 overflow-y-auto">
+      {/* Page Header */}
+      <PageHeader
+        title="Impact Direct Dashboard"
+        subtitle="Complete operations overview"
+        actions={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/jobs/create')}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Create New Job</span>
+            </button>
+            <button
+              onClick={handleDownloadReport}
+              disabled={downloadingReport}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              {downloadingReport ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <DocumentIcon className="w-4 h-4" />
+                  <span>Download Daily Report</span>
+                </>
+              )}
+            </button>
+          </div>
+        }
+      />
 
-      {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Revenue"
-          value={`$${metrics.profitMargins.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-          variant="success"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-success-light flex items-center justify-center">
-              <CurrencyDollarIcon className="w-6 h-6 text-success" />
-            </div>
-          }
-        />
-        <MetricCard
-          title="Costs"
-          value={`$${metrics.profitMargins.totalCosts.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-          variant="danger"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-danger-light flex items-center justify-center">
-              <ChartBarIcon className="w-6 h-6 text-danger" />
-            </div>
-          }
-        />
-        <MetricCard
-          title="Profit"
-          value={`$${metrics.profitMargins.grossProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-          variant="info"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-info-light flex items-center justify-center">
-              <TrendingUpIcon className="w-6 h-6 text-info" />
-            </div>
-          }
-        />
-        <MetricCard
-          title="Margin"
-          value={`${metrics.profitMargins.profitMargin.toFixed(1)}%`}
-          variant="default"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <ChartBarIcon className="w-6 h-6 text-foreground" />
-            </div>
-          }
-        />
-      </div>
-
-      {/* Secondary Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <MetricCard
-          title="Total Jobs"
-          value={jobs.length}
-          icon={
-            <div className="w-12 h-12 rounded-full bg-info-light flex items-center justify-center">
-              <DocumentIcon className="w-6 h-6 text-info" />
-            </div>
-          }
-        />
-        <MetricCard
-          title="Pending Proofs"
-          value={jobs.filter(job => job.proofs?.some((proof: any) => proof.status === 'PENDING')).length}
-          description="Awaiting customer approval"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-warning-light flex items-center justify-center">
-              <DocumentIcon className="w-6 h-6 text-warning" />
-            </div>
-          }
-        />
-        <MetricCard
-          title="In Production"
-          value={jobs.filter(job => job.status === 'IN_PRODUCTION').length}
-          description="Currently being produced"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-info-light flex items-center justify-center">
-              <ChartBarIcon className="w-6 h-6 text-info" />
-            </div>
-          }
-        />
-        <MetricCard
-          title="Revenue MTD"
-          value={`$${metrics.profitMargins.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-          description="Month to date"
-          variant="success"
-          icon={
-            <div className="w-12 h-12 rounded-full bg-success-light flex items-center justify-center">
-              <TrendingUpIcon className="w-6 h-6 text-success" />
-            </div>
-          }
-        />
-      </div>
+      {/* Horizontal Stats Bar */}
+      <StatsBar stats={stats} />
 
       {/* Jobs Requiring Approval */}
       <JobApprovalSection onJobUpdated={loadData} />
@@ -195,72 +186,72 @@ export function ImpactDirectDashboard() {
       {/* PO Flow Chart */}
       {poFlowData && <POFlowChart data={poFlowData} />}
 
-      {/* Jobs Table */}
-      <div className="card">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">Recent Jobs</h2>
-          <p className="text-sm text-muted-foreground mt-1">Click any row to view details</p>
+      {/* Recent Jobs Table */}
+      <div className="mt-8 px-8">
+        <div className="section-header">
+          <h2 className="section-title">Recent Jobs</h2>
+          <p className="text-sm text-muted-foreground">Click any row to view details</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="table-header">
+          <table className="minimal-table">
+            <thead>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer PO#</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Job #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Quantity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Margin</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Owed to Bradford</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+                <th>Customer PO#</th>
+                <th>Job #</th>
+                <th>Customer</th>
+                <th>Size</th>
+                <th>Quantity</th>
+                <th>Total</th>
+                <th>Margin</th>
+                <th>Owed to Bradford</th>
+                <th>Status</th>
+                <th>Date</th>
               </tr>
             </thead>
-            <tbody className="bg-card divide-y divide-border">
+            <tbody>
               {jobs.slice(0, 20).map((job) => (
                 <tr
                   key={job.id}
                   onClick={() => setSelectedJobId(job.id)}
-                  className="table-row cursor-pointer"
+                  className="hover:bg-[#FAFAFC] cursor-pointer transition-colors border-b border-border"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-primary">
                     {job.customerPONumber || '—'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground font-semibold">
                     {job.jobNo}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground">
                     {typeof job.customer === 'string' ? job.customer : job.customer?.name || 'Unknown'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground">
                     {job.sizeName || '—'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground">
                     {job.quantity ? Number(job.quantity).toLocaleString('en-US') : '—'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-foreground">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-foreground">
                     <div className="flex flex-col">
                       <span>${Number(job.customerTotal).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                       {job.customerCPM && (
-                        <span className="text-xs text-gray-500 font-normal">
+                        <span className="text-sm text-data-label font-normal">
                           ${Number(job.customerCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-success">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-success">
                     <div className="flex flex-col">
                       <span>${job.impactMargin ? Number(job.impactMargin).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
                       {job.impactMarginCPM && (
-                        <span className="text-xs text-gray-500 font-normal">
+                        <span className="text-sm text-data-label font-normal">
                           ${Number(job.impactMarginCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
                         </span>
                       )}
                     </div>
                   </td>
                   <td
-                    className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-orange-600 cursor-help hover:bg-orange-50 transition-colors"
+                    className="px-6 py-3 whitespace-nowrap text-sm font-medium text-warning cursor-help hover:bg-warning/10 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
                       setBreakdownJob(job);
@@ -270,21 +261,21 @@ export function ImpactDirectDashboard() {
                     <div className="flex flex-col">
                       <div className="flex items-center gap-1">
                         <span>${job.bradfordTotal ? Number(job.bradfordTotal).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</span>
-                        <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
                       {job.bradfordTotalCPM && (
-                        <span className="text-xs text-gray-500 font-normal">
+                        <span className="text-sm text-data-label font-normal">
                           ${Number(job.bradfordTotalCPM).toLocaleString('en-US', { minimumFractionDigits: 2 })}/M
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-3 whitespace-nowrap">
                     <StatusBadge status={job.status} />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                  <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground">
                     {new Date(job.createdAt).toLocaleDateString()}
                   </td>
                 </tr>
@@ -292,8 +283,8 @@ export function ImpactDirectDashboard() {
             </tbody>
           </table>
           {jobs.length === 0 && (
-            <div className="empty-state">
-              <p className="text-muted-foreground">No jobs found</p>
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              No jobs found
             </div>
           )}
         </div>

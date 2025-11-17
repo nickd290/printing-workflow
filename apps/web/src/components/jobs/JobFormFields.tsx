@@ -1,5 +1,8 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { vendorsAPI, type Vendor } from '@/lib/api-client';
+
 interface JobFormData {
   description: string;
   paper: string;
@@ -13,6 +16,11 @@ interface JobFormData {
   samples: string;
   requiredArtworkCount: number;
   requiredDataFileCount: number;
+  // Routing fields
+  routingType?: 'BRADFORD_JD' | 'THIRD_PARTY_VENDOR';
+  vendorId?: string;
+  vendorAmount?: string;
+  bradfordCut?: string;
 }
 
 interface JobFormFieldsProps {
@@ -20,14 +28,40 @@ interface JobFormFieldsProps {
   onChange: (field: keyof JobFormData, value: string | number) => void;
   disabled?: boolean;
   showFileRequirements?: boolean;
+  showRoutingOptions?: boolean; // Only shown to admins
 }
 
 export function JobFormFields({
   data,
   onChange,
   disabled = false,
-  showFileRequirements = true
+  showFileRequirements = true,
+  showRoutingOptions = false
 }: JobFormFieldsProps) {
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+
+  // Load vendors when routing options are shown
+  useEffect(() => {
+    if (showRoutingOptions) {
+      const loadVendors = async () => {
+        try {
+          setLoadingVendors(true);
+          const data = await vendorsAPI.list({ isActive: true });
+          setVendors(data);
+        } catch (error) {
+          console.error('Failed to load vendors:', error);
+        } finally {
+          setLoadingVendors(false);
+        }
+      };
+      loadVendors();
+    }
+  }, [showRoutingOptions]);
+
+  const routingType = data.routingType || 'BRADFORD_JD';
+  const isThirdPartyVendor = routingType === 'THIRD_PARTY_VENDOR';
+
   return (
     <div className="space-y-6">
       {/* Job Description */}
@@ -44,6 +78,155 @@ export function JobFormFields({
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
         />
       </div>
+
+      {/* Routing Options (Admin Only) */}
+      {showRoutingOptions && (
+        <div className="border-t border-gray-200 pt-6">
+          <h3 className="text-sm font-medium text-gray-900 mb-4">Production Routing</h3>
+
+          {/* Routing Type Selection */}
+          <div className="space-y-3 mb-4">
+            <label className="flex items-start p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="routingType"
+                value="BRADFORD_JD"
+                checked={routingType === 'BRADFORD_JD'}
+                onChange={(e) => onChange('routingType', e.target.value)}
+                disabled={disabled}
+                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+              <div className="ml-3">
+                <div className="text-sm font-medium text-gray-900">Bradford → JD Graphic</div>
+                <div className="text-sm text-gray-500">Traditional routing with auto-calculated pricing</div>
+              </div>
+            </label>
+
+            <label className="flex items-start p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="routingType"
+                value="THIRD_PARTY_VENDOR"
+                checked={routingType === 'THIRD_PARTY_VENDOR'}
+                onChange={(e) => onChange('routingType', e.target.value)}
+                disabled={disabled}
+                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+              <div className="ml-3">
+                <div className="text-sm font-medium text-gray-900">Third-Party Vendor</div>
+                <div className="text-sm text-gray-500">Direct to external vendor with manual pricing</div>
+              </div>
+            </label>
+          </div>
+
+          {/* Third-Party Vendor Fields */}
+          {isThirdPartyVendor && (
+            <div className="space-y-4 mt-4 p-4 bg-blue-50 rounded-md border border-blue-200">
+              {/* Vendor Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">
+                  Select Vendor *
+                </label>
+                <select
+                  value={data.vendorId || ''}
+                  onChange={(e) => onChange('vendorId', e.target.value)}
+                  disabled={disabled || loadingVendors}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                >
+                  <option value="">-- Select a vendor --</option>
+                  {vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </option>
+                  ))}
+                </select>
+                {loadingVendors && (
+                  <p className="mt-1 text-xs text-gray-500">Loading vendors...</p>
+                )}
+              </div>
+
+              {/* Vendor Amount */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">
+                  Vendor Quote Amount *
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={data.vendorAmount || ''}
+                    onChange={(e) => onChange('vendorAmount', e.target.value)}
+                    disabled={disabled}
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-600">
+                  Amount quoted by the third-party vendor
+                </p>
+              </div>
+
+              {/* Bradford Cut */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">
+                  Bradford's Cut *
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={data.bradfordCut || ''}
+                    onChange={(e) => onChange('bradfordCut', e.target.value)}
+                    disabled={disabled}
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-600">
+                  Bradford's portion of the profit
+                </p>
+              </div>
+
+              {/* Margin Calculation Helper */}
+              {data.total && data.vendorAmount && data.bradfordCut && (
+                <div className="mt-3 p-3 bg-white rounded border border-blue-300">
+                  <div className="text-xs font-medium text-gray-700 mb-2">Margin Breakdown:</div>
+                  <div className="space-y-1 text-xs text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Customer Total:</span>
+                      <span className="font-medium">${parseFloat(data.total || '0').toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Vendor Amount:</span>
+                      <span className="font-medium">-${parseFloat(data.vendorAmount || '0').toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Bradford's Cut:</span>
+                      <span className="font-medium">-${parseFloat(data.bradfordCut || '0').toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-gray-200">
+                      <span className="font-semibold">Impact Margin:</span>
+                      <span className={`font-semibold ${
+                        parseFloat(data.total) - parseFloat(data.vendorAmount) - parseFloat(data.bradfordCut) >= 0
+                          ? 'text-green-600'
+                          : 'text-red-600'
+                      }`}>
+                        ${(parseFloat(data.total || '0') - parseFloat(data.vendorAmount || '0') - parseFloat(data.bradfordCut || '0')).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Paper Type */}
       <div>

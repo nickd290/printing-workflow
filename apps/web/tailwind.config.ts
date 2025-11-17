@@ -13,6 +13,8 @@ const config: Config = {
         border: {
           DEFAULT: 'hsl(var(--border))',
           strong: 'hsl(var(--border-strong))',
+          light: 'hsl(var(--border-light))',
+          subtle: 'hsl(var(--border-subtle))',
         },
         input: {
           DEFAULT: 'hsl(var(--input))',
@@ -20,8 +22,17 @@ const config: Config = {
           focus: 'hsl(var(--input-focus))',
         },
         ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
+        background: {
+          DEFAULT: 'hsl(var(--background))',
+          subtle: 'hsl(var(--background-subtle))',
+        },
         foreground: 'hsl(var(--foreground))',
+        'sidebar-dark': {
+          DEFAULT: 'hsl(var(--sidebar-dark))',
+          text: 'hsl(var(--sidebar-dark-text))',
+          muted: 'hsl(var(--sidebar-dark-muted))',
+          border: 'hsl(var(--sidebar-dark-border))',
+        },
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
@@ -60,6 +71,7 @@ const config: Config = {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))',
         },
+        'data-label': 'hsl(var(--data-label))',
         accent: {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))',
@@ -87,11 +99,9 @@ const config: Config = {
         xs: 'var(--shadow-xs)',
         sm: 'var(--shadow-sm)',
         DEFAULT: 'var(--shadow)',
-        md: 'var(--shadow-md)',
         lg: 'var(--shadow-lg)',
-        xl: 'var(--shadow-xl)',
-        '2xl': 'var(--shadow-2xl)',
         'inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
+        'none': 'none',
       },
       fontSize: {
         'xs': ['0.75rem', { lineHeight: '1rem' }],

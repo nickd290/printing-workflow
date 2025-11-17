@@ -1,6 +1,5 @@
 'use client';
 
-import { Navigation } from '@/components/navigation';
 import { Tabs } from '@/components/Tabs';
 import { useState, useEffect } from 'react';
 import { purchaseOrdersAPI, jobsAPI, APIError } from '@/lib/api-client';
@@ -148,7 +147,6 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation />
       <Toaster position="top-right" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -207,6 +205,9 @@ export default function PurchaseOrdersPage() {
           const bradfordToJdPOs = purchaseOrders.filter(
             po => po.originCompany?.id === 'bradford' && po.targetCompany?.id === 'jd-graphic'
           );
+          const thirdPartyVendorPOs = purchaseOrders.filter(
+            po => po.targetVendor !== undefined && po.targetVendor !== null
+          );
 
           // Determine which POs to display based on active tab
           let displayedPOs = purchaseOrders;
@@ -214,6 +215,8 @@ export default function PurchaseOrdersPage() {
             displayedPOs = impactToBradfordPOs;
           } else if (activeTab === 'bradford-jd') {
             displayedPOs = bradfordToJdPOs;
+          } else if (activeTab === 'third-party-vendors') {
+            displayedPOs = thirdPartyVendorPOs;
           }
 
           const totalAmount = displayedPOs.reduce((sum, po) => sum + Number(po.vendorAmount), 0);
@@ -228,6 +231,7 @@ export default function PurchaseOrdersPage() {
                   tabs={[
                     { id: 'impact-bradford', label: 'Impact → Bradford', count: impactToBradfordPOs.length },
                     { id: 'bradford-jd', label: 'Bradford → JD', count: bradfordToJdPOs.length },
+                    { id: 'third-party-vendors', label: 'Third-Party Vendors', count: thirdPartyVendorPOs.length },
                     { id: 'all', label: 'All Purchase Orders', count: purchaseOrders.length }
                   ]}
                 />
@@ -240,6 +244,7 @@ export default function PurchaseOrdersPage() {
                     <p className="text-sm font-medium text-gray-500">
                       {activeTab === 'impact-bradford' ? 'Impact → Bradford POs' :
                        activeTab === 'bradford-jd' ? 'Bradford → JD POs' :
+                       activeTab === 'third-party-vendors' ? 'Third-Party Vendor POs' :
                        'All Purchase Orders'}
                     </p>
                     <p className="text-3xl font-bold text-blue-600 mt-2">
@@ -261,6 +266,7 @@ export default function PurchaseOrdersPage() {
                   <h2 className="text-lg font-medium text-gray-900">
                     {activeTab === 'impact-bradford' ? 'Impact Direct → Bradford' :
                      activeTab === 'bradford-jd' ? 'Bradford → JD Graphic' :
+                     activeTab === 'third-party-vendors' ? 'Impact Direct → Third-Party Vendors' :
                      'All Purchase Orders'}
                   </h2>
                 </div>
@@ -294,7 +300,16 @@ export default function PurchaseOrdersPage() {
                               {po.originCompany?.name || 'Unknown'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {po.targetCompany?.name || 'Unknown'}
+                              {po.targetVendor ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                  </svg>
+                                  {po.targetVendor.name}
+                                </span>
+                              ) : (
+                                po.targetCompany?.name || 'Unknown'
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
                               {po.job?.jobNo || 'N/A'}

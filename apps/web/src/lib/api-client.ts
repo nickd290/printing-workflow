@@ -871,6 +871,84 @@ export const adminAPI = {
 };
 
 // ============================================================================
+// Vendors API
+// ============================================================================
+
+export interface Vendor {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    jobs: number;
+  };
+}
+
+export interface CreateVendorBody {
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface UpdateVendorBody {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  isActive?: boolean;
+}
+
+export const vendorsAPI = {
+  list: async (filters?: { isActive?: boolean; search?: string }) => {
+    const query = new URLSearchParams(filters as any).toString();
+    const response = await fetch(`${API_URL}/api/vendors?${query}`, {
+      credentials: 'include',
+    });
+    return handleResponse<Vendor[]>(response);
+  },
+
+  getById: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/vendors/${id}`, {
+      credentials: 'include',
+    });
+    return handleResponse<Vendor>(response);
+  },
+
+  create: async (data: CreateVendorBody) => {
+    const response = await fetch(`${API_URL}/api/vendors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Vendor>(response);
+  },
+
+  update: async (id: string, data: UpdateVendorBody) => {
+    const response = await fetch(`${API_URL}/api/vendors/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Vendor>(response);
+  },
+
+  delete: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/vendors/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return handleResponse<{ success: boolean; vendor: Vendor }>(response);
+  },
+};
+
+// ============================================================================
 // Export error class for error handling
 // ============================================================================
 

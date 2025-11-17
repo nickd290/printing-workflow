@@ -1,7 +1,8 @@
-import { prisma, JobStatus } from '@printing-workflow/db';
-import { calculateJobPricing, calculateCustomPricing, calculateDynamicPricing, calculateFromCustomerTotal } from '@printing-workflow/shared';
+import { prisma, JobStatus, RoutingType } from '@printing-workflow/db';
+import { calculateJobPricing, calculateCustomPricing, calculateDynamicPricing, calculateFromCustomerTotal, PRODUCT_SIZES, COMPANY_IDS } from '@printing-workflow/shared';
 import { generateJobNumber } from '../lib/utils.js';
 import { queueAutoPOCreation } from '../lib/queue.js';
+import { createThirdPartyVendorPO } from './purchase-order.service.js';
 
 /**
  * Validates that all required financial fields are present in job data
@@ -165,15 +166,71 @@ export async function createDirectJob(data: {
   customPrice?: number; // Custom customer price (optional)
   customPaperCPM?: number; // Custom Bradford paper CPM (optional)
   jdSuppliesPaper?: boolean; // True if JD supplies paper (10/10 split, no Bradford markup)
+  bradfordWaivesPaperMargin?: boolean; // True if Bradford waives paper margin (50/50 total split)
+
+  // Vendor Routing (new)
+  routingType?: RoutingType; // BRADFORD_JD (default) or THIRD_PARTY_VENDOR
+  vendorId?: string; // Third-party vendor ID (required if THIRD_PARTY_VENDOR)
+  vendorAmount?: number; // Manual vendor quote amount (required if THIRD_PARTY_VENDOR)
+  bradfordCut?: number; // Bradford's portion for third-party jobs (required if THIRD_PARTY_VENDOR)
 }) {
   // Validate customer PO number is provided
   if (!data.customerPONumber || data.customerPONumber.trim() === '') {
     throw new Error('Customer PO number is required');
   }
 
-  // Calculate all pricing using the pricing calculator
-  // Use custom pricing calculator if customPrice or customPaperCPM is provided
-  const pricing = calculateCustomPricing(data.sizeId, data.quantity, data.customPrice, data.customPaperCPM);
+  // Determine routing type (default to BRADFORD_JD for backward compatibility)
+  const routingType = data.routingType || RoutingType.BRADFORD_JD;
+
+  // Validate third-party vendor routing requirements
+  if (routingType === RoutingType.THIRD_PARTY_VENDOR) {
+    if (!data.vendorId || data.vendorId.trim() === '') {
+      throw new Error('Vendor ID is required for third-party vendor routing');
+    }
+    if (data.vendorAmount === undefined || data.vendorAmount === null) {
+      throw new Error('Vendor quote amount is required for third-party vendor routing');
+    }
+    if (data.bradfordCut === undefined || data.bradfordCut === null) {
+      throw new Error("Bradford's cut amount is required for third-party vendor routing");
+    }
+
+    // Verify vendor exists and is active
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: data.vendorId },
+    });
+
+    if (!vendor) {
+      throw new Error('Vendor not found');
+    }
+
+    if (!vendor.isActive) {
+      throw new Error('Cannot create job with inactive vendor');
+    }
+  }
+
+  // Get sizeName from sizeId (lookup in legacy PRODUCT_SIZES)
+  const sizeInfo = PRODUCT_SIZES[data.sizeId];
+  if (!sizeInfo) {
+    throw new Error(`Invalid size ID: ${data.sizeId}`);
+  }
+
+  // Build pricing overrides if custom values provided
+  const overrides = data.customPrice || data.customPaperCPM
+    ? {
+        customerCPM: data.customPrice ? data.customPrice / (data.quantity / 1000) : undefined,
+        paperChargedCPM: data.customPaperCPM,
+      }
+    : undefined;
+
+  // Calculate all pricing using the dynamic pricing calculator
+  const pricing = await calculateDynamicPricing(
+    prisma,
+    sizeInfo.name, // sizeName
+    data.quantity,
+    overrides,
+    data.jdSuppliesPaper ?? false,
+    data.bradfordWaivesPaperMargin ?? false
+  );
 
   // Validate that all required financial fields are present
   validateJobFinancialFields(pricing);
@@ -194,6 +251,12 @@ export async function createDirectJob(data: {
       status: JobStatus.PENDING,
       specs,
       customerPONumber: data.customerPONumber.trim(),
+
+      // Vendor routing
+      routingType,
+      vendorId: data.vendorId,
+      vendorAmount: data.vendorAmount,
+      bradfordCut: data.bradfordCut,
 
       // Product details
       sizeId: pricing.sizeId,
@@ -226,24 +289,38 @@ export async function createDirectJob(data: {
       paperType: pricing.paperType,
       paperWeightTotal: pricing.paperWeightTotal,
       paperWeightPer1000: pricing.paperWeightPer1000,
-      jdSuppliesPaper: data.jdSuppliesPaper ?? false,  // Default to false (50/50 split)
+      jdSuppliesPaper: data.jdSuppliesPaper ?? false,  // Default to false (normal mode)
+      bradfordWaivesPaperMargin: data.bradfordWaivesPaperMargin ?? false, // Default to false (normal mode)
 
       // Approval workflow (required if pricing is below cost)
-      requiresApproval: pricing.isLoss,
+      requiresApproval: pricing.requiresApproval ?? false,
     },
     include: {
       customer: true,
+      vendor: true,
     },
   });
 
-  // Queue auto-PO creation (Impact → Bradford)
-  await queueAutoPOCreation({
-    jobId: job.id,
-    customerTotal: pricing.customerTotal,
-    bradfordTotal: pricing.bradfordTotal,
-    jdTotal: pricing.jdTotal,
-    customerPONumber: data.customerPONumber.trim(),
-  });
+  // Conditional PO creation based on routing type
+  if (routingType === RoutingType.BRADFORD_JD) {
+    // Traditional flow: Queue auto-PO creation (Impact → Bradford)
+    await queueAutoPOCreation({
+      jobId: job.id,
+      customerTotal: pricing.customerTotal,
+      bradfordTotal: pricing.bradfordTotal,
+      jdTotal: pricing.jdTotal,
+      customerPONumber: data.customerPONumber.trim(),
+    });
+  } else if (routingType === RoutingType.THIRD_PARTY_VENDOR) {
+    // New flow: Create third-party vendor PO (Impact → Third-Party Vendor)
+    await createThirdPartyVendorPO({
+      jobId: job.id,
+      vendorId: data.vendorId!,
+      vendorAmount: data.vendorAmount!,
+      bradfordCut: data.bradfordCut!,
+      customerPONumber: data.customerPONumber.trim(),
+    });
+  }
 
   return job;
 }
@@ -263,6 +340,7 @@ export async function getJobById(id: string) {
     where: { id },
     include: {
       customer: true,
+      vendor: true,
       quote: {
         include: {
           quoteRequest: true,
@@ -734,8 +812,20 @@ export async function updateJob(
     }
   }
 
-  // PRICING RECALCULATION
-  // If customerTotal, paperChargedCPM, paperChargedTotal, or margin flags changed, recalculate all derived pricing fields
+  // ===================================================================================
+  // PRICING RECALCULATION - SIMPLE RULE
+  // ===================================================================================
+  // The pricing system follows a simple rule:
+  // 1. Start with customer price (from pricing rule OR manual override)
+  // 2. Apply 2 adjustable flags:
+  //    - jdSuppliesPaper: If true, 10/10/80 split, no paper markup
+  //    - bradfordWaivesPaperMargin: If true, 50/50 total margin, paper at cost
+  // 3. Calculate all other fields using basic math
+  //
+  // When any pricing field or flag changes, we recalculate all derived fields
+  // while preserving the user's manual edits (see "MANUAL OVERRIDE PROTECTION" below)
+  // ===================================================================================
+
   const pricingFieldsChanged = updateData.customerTotal !== undefined ||
                                updateData.paperChargedCPM !== undefined ||
                                updateData.paperChargedTotal !== undefined ||
@@ -747,15 +837,24 @@ export async function updateJob(
   const marginFlagsChanged = (updateData.jdSuppliesPaper !== undefined ||
                              updateData.bradfordWaivesPaperMargin !== undefined);
 
-  // Only run standard pricing recalculation if margin flags DIDN'T change
-  // This prevents double-recalculation where the standard calculator overwrites the correct margin flag calculations
-  if (pricingFieldsChanged && !marginFlagsChanged && currentJob.sizeName && currentJob.quantity) {
+  // Run pricing recalculation when any pricing field changes (including margin flags)
+  // The calculator properly handles all margin modes based on the flags passed to it
+  if (pricingFieldsChanged && currentJob.sizeName && currentJob.quantity) {
     try {
       const { calculateDynamicPricing } = await import('@printing-workflow/shared/pricing-calculator');
 
       // Prepare overrides based on what was changed
       const overrides: any = {};
 
+      // ==========================================
+      // MANUAL OVERRIDE PROTECTION
+      // ==========================================
+      // When a user manually edits pricing fields (like customerTotal or paperChargedCPM),
+      // we need to recalculate all derived fields while preserving their manual edits.
+      //
+      // Example: User changes customerTotal → we recalculate margins, but keep their customerTotal
+      // This prevents the calculator from overwriting the user's intentional manual changes.
+      //
       // Track user's manual values to preserve them after recalculation
       const userCustomerTotal = updateData.customerTotal;
       const userPaperChargedCPM = updateData.paperChargedCPM;
@@ -788,12 +887,14 @@ export async function updateJob(
 
       // Recalculate all pricing fields
       const jdSuppliesPaper = updateData.jdSuppliesPaper ?? currentJob.jdSuppliesPaper ?? false;
+      const bradfordWaivesPaperMargin = updateData.bradfordWaivesPaperMargin ?? currentJob.bradfordWaivesPaperMargin ?? false;
       const recalculatedPricing = await calculateDynamicPricing(
         prisma,
         currentJob.sizeName,
         currentJob.quantity,
         overrides,
-        jdSuppliesPaper
+        jdSuppliesPaper,
+        bradfordWaivesPaperMargin
       );
 
       // Update all derived pricing fields

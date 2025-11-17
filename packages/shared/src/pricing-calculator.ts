@@ -26,7 +26,6 @@ export interface PricingOverrides {
   printCPM?: number;            // Override JD print cost per M
   paperCostCPM?: number;        // Override paper cost per M
   paperChargedCPM?: number;     // Override paper charge per M
-  paperMarkupPercent?: number;  // Override paper markup %
 }
 
 /**
@@ -113,15 +112,15 @@ export async function calculateDynamicPricing(
     paperChargedCPM = paperCostCPM; // No markup when JD supplies paper
   }
 
-  // Calculate paper markup
-  const paperMarkupCPM = paperChargedCPM - paperCostCPM;
+  // Calculate paper markup (let instead of const so it can be updated in special modes)
+  let paperMarkupCPM = paperChargedCPM - paperCostCPM;
 
   // Standard customer rate = what Impact charges customer (impactInvoicePerM in CSV)
   // This is the baseline rate that the customer should be charged
-  const standardCustomerCPM = Number(pricingRule.impactInvoicePerM || pricingRule.baseCPM || 0);
+  const standardCustomerCPM = Number(pricingRule.impactInvoicePerM || 0);
 
-  // Baseline minimum rate for undercharge detection (impactInvoicePerM in CSV)
-  const minimumCustomerCPM = Number(pricingRule.impactInvoicePerM || 0);
+  // Baseline minimum rate for undercharge detection
+  const minimumCustomerCPM = standardCustomerCPM;
 
   // Actual customer price (use override or standard)
   const customerCPM = overrides?.customerCPM ?? standardCustomerCPM;
@@ -159,6 +158,7 @@ export async function calculateDynamicPricing(
     // Bradford Waives Paper Margin: 50/50 split of total margin, no paper markup
     // Bradford charges paper at cost (no markup)
     paperChargedCPM = paperCostCPM;
+    paperMarkupCPM = 0; // Recalculate: no markup when waived
 
     // JD receives print cost
     jdTotalCPM = printCPM;

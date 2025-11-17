@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useUser } from '@/contexts/UserContext';
 import { JobFormFields } from './JobFormFields';
 
 interface ParsedPOData {
@@ -26,6 +27,7 @@ interface POReviewFormProps {
 }
 
 export function POReviewForm({ parsedData, onConfirm, onCancel, loading = false }: POReviewFormProps) {
+  const { isBrokerAdmin } = useUser();
   const [formData, setFormData] = useState({
     description: parsedData.description || '',
     paper: parsedData.paper || '',
@@ -39,6 +41,11 @@ export function POReviewForm({ parsedData, onConfirm, onCancel, loading = false 
     samples: parsedData.samples || '',
     requiredArtworkCount: parsedData.requiredArtworkCount || 1,
     requiredDataFileCount: parsedData.requiredDataFileCount || 0,
+    // Routing fields (admin only)
+    routingType: 'BRADFORD_JD' as const,
+    vendorId: '',
+    vendorAmount: '',
+    bradfordCut: '',
   });
 
   const handleFieldChange = (field: string, value: string | number) => {
@@ -46,7 +53,30 @@ export function POReviewForm({ parsedData, onConfirm, onCancel, loading = false 
   };
 
   const handleConfirm = () => {
-    onConfirm(formData);
+    // Validate third-party vendor fields if selected
+    if (formData.routingType === 'THIRD_PARTY_VENDOR') {
+      if (!formData.vendorId) {
+        alert('Please select a vendor');
+        return;
+      }
+      if (!formData.vendorAmount || parseFloat(formData.vendorAmount) <= 0) {
+        alert('Please enter a valid vendor amount');
+        return;
+      }
+      if (!formData.bradfordCut || parseFloat(formData.bradfordCut) < 0) {
+        alert('Please enter a valid Bradford cut amount');
+        return;
+      }
+    }
+
+    // Convert routing fields to proper types if third-party vendor
+    const submitData = { ...formData };
+    if (isBrokerAdmin && formData.routingType === 'THIRD_PARTY_VENDOR') {
+      submitData.vendorAmount = parseFloat(formData.vendorAmount);
+      submitData.bradfordCut = parseFloat(formData.bradfordCut);
+    }
+
+    onConfirm(submitData);
   };
 
   return (
@@ -81,6 +111,7 @@ export function POReviewForm({ parsedData, onConfirm, onCancel, loading = false 
         onChange={handleFieldChange}
         disabled={loading}
         showFileRequirements={true}
+        showRoutingOptions={isBrokerAdmin}
       />
 
       {/* Actions */}

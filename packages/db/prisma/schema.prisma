@@ -59,6 +59,23 @@ model Account {
 // Companies & Contacts
 // ============================================================================
 
+model Vendor {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs              Job[]
+  purchaseOrders    PurchaseOrder[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -157,6 +174,11 @@ model Quote {
 // Jobs
 // ============================================================================
 
+enum RoutingType {
+  BRADFORD_JD         // Traditional flow: Impact → Bradford → JD Graphic
+  THIRD_PARTY_VENDOR  // New flow: Impact → Third-Party Vendor (Bradford gets cut)
+}
+
 enum JobStatus {
   PENDING
   IN_PRODUCTION
@@ -175,6 +197,13 @@ model Job {
 
   customerId String
   customer   Company   @relation("CustomerJobs", fields: [customerId], references: [id])
+
+  // Vendor Routing (new)
+  routingType    RoutingType  @default(BRADFORD_JD)
+  vendorId       String?
+  vendor         Vendor?      @relation(fields: [vendorId], references: [id])
+  vendorAmount   Decimal?     // Manual vendor quote (for third-party vendors)
+  bradfordCut    Decimal?     // Bradford's portion for third-party jobs
 
   status     JobStatus @default(PENDING)
 
@@ -202,7 +231,8 @@ model Job {
   paperChargedCPM       Decimal?
 
   // Total amounts for this job
-  customerTotal         Decimal
+  customerTotal         Decimal  // What Bradford invoices to Impact
+  impactCustomerTotal   Decimal? // What Impact invoices to their end customer
   impactMargin          Decimal?
   bradfordTotal         Decimal?
   bradfordPrintMargin   Decimal?  // Bradford's print profit
@@ -258,6 +288,8 @@ model Job {
   @@index([customerId])
   @@index([status])
   @@index([jobNo])
+  @@index([vendorId])
+  @@index([routingType])
 }
 
 // Job Activity / Audit Log
@@ -388,9 +420,13 @@ model PurchaseOrder {
   originCompanyId String
   originCompany   Company  @relation("OriginCompanyPOs", fields: [originCompanyId], references: [id])
 
-  // Target company is the seller
-  targetCompanyId String
-  targetCompany   Company  @relation("TargetCompanyPOs", fields: [targetCompanyId], references: [id])
+  // Target company is the seller (for Bradford→JD flow)
+  targetCompanyId String?
+  targetCompany   Company?  @relation("TargetCompanyPOs", fields: [targetCompanyId], references: [id])
+
+  // Target vendor is the seller (for Impact→ThirdPartyVendor flow)
+  targetVendorId  String?
+  targetVendor    Vendor?  @relation(fields: [targetVendorId], references: [id])
 
   jobId           String?
   job             Job?     @relation(fields: [jobId], references: [id])
@@ -419,6 +455,7 @@ model PurchaseOrder {
 
   @@index([originCompanyId])
   @@index([targetCompanyId])
+  @@index([targetVendorId])
   @@index([jobId])
   @@index([externalRef])
   @@index([poNumber])

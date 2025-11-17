@@ -4,39 +4,45 @@
 
 @layer base {
   :root {
-    /* Modern SaaS Light Theme - Professional & Clean */
-    --background: 210 20% 98%; /* #F7F8FA */
-    --background-subtle: 210 20% 96%;
-    --foreground: 222 47% 11%;
+    /* Linear/Vercel Minimal Theme - Ultra-clean, high-contrast */
+    --background: 210 20% 97%; /* #F5F6FA soft, light neutral */
+    --background-subtle: 210 20% 99%; /* Lighter for elevated sections */
+    --foreground: 216 11% 14%; /* #1F2329 dark neutral text */
 
-    /* Card variants - Pure white with soft shadows */
+    /* Card variants - Pure white, minimal shadows */
     --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 216 11% 14%;
     --card-hover: 210 20% 99%;
 
-    /* Primary brand color - Electric Blue (#4D7CFF) */
-    --primary: 225 100% 65%;
+    /* Sidebar - Dark graphite */
+    --sidebar-dark: 220 20% 5%; /* #0D0F12 near-black graphite */
+    --sidebar-dark-text: 0 0% 98%;
+    --sidebar-dark-muted: 220 10% 75%;
+    --sidebar-dark-border: 220 15% 15%;
+
+    /* Primary brand color - Modern Blue (#4B82F2) */
+    --primary: 219 89% 61%; /* #4B82F2 modern but not childish */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 225 100% 60%;
-    --primary-light: 225 100% 97%;
+    --primary-hover: 219 89% 55%;
+    --primary-light: 219 89% 97%;
 
     /* Secondary colors - Softer tones */
     --secondary: 214 27% 93%;
     --secondary-foreground: 222 47% 11%;
     --secondary-hover: 214 27% 88%;
 
-    /* Status colors - Muted for modern aesthetic */
-    --success: 142 60% 45%;
+    /* Status colors - Muted, professional */
+    --success: 140 60% 47%; /* #4BB878 muted green */
     --success-foreground: 0 0% 100%;
-    --success-light: 142 60% 96%;
+    --success-light: 140 60% 96%;
 
-    --warning: 38 80% 50%;
-    --warning-foreground: 0 0% 100%;
-    --warning-light: 38 80% 96%;
+    --warning: 43 90% 60%; /* #F2C94C deep gold */
+    --warning-foreground: 216 11% 14%;
+    --warning-light: 43 90% 96%;
 
-    --danger: 0 65% 52%;
+    --danger: 0 63% 63%; /* #EB5757 muted red */
     --danger-foreground: 0 0% 100%;
-    --danger-light: 0 65% 96%;
+    --danger-light: 0 63% 96%;
 
     --info: 199 80% 48%;
     --info-foreground: 0 0% 100%;
@@ -44,7 +50,8 @@
 
     /* Neutral colors - Refined grayscale */
     --muted: 210 20% 95%;
-    --muted-foreground: 215 14% 48%;
+    --muted-foreground: 215 14% 35%;
+    --data-label: 215 14% 45%;
 
     --accent: 210 20% 95%;
     --accent-foreground: 222 47% 11%;
@@ -52,10 +59,11 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 20% 98%;
 
-    /* Borders - Soft and subtle */
-    --border: 210 20% 92%;
-    --border-light: 210 20% 94%;
-    --border-strong: 210 20% 85%;
+    /* Borders - Clean and subtle */
+    --border: 214 13% 90%; /* #E5E7EB light gray */
+    --border-light: 214 13% 93%;
+    --border-strong: 214 13% 80%;
+    --border-subtle: 214 13% 92%;
 
     /* Input - Enhanced focus states */
     --input: 210 20% 92%;
@@ -66,29 +74,26 @@
     --ring: 225 100% 65%;
     --ring-offset: 0 0% 100%;
 
-    /* Radius - Modern, 12-16px default (0.75-1rem) */
-    --radius: 0.75rem; /* 12px */
-    --radius-sm: 0.5rem; /* 8px */
-    --radius-lg: 1rem; /* 16px */
-    --radius-xl: 1.25rem; /* 20px */
-    --radius-2xl: 1.5rem; /* 24px */
+    /* Radius - Smaller, flatter (Linear/Vercel style) */
+    --radius: 0.375rem; /* 6px */
+    --radius-sm: 0.25rem; /* 4px */
+    --radius-lg: 0.5rem; /* 8px */
+    --radius-xl: 0.75rem; /* 12px */
+    --radius-2xl: 1rem; /* 16px */
 
-    /* Shadows - Soft, elevated effect */
-    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-    --shadow-sm: 0 2px 4px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 6px 12px -2px rgba(0, 0, 0, 0.10), 0 3px 6px -2px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.12), 0 6px 12px -4px rgba(0, 0, 0, 0.08);
-    --shadow-xl: 0 20px 32px -6px rgba(0, 0, 0, 0.14), 0 10px 16px -6px rgba(0, 0, 0, 0.10);
-    --shadow-2xl: 0 32px 64px -12px rgba(0, 0, 0, 0.16);
+    /* Shadows - Minimal, subtle (rely on borders instead) */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+    --shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 4px 12px -2px rgba(0, 0, 0, 0.08);
 
-    /* Spacing scale - Consistent spacing system */
-    --spacing-xs: 0.25rem;
-    --spacing-sm: 0.5rem;
-    --spacing-md: 1rem;
-    --spacing-lg: 1.5rem;
-    --spacing-xl: 2rem;
-    --spacing-2xl: 3rem;
+    /* Spacing scale - 8px base system (Linear/Vercel style) */
+    --spacing-1: 0.5rem; /* 8px */
+    --spacing-2: 0.75rem; /* 12px */
+    --spacing-3: 1rem; /* 16px */
+    --spacing-4: 1.25rem; /* 20px */
+    --spacing-5: 1.5rem; /* 24px */
+    --spacing-6: 2rem; /* 32px */
 
     /* Dark mode colors - Modern dark theme */
     --dark-background: 270 10% 7%; /* #111013 */
@@ -520,5 +525,196 @@
   .sidebar-nav-item.active {
     @apply bg-primary/10 text-primary;
     box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.2);
+  }
+
+  /* ============================================================
+     LINEAR/VERCEL MINIMAL DESIGN COMPONENTS
+     ============================================================ */
+
+  /* Horizontal stats bar - replaces metric card grids */
+  .stats-bar {
+    @apply flex flex-wrap items-start gap-8 py-6 px-8;
+    @apply border-b;
+    border-color: hsl(var(--border-subtle));
+    background-color: hsl(var(--background-subtle));
+  }
+
+  .stat-item {
+    @apply flex flex-col gap-1 min-w-[120px];
+  }
+
+  .stat-label {
+    @apply text-xs font-medium text-muted-foreground uppercase tracking-wider;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-foreground tracking-tight;
+    line-height: 1.1;
+  }
+
+  .stat-delta {
+    @apply text-xs font-medium flex items-center gap-1;
+  }
+
+  .stat-delta.positive {
+    @apply text-success;
+  }
+
+  .stat-delta.negative {
+    @apply text-danger;
+  }
+
+  .stat-divider {
+    @apply h-12 w-px self-center;
+    background-color: hsl(var(--border-subtle));
+  }
+
+  /* Section headers - clean typography */
+  .section-header {
+    @apply flex items-center justify-between py-4 px-8;
+    @apply border-b;
+    border-color: hsl(var(--border-subtle));
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-foreground tracking-tight;
+  }
+
+  .section-actions {
+    @apply flex items-center gap-3;
+  }
+
+  /* Page header - thin horizontal bar */
+  .page-header {
+    @apply flex items-center justify-between h-16 px-8;
+    @apply border-b bg-card;
+    border-color: hsl(var(--border-subtle));
+  }
+
+  .page-title {
+    @apply text-2xl font-semibold text-foreground tracking-tight;
+  }
+
+  /* Minimal table styling */
+  .minimal-table {
+    @apply w-full;
+  }
+
+  .minimal-table thead {
+    @apply border-b border-border;
+  }
+
+  .minimal-table thead th {
+    @apply px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider;
+    @apply bg-transparent;
+  }
+
+  .minimal-table tbody tr {
+    @apply border-b transition-colors duration-150;
+    border-color: hsl(var(--border-subtle));
+  }
+
+  .minimal-table tbody tr:hover {
+    background-color: hsl(var(--background-subtle) / 0.5);
+  }
+
+  .minimal-table tbody td {
+    @apply px-6 py-4 text-sm text-foreground;
+    line-height: 1.5;
+  }
+
+  /* Horizontal flow diagram (for PO flow) */
+  .flow-container {
+    @apply flex items-center gap-4 py-6;
+  }
+
+  .flow-step {
+    @apply flex-1 rounded-lg border border-border px-6 py-4;
+    @apply bg-card transition-all duration-200;
+  }
+
+  .flow-step:hover {
+    @apply border-border-strong;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .flow-step.active {
+    @apply border-primary bg-primary/5;
+  }
+
+  .flow-arrow {
+    @apply text-muted-foreground flex-shrink-0;
+  }
+
+  .flow-label {
+    @apply text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2;
+  }
+
+  .flow-value {
+    @apply text-2xl font-bold text-foreground mb-1;
+  }
+
+  .flow-meta {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Dark sidebar specific styles */
+  .sidebar-dark {
+    background-color: hsl(var(--sidebar-dark));
+    color: hsl(var(--sidebar-dark-text));
+    @apply border-r;
+    border-color: hsl(var(--sidebar-dark-border));
+  }
+
+  .sidebar-dark-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium;
+    @apply transition-all duration-200;
+    color: hsl(var(--sidebar-dark-muted));
+  }
+
+  .sidebar-dark-nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: hsl(var(--sidebar-dark-text));
+  }
+
+  .sidebar-dark-nav-item.active {
+    background-color: rgba(75, 130, 242, 0.12);
+    color: hsl(var(--primary));
+    border-left: 2px solid hsl(var(--primary));
+    padding-left: calc(0.75rem - 2px);
+  }
+
+  /* Flat badge variants (no heavy backgrounds) */
+  .badge-flat {
+    @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-medium;
+    @apply border transition-all duration-150;
+  }
+
+  .badge-flat-success {
+    @apply badge-flat;
+    background-color: hsl(var(--success) / 0.1);
+    color: hsl(var(--success));
+    border-color: hsl(var(--success) / 0.2);
+  }
+
+  .badge-flat-warning {
+    @apply badge-flat;
+    background-color: hsl(var(--warning) / 0.1);
+    color: hsl(var(--warning));
+    border-color: hsl(var(--warning) / 0.2);
+  }
+
+  .badge-flat-danger {
+    @apply badge-flat;
+    background-color: hsl(var(--danger) / 0.1);
+    color: hsl(var(--danger));
+    border-color: hsl(var(--danger) / 0.2);
+  }
+
+  .badge-flat-info {
+    @apply badge-flat;
+    background-color: hsl(var(--info) / 0.1);
+    color: hsl(var(--info));
+    border-color: hsl(var(--info) / 0.2);
   }
 }

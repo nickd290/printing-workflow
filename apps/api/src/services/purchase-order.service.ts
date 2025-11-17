@@ -9,7 +9,8 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 export async function createPurchaseOrder(data: {
   originCompanyId: string;
-  targetCompanyId: string;
+  targetCompanyId?: string; // Optional for third-party vendors
+  targetVendorId?: string; // Optional for third-party vendors
   jobId?: string;
   originalAmount: number;
   vendorAmount: number;
@@ -18,10 +19,19 @@ export async function createPurchaseOrder(data: {
   poNumber?: string;
   referencePONumber?: string;
 }) {
+  // Validate that either targetCompanyId OR targetVendorId is provided, but not both
+  if (!data.targetCompanyId && !data.targetVendorId) {
+    throw new Error('Either targetCompanyId or targetVendorId must be provided');
+  }
+  if (data.targetCompanyId && data.targetVendorId) {
+    throw new Error('Cannot specify both targetCompanyId and targetVendorId');
+  }
+
   const po = await prisma.purchaseOrder.create({
     data: {
       originCompanyId: data.originCompanyId,
       targetCompanyId: data.targetCompanyId,
+      targetVendorId: data.targetVendorId,
       jobId: data.jobId,
       originalAmount: data.originalAmount,
       vendorAmount: data.vendorAmount,
@@ -34,6 +44,7 @@ export async function createPurchaseOrder(data: {
     include: {
       originCompany: true,
       targetCompany: true,
+      targetVendor: true,
       job: true,
     },
   });
@@ -92,6 +103,71 @@ export async function createAutoPurchaseOrder(data: {
   console.log(
     `Auto PO created: ${data.originCompanyId} → ${data.targetCompanyId} | PO#: ${poNumber} | Ref: ${customerPONumber || 'N/A'} | Original: $${data.originalAmount}, Vendor: $${vendorAmount}, Margin: $${marginAmount}`
   );
+
+  return po;
+}
+
+/**
+ * Create PO for third-party vendor routing
+ * Impact → Third-Party Vendor (with Bradford cut payment tracking)
+ */
+export async function createThirdPartyVendorPO(data: {
+  jobId: string;
+  vendorId: string;
+  vendorAmount: number;
+  bradfordCut: number;
+  customerPONumber: string;
+}) {
+  // Get job and vendor details
+  const job = await prisma.job.findUnique({
+    where: { id: data.jobId },
+    select: { jobNo: true, customerTotal: true },
+  });
+
+  if (!job) {
+    throw new Error('Job not found');
+  }
+
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: data.vendorId },
+  });
+
+  if (!vendor) {
+    throw new Error('Vendor not found');
+  }
+
+  // Calculate Impact's margin (what they keep)
+  const impactMargin = Number(job.customerTotal) - data.vendorAmount - data.bradfordCut;
+
+  if (impactMargin < 0) {
+    throw new Error(
+      `Invalid pricing: Total cost (vendor: $${data.vendorAmount} + Bradford cut: $${data.bradfordCut}) ` +
+      `exceeds customer total ($${job.customerTotal}). Impact margin would be negative ($${impactMargin}).`
+    );
+  }
+
+  // Create PO: Impact Direct → Third-Party Vendor
+  const poNumber = `IMP-${data.customerPONumber}`;
+
+  const po = await createPurchaseOrder({
+    originCompanyId: 'impact-direct', // Impact Direct
+    targetVendorId: data.vendorId, // Third-party vendor (not a company)
+    jobId: data.jobId,
+    originalAmount: Number(job.customerTotal),
+    vendorAmount: data.vendorAmount,
+    marginAmount: impactMargin,
+    poNumber,
+    referencePONumber: data.customerPONumber,
+  });
+
+  console.log(
+    `Third-party vendor PO created: Impact → ${vendor.name} | PO#: ${poNumber} | ` +
+    `Customer Total: $${job.customerTotal}, Vendor: $${data.vendorAmount}, ` +
+    `Bradford Cut: $${data.bradfordCut}, Impact Margin: $${impactMargin}`
+  );
+
+  // TODO: Create Bradford payment tracking record (future enhancement)
+  // This would track that Bradford is owed $bradfordCut even though they're not brokering
 
   return po;
 }
@@ -592,11 +668,11 @@ export async function uploadBradfordPOPdf(
 
   // Find Bradford and JD Graphic companies
   const bradfordCompany = await prisma.company.findFirst({
-    where: { name: { contains: 'Bradford', mode: 'insensitive' } },
+    where: { name: { contains: 'Bradford' } },
   });
 
   const jdCompany = await prisma.company.findFirst({
-    where: { name: { contains: 'JD Graphic', mode: 'insensitive' } },
+    where: { name: { contains: 'JD Graphic' } },
   });
 
   if (!bradfordCompany || !jdCompany) {

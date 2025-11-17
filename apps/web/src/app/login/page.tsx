@@ -36,10 +36,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
       {/* Login card */}
       <div className="max-w-md w-full">
-        <div className="card-elevated p-8 md:p-10 animate-fade-in">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8 md:p-10 animate-fade-in">
           {/* Logo and header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">

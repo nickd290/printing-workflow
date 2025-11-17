@@ -1,9 +1,9 @@
 'use client';
 
-import { Navigation } from '@/components/navigation';
 import { Tabs } from '@/components/Tabs';
 import { BatchPaymentModal } from '@/components/BatchPaymentModal';
 import { EditInvoiceModal } from '@/components/EditInvoiceModal';
+import { Navigation } from '@/components/Navigation';
 import { useUser } from '@/contexts/UserContext';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';

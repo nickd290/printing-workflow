@@ -347,7 +347,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-background">
       <Toaster position="top-right" />
 
       <div className="mx-auto px-6 sm:px-8 lg:px-12 py-12 max-w-[1800px]">
@@ -359,10 +359,10 @@ export default function DashboardPage() {
             {/* Customer Dashboard - Enhanced Header */}
             <div className="mb-8 flex justify-between items-start">
               <div>
-                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent mb-2">
+                <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
                   My Jobs
                 </h1>
-                <p className="text-base text-slate-400">
+                <p className="text-base text-muted-foreground">
                   Track your orders and proofs • {filteredJobs.length} active {filteredJobs.length === 1 ? 'job' : 'jobs'}
                 </p>
               </div>
@@ -399,15 +399,15 @@ export default function DashboardPage() {
             {loading ? (
               <div className="text-center py-16">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                <p className="mt-4 text-slate-400">Loading your jobs...</p>
+                <p className="mt-4 text-muted-foreground">Loading your jobs...</p>
               </div>
             ) : filteredJobs.length === 0 ? (
-              <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
-                <svg className="mx-auto h-16 w-16 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+                <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="mt-4 text-lg font-medium text-white">No orders yet</p>
-                <p className="mt-2 text-sm text-slate-400">Click "New Order" above to create your first order</p>
+                <p className="mt-4 text-lg font-medium text-foreground">No orders yet</p>
+                <p className="mt-2 text-sm text-muted-foreground">Click "New Order" above to create your first order</p>
               </div>
             ) : (
               <>
@@ -436,18 +436,18 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={job.id}
-                        className={`group relative overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 border ${borderColor} hover:border-slate-600 rounded-xl p-6 cursor-pointer shadow-lg hover:shadow-xl ${glowEffect} transition-all duration-300 hover:-translate-y-1`}
+                        className={`group relative overflow-hidden bg-white border ${borderColor} hover:border-gray-300 rounded-xl p-6 cursor-pointer shadow-md hover:shadow-lg ${glowEffect} transition-all duration-300 hover:-translate-y-1`}
                         onClick={() => setSelectedJobId(job.id)}
                       >
-                        {/* Subtle background glow */}
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-700/10 rounded-full blur-3xl group-hover:bg-slate-600/20 transition-all duration-300"></div>
+                        {/* Subtle background decoration */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-gray-50 rounded-full blur-3xl group-hover:bg-gray-100 transition-all duration-300"></div>
 
                         {/* Card Content */}
                         <div className="relative">
                           <div className="flex justify-between items-start mb-4">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-xl font-bold tracking-tight text-white">
+                                <h3 className="text-xl font-bold tracking-tight text-foreground">
                                   {job.customerPONumber || job.jobNo}
                                 </h3>
                                 {job.deliveryDate && !job.completedAt && (
@@ -457,10 +457,10 @@ export default function DashboardPage() {
                                   />
                                 )}
                               </div>
-                              <p className="text-xs text-slate-500 font-medium mb-2">
+                              <p className="text-xs text-data-label font-medium mb-2">
                                 Job #{job.jobNo}
                               </p>
-                              <p className="text-sm text-slate-300 leading-relaxed line-clamp-2">
+                              <p className="text-sm text-foreground leading-relaxed line-clamp-2">
                                 {job.specs?.description || 'No description'}
                               </p>
                             {job.customerTotal && (
@@ -474,26 +474,26 @@ export default function DashboardPage() {
                             )}
                           </div>
                           <span className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${
-                            job.status === 'READY_FOR_PROOF' ? 'bg-gradient-to-r from-yellow-900/40 to-yellow-800/40 text-yellow-300 border border-yellow-700/50 shadow-yellow-500/10' :
-                            job.status === 'PROOF_APPROVED' ? 'bg-gradient-to-r from-green-900/40 to-green-800/40 text-green-300 border border-green-700/50 shadow-green-500/10' :
-                            job.status === 'IN_PRODUCTION' ? 'bg-gradient-to-r from-blue-900/40 to-blue-800/40 text-blue-300 border border-blue-700/50 shadow-blue-500/10' :
-                            job.status === 'COMPLETED' ? 'bg-gradient-to-r from-slate-700 to-slate-600 text-slate-300 border border-slate-600' :
-                            'bg-slate-700 text-slate-400 border border-slate-600'
-                          } shadow-lg`}>
+                            job.status === 'READY_FOR_PROOF' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            job.status === 'PROOF_APPROVED' ? 'bg-green-50 text-green-700 border border-green-200' :
+                            job.status === 'IN_PRODUCTION' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                            job.status === 'COMPLETED' ? 'bg-gray-100 text-gray-700 border border-gray-200' :
+                            'bg-gray-100 text-gray-600 border border-gray-200'
+                          } shadow-sm`}>
                             {job.status.replace(/_/g, ' ')}
                           </span>
                         </div>
 
                           {/* Proof Approval Section */}
                           {job.status === 'READY_FOR_PROOF' && job.proofs && job.proofs.length > 0 && (
-                            <div className="mt-4 p-4 bg-gradient-to-r from-yellow-900/30 to-yellow-800/20 border border-yellow-700/50 rounded-xl" onClick={(e) => e.stopPropagation()}>
-                              <h4 className="font-bold text-yellow-300 mb-2 flex items-center gap-2">
+                            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl" onClick={(e) => e.stopPropagation()}>
+                              <h4 className="font-bold text-yellow-800 mb-2 flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                 </svg>
                                 Proof Ready for Your Review
                               </h4>
-                              <p className="text-sm text-yellow-200/80 mb-3 leading-relaxed">
+                              <p className="text-sm text-yellow-700 mb-3 leading-relaxed">
                                 Your proof is ready! Please review and approve to move forward with production.
                               </p>
                               <div className="flex flex-wrap gap-2">
@@ -514,7 +514,7 @@ export default function DashboardPage() {
                                 </button>
                                 <button
                                   onClick={() => setSelectedJobId(job.id)}
-                                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 hover:-translate-y-0.5"
+                                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg shadow-sm transition-all duration-300 hover:-translate-y-0.5"
                                 >
                                   View Details
                                 </button>
@@ -523,8 +523,8 @@ export default function DashboardPage() {
                           )}
 
                           {job.status === 'PROOF_APPROVED' && (
-                            <div className="mt-4 p-4 bg-gradient-to-r from-green-900/30 to-green-800/20 border border-green-700/50 rounded-xl">
-                              <p className="text-green-300 font-semibold flex items-center gap-2">
+                            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+                              <p className="text-green-700 font-semibold flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                 </svg>
@@ -534,8 +534,8 @@ export default function DashboardPage() {
                           )}
 
                           {job.status === 'COMPLETED' && (
-                            <div className="mt-4 p-4 bg-gradient-to-r from-slate-700/50 to-slate-600/30 border border-slate-600/50 rounded-xl">
-                              <p className="text-slate-300 font-semibold flex items-center gap-2">
+                            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                              <p className="text-gray-700 font-semibold flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
                                   <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0015 7h-1z" />

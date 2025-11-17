@@ -38,6 +38,7 @@ import customerRoutes from './routes/customer.js';
 import { adminRoutes } from './routes/admin.js';
 import reportsRoutes from './routes/reports.js';
 import reconciliationRoutes from './routes/reconciliation.js';
+import { vendorRoutes } from './routes/vendors.js';
 
 const fastify = Fastify({
   logger: {
@@ -94,6 +95,7 @@ await fastify.register(customerRoutes, { prefix: '/api/customer' });
 await fastify.register(adminRoutes, { prefix: '/api/admin' });
 await fastify.register(reportsRoutes, { prefix: '/api/reports' });
 await fastify.register(reconciliationRoutes, { prefix: '/api/reconciliation' });
+await fastify.register(vendorRoutes, { prefix: '/api/vendors' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

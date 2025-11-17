@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
-import { TopBar } from './TopBar';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -40,15 +39,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Bar */}
-      <TopBar />
-
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
       <main
-        className={`pt-12 transition-all duration-300 ease-in-out ${
+        className={`transition-all duration-300 ease-in-out ${
           sidebarCollapsed ? 'ml-[64px]' : 'ml-[280px]'
         }`}
       >

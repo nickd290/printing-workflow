@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 import { useUser } from '@/contexts/UserContext';
-import { Navigation } from '@/components/navigation';
 import { StatsCards } from '@/components/customer/StatsCards';
 import { JobsTable } from '@/components/customer/JobsTable';
 import { FileUploadModal } from '@/components/customer/FileUploadModal';
@@ -144,9 +143,6 @@ export default function CustomerPortalPage() {
   return (
     <div className="min-h-screen bg-background">
       <Toaster position="top-right" />
-
-      {/* Navigation */}
-      <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}

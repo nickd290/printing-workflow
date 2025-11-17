@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@/contexts/UserContext';
 import { FileUploadZone } from '@/components/jobs/FileUploadZone';
 import { POReviewForm } from '@/components/jobs/POReviewForm';
 import { JobFormFields } from '@/components/jobs/JobFormFields';
@@ -10,6 +11,7 @@ type WorkflowStep = 'select-method' | 'upload-po' | 'review-po' | 'manual-entry'
 
 export default function CreateJobPage() {
   const router = useRouter();
+  const { isBrokerAdmin } = useUser();
   const [step, setStep] = useState<WorkflowStep>('select-method');
   const [poFile, setPoFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<any>(null);
@@ -28,6 +30,11 @@ export default function CreateJobPage() {
     samples: '',
     requiredArtworkCount: 1,
     requiredDataFileCount: 0,
+    // Routing fields (admin only)
+    routingType: 'BRADFORD_JD',
+    vendorId: '',
+    vendorAmount: '',
+    bradfordCut: '',
   });
 
   // Get customer ID from session/context (hardcoded for demo)
@@ -103,17 +110,46 @@ export default function CreateJobPage() {
       return;
     }
 
+    // Validate third-party vendor fields if selected
+    if (manualFormData.routingType === 'THIRD_PARTY_VENDOR') {
+      if (!manualFormData.vendorId) {
+        setError('Please select a vendor');
+        return;
+      }
+      if (!manualFormData.vendorAmount || parseFloat(manualFormData.vendorAmount) <= 0) {
+        setError('Please enter a valid vendor amount');
+        return;
+      }
+      if (!manualFormData.bradfordCut || parseFloat(manualFormData.bradfordCut) < 0) {
+        setError('Please enter a valid Bradford cut amount');
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
 
     try {
+      // Build submission data
+      const submitData: any = {
+        customerId,
+        ...manualFormData,
+      };
+
+      // Convert routing fields to proper types
+      if (isBrokerAdmin && manualFormData.routingType === 'THIRD_PARTY_VENDOR') {
+        submitData.routingType = 'THIRD_PARTY_VENDOR';
+        submitData.vendorId = manualFormData.vendorId;
+        submitData.vendorAmount = parseFloat(manualFormData.vendorAmount);
+        submitData.bradfordCut = parseFloat(manualFormData.bradfordCut);
+      } else {
+        submitData.routingType = 'BRADFORD_JD';
+      }
+
       const response = await fetch('/api/customer/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId,
-          ...manualFormData,
-        }),
+        body: JSON.stringify(submitData),
       });
 
       if (!response.ok) {
@@ -330,6 +366,7 @@ export default function CreateJobPage() {
                   onChange={handleManualFormChange}
                   disabled={loading}
                   showFileRequirements={true}
+                  showRoutingOptions={isBrokerAdmin}
                 />
 
                 {/* Actions */}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { Navigation } from '@/components/navigation';
+import { Navigation } from '@/components/Navigation';
 import { FileManagementSection } from '@/components/jobs/FileManagementSection';
 import { JobEditModal } from '@/components/jobs/JobEditModal';
 

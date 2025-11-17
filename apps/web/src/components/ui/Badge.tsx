@@ -42,14 +42,14 @@ export interface StatusBadgeProps {
 
 export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
   // Map job statuses to badge variants
-  const statusMap: Record<string, { variant: BadgeProps['variant']; label: string; icon?: string }> = {
-    PENDING: { variant: 'neutral', label: 'Pending', icon: '⏳' },
-    IN_PRODUCTION: { variant: 'info', label: 'In Production', icon: '🔧' },
-    READY_FOR_PROOF: { variant: 'warning', label: 'Ready for Proof', icon: '👁️' },
-    PROOF_APPROVED: { variant: 'success', label: 'Proof Approved', icon: '✓' },
-    COMPLETED: { variant: 'success', label: 'Completed', icon: '✓' },
-    CANCELLED: { variant: 'danger', label: 'Cancelled', icon: '✕' },
-    ON_HOLD: { variant: 'warning', label: 'On Hold', icon: '⏸' },
+  const statusMap: Record<string, { variant: BadgeProps['variant']; label: string }> = {
+    PENDING: { variant: 'neutral', label: 'Pending' },
+    IN_PRODUCTION: { variant: 'info', label: 'In Production' },
+    READY_FOR_PROOF: { variant: 'warning', label: 'Ready for Proof' },
+    PROOF_APPROVED: { variant: 'success', label: 'Proof Approved' },
+    COMPLETED: { variant: 'success', label: 'Completed' },
+    CANCELLED: { variant: 'danger', label: 'Cancelled' },
+    ON_HOLD: { variant: 'warning', label: 'On Hold' },
   };
 
   const config = statusMap[status] || { variant: 'neutral', label: status.replace(/_/g, ' ') };

@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { PricingCalculator } from '@/components/PricingCalculator';
-import { Navigation } from '@/components/navigation';
 import type { CustomJobPricing } from '@printing-workflow/shared';
 
 export default function TestPricingPage() {
@@ -10,8 +9,6 @@ export default function TestPricingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation />
-
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Pricing Calculator Test</h1>

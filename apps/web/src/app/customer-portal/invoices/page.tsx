@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 import { useUser } from '@/contexts/UserContext';
-import { Navigation } from '@/components/navigation';
 import { InvoiceCard } from '@/components/customer/InvoiceCard';
 import { InvoiceTable } from '@/components/customer/InvoiceTable';
 import { InvoiceDetailModal } from '@/components/customer/InvoiceDetailModal';
@@ -193,7 +192,6 @@ export default function InvoicesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Toaster position="top-right" />
-      <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
