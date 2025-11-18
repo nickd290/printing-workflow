@@ -1,100 +1,98 @@
 import { FastifyPluginAsync } from 'fastify';
 import {
-  createVendor,
-  getVendorById,
-  listVendors,
-  updateVendor,
-  deleteVendor,
-} from '../services/vendor.service.js';
+  createCompany,
+  getCompanyById,
+  listCompanies,
+  updateCompany,
+  deleteCompany,
+} from '../services/company.service.js';
 
-export const vendorRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/vendors - Create vendor
+export const companyRoutes: FastifyPluginAsync = async (fastify) => {
+  // POST /api/companies - Create company
   fastify.post('/', async (request, reply) => {
     try {
       const body = request.body as {
         name: string;
+        type: string;
         email?: string;
         phone?: string;
         address?: string;
       };
 
-      console.log('➕ Creating vendor with data:', body);
-      const vendor = await createVendor(body);
-      console.log('✅ Vendor created successfully:', { id: vendor.id, name: vendor.name });
-      return vendor;
+      const company = await createCompany(body);
+      return company;
     } catch (error: any) {
-      console.error('❌ Error creating vendor:', error.message);
       return reply.status(400).send({ error: error.message });
     }
   });
 
-  // GET /api/vendors - List all vendors
+  // GET /api/companies - List all companies
   fastify.get('/', async (request, reply) => {
     try {
-      const { isActive, search } = request.query as {
-        isActive?: string;
+      const { type, search } = request.query as {
+        type?: string;
         search?: string;
       };
 
       const filters: any = {};
-      if (isActive !== undefined) {
-        filters.isActive = isActive === 'true';
+      if (type) {
+        filters.type = type;
       }
       if (search) {
         filters.search = search;
       }
 
-      const vendors = await listVendors(filters);
-      return vendors;
+      const companies = await listCompanies(filters);
+      return companies;
     } catch (error: any) {
       return reply.status(500).send({ error: error.message });
     }
   });
 
-  // GET /api/vendors/:id - Get vendor by ID
+  // GET /api/companies/:id - Get company by ID
   fastify.get('/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-      const vendor = await getVendorById(id);
-      return vendor;
+      const company = await getCompanyById(id);
+      return company;
     } catch (error: any) {
-      if (error.message === 'Vendor not found') {
+      if (error.message === 'Company not found') {
         return reply.status(404).send({ error: error.message });
       }
       return reply.status(500).send({ error: error.message });
     }
   });
 
-  // PATCH /api/vendors/:id - Update vendor
+  // PATCH /api/companies/:id - Update company
   fastify.patch('/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = request.body as {
         name?: string;
+        type?: string;
         email?: string;
         phone?: string;
         address?: string;
-        isActive?: boolean;
       };
 
-      const vendor = await updateVendor(id, body);
-      return vendor;
+      const company = await updateCompany(id, body);
+      return company;
     } catch (error: any) {
-      if (error.message === 'Vendor not found') {
+      if (error.message === 'Company not found') {
         return reply.status(404).send({ error: error.message });
       }
       return reply.status(400).send({ error: error.message });
     }
   });
 
-  // DELETE /api/vendors/:id - Delete/deactivate vendor
+  // DELETE /api/companies/:id - Delete company
   fastify.delete('/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-      const vendor = await deleteVendor(id);
-      return { success: true, vendor };
+      const result = await deleteCompany(id);
+      return result;
     } catch (error: any) {
-      if (error.message === 'Vendor not found') {
+      if (error.message === 'Company not found') {
         return reply.status(404).send({ error: error.message });
       }
       return reply.status(400).send({ error: error.message });

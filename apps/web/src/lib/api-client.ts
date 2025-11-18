@@ -166,6 +166,29 @@ export interface CreateDirectJobBody {
   customPaperCPM?: number; // Custom Bradford paper CPM (per job override)
 }
 
+export interface CreateCustomerJobBody {
+  customerId: string;
+  description?: string;
+  paper?: string;
+  flatSize?: string;
+  foldedSize?: string;
+  colors?: string;
+  finishing?: string;
+  total?: string;
+  poNumber?: string;
+  deliveryDate?: string;
+  samples?: string;
+  requiredArtworkCount?: number;
+  requiredDataFileCount?: number;
+  notes?: string;
+  quantity?: string;
+  // Routing fields
+  routingType?: 'BRADFORD_JD' | 'THIRD_PARTY_VENDOR';
+  vendorId?: string;
+  vendorAmount?: string;
+  bradfordCut?: string;
+}
+
 export const jobsAPI = {
   createFromQuote: async (quoteId: string) => {
     const response = await fetch(`${API_URL}/api/jobs/from-quote/${quoteId}`, {
@@ -179,6 +202,16 @@ export const jobsAPI = {
     const response = await fetch(`${API_URL}/api/jobs/direct`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  createCustomerJob: async (data: CreateCustomerJobBody) => {
+    const response = await fetch(`${API_URL}/api/customer/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     return handleResponse(response);
@@ -230,6 +263,15 @@ export const jobsAPI = {
   getPendingApproval: async () => {
     const response = await fetch(`${API_URL}/api/jobs/pending-approval`);
     return handleResponse<{ jobs: any[]; count: number }>(response);
+  },
+
+  delete: async (jobId: string, deletedBy?: string) => {
+    const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedBy }),
+    });
+    return handleResponse(response);
   },
 };
 
@@ -854,6 +896,71 @@ export interface GenerateMissingPdfsResponse {
   };
 }
 
+export interface CreateCustomerBody {
+  companyName: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+  userName: string;
+  userEmail: string;
+  password: string;
+}
+
+export interface CustomerResponse {
+  success: boolean;
+  message: string;
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    createdAt: Date;
+    company: {
+      id: string;
+      name: string;
+      email?: string;
+      phone?: string;
+      address?: string;
+    };
+  };
+  credentials: {
+    email: string;
+    password: string;
+  };
+}
+
+export interface CustomerListResponse {
+  customers: Array<{
+    id: string;
+    name: string;
+    type: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    users: Array<{
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      createdAt: Date;
+    }>;
+  }>;
+  count: number;
+}
+
+export interface UpdateCustomerBody {
+  companyName?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+}
+
+export interface UpdateUserBody {
+  userName?: string;
+  userEmail?: string;
+  password?: string;
+}
+
 export const adminAPI = {
   getMissingPdfs: async () => {
     const response = await fetch(`${API_URL}/api/admin/pdfs/missing`);
@@ -867,6 +974,43 @@ export const adminAPI = {
       body: JSON.stringify({ type: type || 'all' }),
     });
     return handleResponse<GenerateMissingPdfsResponse>(response);
+  },
+
+  createCustomer: async (data: CreateCustomerBody) => {
+    const response = await fetch(`${API_URL}/api/admin/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<CustomerResponse>(response);
+  },
+
+  listCustomers: async () => {
+    const response = await fetch(`${API_URL}/api/admin/customers`);
+    return handleResponse<CustomerListResponse>(response);
+  },
+
+  getCustomer: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/admin/customers/${id}`);
+    return handleResponse<{ customer: any }>(response);
+  },
+
+  updateCustomer: async (id: string, data: UpdateCustomerBody) => {
+    const response = await fetch(`${API_URL}/api/admin/customers/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{ success: boolean; message: string; customer: any }>(response);
+  },
+
+  updateCustomerUser: async (companyId: string, userId: string, data: UpdateUserBody) => {
+    const response = await fetch(`${API_URL}/api/admin/customers/${companyId}/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<{ success: boolean; message: string; user: any }>(response);
   },
 };
 
@@ -945,6 +1089,42 @@ export const vendorsAPI = {
       credentials: 'include',
     });
     return handleResponse<{ success: boolean; vendor: Vendor }>(response);
+  },
+};
+
+// ============================================================================
+// Companies API
+// ============================================================================
+
+export interface Company {
+  id: string;
+  name: string;
+  type: 'customer' | 'vendor' | 'internal';
+  email?: string;
+  phone?: string;
+  address?: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    users: number;
+    jobs: number;
+  };
+}
+
+export const companiesAPI = {
+  list: async (filters?: { type?: 'customer' | 'vendor' | 'internal'; search?: string }) => {
+    const query = new URLSearchParams(filters as any).toString();
+    const response = await fetch(`${API_URL}/api/companies?${query}`, {
+      credentials: 'include',
+    });
+    return handleResponse<Company[]>(response);
+  },
+
+  getById: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/companies/${id}`, {
+      credentials: 'include',
+    });
+    return handleResponse<Company>(response);
   },
 };
 

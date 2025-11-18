@@ -276,6 +276,10 @@ model Job {
   updatedAt  DateTime  @updatedAt
   completedAt DateTime?
 
+  // Soft delete tracking
+  deletedAt  DateTime?  // Null = active, non-null = soft deleted
+  deletedBy  String?    // Email of user who deleted this job
+
   files      File[]
   proofs     Proof[]
   purchaseOrders PurchaseOrder[]
@@ -290,6 +294,7 @@ model Job {
   @@index([jobNo])
   @@index([vendorId])
   @@index([routingType])
+  @@index([deletedAt])
 }
 
 // Job Activity / Audit Log
@@ -436,6 +441,11 @@ model PurchaseOrder {
   vendorAmount    Decimal   // Amount to vendor (total)
   vendorCPM       Decimal?  // Cost per thousand (for Bradford→JD POs using CPM pricing)
   marginAmount    Decimal   // Margin kept by origin company
+
+  // Bradford payment tracking (for THIRD_PARTY_VENDOR routing)
+  bradfordCutPaid     Boolean?  @default(false) // Has Bradford been paid their cut?
+  bradfordCutPaidDate DateTime? // When Bradford was paid
+  bradfordPaymentNotes String?  // Optional notes about Bradford payment
 
   // PO Number tracking
   poNumber          String?   // This PO's number (Impact's PO# or Bradford's PO#)

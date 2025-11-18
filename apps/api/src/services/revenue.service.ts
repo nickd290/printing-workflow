@@ -121,6 +121,9 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
   // Calculate revenue and costs from Job PO-based fields (not invoices)
   // Get all jobs to calculate revenue from actual Job data
   const allJobs = await prisma.job.findMany({
+    where: {
+      deletedAt: null, // Exclude soft-deleted jobs
+    },
     select: {
       customerTotal: true,
       impactMargin: true,
@@ -227,6 +230,9 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
 export async function getBradfordMetrics(): Promise<BradfordMetrics> {
   // Get all jobs that involve Bradford (have Bradford POs)
   const allJobs = await prisma.job.findMany({
+    where: {
+      deletedAt: null, // Exclude soft-deleted jobs
+    },
     include: {
       purchaseOrders: {
         include: {
@@ -374,6 +380,9 @@ export async function getPOFlowMetrics(): Promise<POFlowMetrics> {
 
   // Get all jobs to calculate customer POs
   const allJobs = await prisma.job.findMany({
+    where: {
+      deletedAt: null, // Exclude soft-deleted jobs
+    },
     select: {
       id: true,
       customerTotal: true,

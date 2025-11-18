@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { jobsAPI, APIError } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { GroupedJobsTable } from '@/components/GroupedJobsTable';
 import { PricingCalculator } from '@/components/PricingCalculator';
+import { UnifiedJobCreationWizard } from '@/components/jobs/UnifiedJobCreationWizard';
 import type { CustomJobPricing } from '@printing-workflow/shared';
 
 interface Job {
@@ -210,6 +210,40 @@ export default function JobsPage() {
     }
   };
 
+  const handleWizardSubmit = async (data: any) => {
+    try {
+      await jobsAPI.createCustomerJob({
+        customerId: data.customerId || user?.companyId || '',
+        description: data.description,
+        paper: data.paper,
+        flatSize: data.flatSize,
+        foldedSize: data.foldedSize,
+        colors: data.colors,
+        finishing: data.finishing,
+        total: data.total,
+        poNumber: data.poNumber,
+        deliveryDate: data.deliveryDate,
+        samples: data.samples,
+        requiredArtworkCount: data.requiredArtworkCount,
+        requiredDataFileCount: data.requiredDataFileCount,
+        // Routing fields (admin only) - convert strings to numbers for validation
+        routingType: data.routingType,
+        vendorId: data.vendorId,
+        vendorAmount: data.vendorAmount && data.vendorAmount !== '' ? parseFloat(data.vendorAmount) : undefined,
+        bradfordCut: data.bradfordCut && data.bradfordCut !== '' ? parseFloat(data.bradfordCut) : undefined,
+      });
+
+      toast.success('Job created successfully!');
+      await loadJobs();
+      setError(null);
+    } catch (err: any) {
+      console.error('Failed to create job:', err);
+      const errorMessage = err.message || 'Failed to create job. Please try again.';
+      toast.error(errorMessage);
+      throw err; // Re-throw so the wizard can handle it
+    }
+  };
+
   const handleExportCSV = async () => {
     try {
       toast.loading('Exporting jobs to CSV...', { id: 'export' });
@@ -289,24 +323,15 @@ export default function JobsPage() {
               </svg>
               Export to CSV
             </button>
-            {isCustomer ? (
-              <Link
-                href="/jobs/create"
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create Job
-              </Link>
-            ) : (
-              <button
-                onClick={() => setShowNewJobModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
-              >
-                + New Job
-              </button>
-            )}
+            <button
+              onClick={() => setShowNewJobModal(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              {isCustomer ? 'Create Job' : '+ New Job'}
+            </button>
           </div>
         </div>
 
@@ -467,98 +492,14 @@ export default function JobsPage() {
         </>
         )}
 
-        {/* New Job Modal */}
-        {showNewJobModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">Create New Job</h2>
-                <button
-                  onClick={() => setShowNewJobModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateJob} className="p-6 space-y-6">
-                {/* Customer Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer *
-                  </label>
-                  <select
-                    name="customerId"
-                    required
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select customer...</option>
-                    <option value="jjsa">JJSA</option>
-                    <option value="ballantine">Ballantine</option>
-                  </select>
-                </div>
-
-                {/* Customer PO Number */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer PO Number *
-                  </label>
-                  <input
-                    type="text"
-                    name="customerPONumber"
-                    required
-                    placeholder="e.g., PO-12345"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description *
-                  </label>
-                  <input
-                    type="text"
-                    name="description"
-                    required
-                    placeholder="e.g., Holiday Mailer, Spring Campaign"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                {/* Pricing Calculator with Size, Quantity, and Custom Pricing */}
-                <PricingCalculator
-                  onPricingChange={(pricing, paperCPM) => {
-                    setCustomPricing(pricing);
-                    setCustomPaperCPM(paperCPM);
-                  }}
-                  initialQuantity={10000}
-                />
-
-                {/* Actions */}
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => setShowNewJobModal(false)}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-                    disabled={submitting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? 'Creating...' : 'Create Job'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        {/* New Job Creation Wizard */}
+        <UnifiedJobCreationWizard
+          isOpen={showNewJobModal}
+          onClose={() => setShowNewJobModal(false)}
+          onSubmit={handleWizardSubmit}
+          userRole={isCustomer ? 'customer' : isInternalTeam ? 'admin' : 'production'}
+          defaultCustomerId={isCustomer ? user?.companyId : undefined}
+        />
       </div>
     </div>
   );

@@ -236,4 +236,148 @@ export const purchaseOrderRoutes: FastifyPluginAsync = async (fastify) => {
 
     return { purchaseOrders: pos };
   });
+
+  // GET /api/purchase-orders/bradford-payments - List all Bradford pending payments
+  fastify.get('/bradford-payments', async (request, reply) => {
+    try {
+      const { prisma } = fastify;
+
+      // Find all POs with unpaid Bradford cuts (third-party vendor jobs)
+      const pendingPayments = await prisma.purchaseOrder.findMany({
+        where: {
+          marginAmount: {
+            gt: 0, // Bradford has a cut
+          },
+          bradfordCutPaid: {
+            not: true, // Not yet paid
+          },
+          targetCompanyId: {
+            not: 'jd-graphic', // Exclude JD Graphic jobs (those are BRADFORD_JD routing)
+          },
+        },
+        include: {
+          job: {
+            select: {
+              jobNo: true,
+              customer: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+          targetCompany: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      // Calculate totals
+      const totalPending = pendingPayments.reduce(
+        (sum, po) => sum + parseFloat(po.marginAmount.toString()),
+        0
+      );
+
+      return {
+        pendingPayments: pendingPayments.map((po) => ({
+          id: po.id,
+          poNumber: po.poNumber,
+          jobNo: po.job?.jobNo,
+          customerName: po.job?.customer?.name,
+          vendorName: po.targetCompany?.name,
+          originalAmount: parseFloat(po.originalAmount.toString()),
+          vendorAmount: parseFloat(po.vendorAmount.toString()),
+          bradfordCut: parseFloat(po.marginAmount.toString()),
+          createdAt: po.createdAt,
+          status: po.status,
+        })),
+        summary: {
+          count: pendingPayments.length,
+          totalPending,
+        },
+      };
+    } catch (error: any) {
+      console.error('Error fetching Bradford payments:', error);
+      return reply.status(500).send({
+        error: error.message || 'Failed to fetch Bradford payments',
+      });
+    }
+  });
+
+  // POST /api/purchase-orders/:id/mark-bradford-paid - Mark Bradford cut as paid
+  fastify.post('/:id/mark-bradford-paid', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { notes } = request.body as { notes?: string };
+      const { prisma } = fastify;
+
+      // Find the PO
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id },
+        include: {
+          job: {
+            select: {
+              jobNo: true,
+            },
+          },
+        },
+      });
+
+      if (!po) {
+        return reply.status(404).send({ error: 'Purchase order not found' });
+      }
+
+      // Verify it has a Bradford cut
+      if (parseFloat(po.marginAmount.toString()) <= 0) {
+        return reply.status(400).send({
+          error: 'This purchase order has no Bradford cut to pay',
+        });
+      }
+
+      // Verify it's not already paid
+      if (po.bradfordCutPaid) {
+        return reply.status(400).send({
+          error: 'Bradford cut has already been marked as paid',
+          paidDate: po.bradfordCutPaidDate,
+        });
+      }
+
+      // Mark as paid
+      const updatedPO = await prisma.purchaseOrder.update({
+        where: { id },
+        data: {
+          bradfordCutPaid: true,
+          bradfordCutPaidDate: new Date(),
+          bradfordPaymentNotes: notes,
+        },
+      });
+
+      console.log(
+        `✅ Marked Bradford cut as paid for PO ${po.poNumber} (Job ${po.job?.jobNo}): $${po.marginAmount}`
+      );
+
+      return {
+        success: true,
+        message: `Bradford cut of $${po.marginAmount} marked as paid`,
+        purchaseOrder: {
+          id: updatedPO.id,
+          poNumber: updatedPO.poNumber,
+          bradfordCut: parseFloat(updatedPO.marginAmount.toString()),
+          bradfordCutPaid: updatedPO.bradfordCutPaid,
+          bradfordCutPaidDate: updatedPO.bradfordCutPaidDate,
+          bradfordPaymentNotes: updatedPO.bradfordPaymentNotes,
+        },
+      };
+    } catch (error: any) {
+      console.error('Error marking Bradford payment as paid:', error);
+      return reply.status(500).send({
+        error: error.message || 'Failed to mark payment as paid',
+      });
+    }
+  });
 };

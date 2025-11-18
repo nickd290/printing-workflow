@@ -803,7 +803,7 @@ export const emailTemplates = {
         ` : ''}
 
         <center style="margin-top: 30px;">
-          <a href="${env.NEXTAUTH_URL}/jobs/${data.jobNo}" class="button">View Job Details</a>
+          <a href="${env.NEXTAUTH_URL}/customer-portal" class="button">View Your Orders</a>
         </center>
 
         <div class="divider"></div>
@@ -862,6 +862,124 @@ export const emailTemplates = {
         </p>
       `,
       `File uploaded for job ${data.jobNo}`
+    ),
+  }),
+
+  // Vendor Job Created notification (THIRD_PARTY_VENDOR routing)
+  vendorJobCreated: (data: {
+    jobNo: string;
+    customerName: string;
+    vendorName: string;
+    poNumber: string;
+    vendorAmount: number;
+    description?: string;
+    quantity?: number;
+    deliveryDate?: string;
+    paper?: string;
+    flatSize?: string;
+    foldedSize?: string;
+    colors?: string;
+    finishing?: string;
+    notes?: string;
+  }) => ({
+    subject: `New Purchase Order - Job #${data.jobNo}`,
+    html: emailTemplate(
+      `
+        <h2>New Purchase Order Received</h2>
+        <p>Bradford Graphics has issued a new purchase order for production.</p>
+
+        <div class="info-box">
+          <p><strong>PO Number:</strong> ${data.poNumber}</p>
+          <p><strong>Job Number:</strong> ${data.jobNo}</p>
+          <p><strong>Customer:</strong> ${data.customerName}</p>
+          ${data.description ? `<p><strong>Description:</strong> ${data.description}</p>` : ''}
+          ${data.quantity ? `<p><strong>Quantity:</strong> ${data.quantity.toLocaleString()} pieces</p>` : ''}
+          <p><strong>PO Amount:</strong> $${data.vendorAmount.toFixed(2)}</p>
+        </div>
+
+        ${data.deliveryDate ? `
+          <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Delivery Schedule</h3>
+          <div class="info-box" style="background-color: #f0f9ff;">
+            <p><strong>Required Delivery Date:</strong> ${new Date(data.deliveryDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          </div>
+        ` : ''}
+
+        ${data.paper || data.flatSize || data.foldedSize || data.colors || data.finishing ? `
+          <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Specifications</h3>
+          <div class="info-box">
+            ${data.paper ? `<p><strong>Paper:</strong> ${data.paper}</p>` : ''}
+            ${data.flatSize ? `<p><strong>Flat Size:</strong> ${data.flatSize}</p>` : ''}
+            ${data.foldedSize ? `<p><strong>Folded Size:</strong> ${data.foldedSize}</p>` : ''}
+            ${data.colors ? `<p><strong>Colors:</strong> ${data.colors}</p>` : ''}
+            ${data.finishing ? `<p><strong>Finishing:</strong> ${data.finishing}</p>` : ''}
+          </div>
+        ` : ''}
+
+        ${data.notes ? `
+          <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Special Notes & Instructions</h3>
+          <div class="info-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b;">
+            <p style="white-space: pre-wrap; margin: 0; color: #92400e;">${data.notes}</p>
+          </div>
+        ` : ''}
+
+        <p style="margin-top: 30px; color: #4a5568;">
+          The purchase order document is attached to this email with complete job specifications and delivery details.
+        </p>
+
+        <div class="divider"></div>
+
+        <p style="color: #718096; font-size: 14px;">
+          <strong>Next Steps:</strong> Please review the attached PO and confirm receipt. You'll receive another notification when all files are ready and the job is approved for production.
+        </p>
+      `,
+      `New PO ${data.poNumber} for job ${data.jobNo}`
+    ),
+  }),
+
+  // Vendor Job Ready notification (all files uploaded + proof approved)
+  vendorJobReady: (data: {
+    jobNo: string;
+    customerName: string;
+    vendorName: string;
+    poNumber: string;
+    vendorAmount: number;
+    artworkCount: number;
+    dataFileCount: number;
+    deliveryDate?: string;
+  }) => ({
+    subject: `Job Ready for Production - Job #${data.jobNo}`,
+    html: emailTemplate(
+      `
+        <h2>Job Ready to Start Production</h2>
+        <p>All files have been received and the proof has been approved by the customer. This job is ready to begin production.</p>
+
+        <div class="info-box">
+          <p><strong>Job Number:</strong> ${data.jobNo}</p>
+          <p><strong>PO Number:</strong> ${data.poNumber}</p>
+          <p><strong>Customer:</strong> ${data.customerName}</p>
+          <p><strong>PO Amount:</strong> $${data.vendorAmount.toFixed(2)}</p>
+          ${data.deliveryDate ? `<p><strong>Required Delivery:</strong> ${new Date(data.deliveryDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}
+        </div>
+
+        <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Files Ready</h3>
+        <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #16a34a;">
+          <p style="color: #16a34a; font-weight: 600;">✓ All production files ready</p>
+          <p><strong>Artwork Files:</strong> ${data.artworkCount} file(s) ✓</p>
+          ${data.dataFileCount > 0 ? `<p><strong>Data Files:</strong> ${data.dataFileCount} file(s) ✓</p>` : ''}
+          <p style="margin-top: 10px;"><strong>Proof Status:</strong> Approved by customer ✓</p>
+        </div>
+
+        <p style="margin-top: 25px; color: #4a5568;">
+          All production files are available for download. The customer has approved the proof, so you can proceed with production immediately.
+        </p>
+
+        <div class="divider"></div>
+
+        <p style="color: #718096; font-size: 14px;">
+          <strong>Important:</strong> Please confirm receipt and provide an estimated completion date if possible. Contact Bradford Graphics if you have any questions about the specifications.
+        </p>
+      `,
+      `Job ${data.jobNo} ready for production`
     ),
   }),
 };

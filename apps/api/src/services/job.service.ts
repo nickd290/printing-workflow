@@ -184,14 +184,27 @@ export async function createDirectJob(data: {
 
   // Validate third-party vendor routing requirements
   if (routingType === RoutingType.THIRD_PARTY_VENDOR) {
+    // Validate vendor ID
     if (!data.vendorId || data.vendorId.trim() === '') {
       throw new Error('Vendor ID is required for third-party vendor routing');
     }
-    if (data.vendorAmount === undefined || data.vendorAmount === null) {
-      throw new Error('Vendor quote amount is required for third-party vendor routing');
+
+    // Validate vendor amount (handle empty strings and convert to number)
+    const vendorAmount = typeof data.vendorAmount === 'string'
+      ? parseFloat(data.vendorAmount)
+      : data.vendorAmount;
+
+    if (vendorAmount === undefined || vendorAmount === null || isNaN(vendorAmount) || vendorAmount <= 0) {
+      throw new Error('Valid vendor quote amount is required for third-party vendor routing (must be greater than $0)');
     }
-    if (data.bradfordCut === undefined || data.bradfordCut === null) {
-      throw new Error("Bradford's cut amount is required for third-party vendor routing");
+
+    // Validate Bradford's cut (handle empty strings and convert to number)
+    const bradfordCut = typeof data.bradfordCut === 'string'
+      ? parseFloat(data.bradfordCut)
+      : data.bradfordCut;
+
+    if (bradfordCut === undefined || bradfordCut === null || isNaN(bradfordCut) || bradfordCut < 0) {
+      throw new Error("Bradford's cut amount is required for third-party vendor routing (must be $0 or greater)");
     }
 
     // Verify vendor exists and is active
@@ -206,6 +219,10 @@ export async function createDirectJob(data: {
     if (!vendor.isActive) {
       throw new Error('Cannot create job with inactive vendor');
     }
+
+    // Update data with parsed numeric values
+    data.vendorAmount = vendorAmount;
+    data.bradfordCut = bradfordCut;
   }
 
   // Get sizeName from sizeId (lookup in legacy PRODUCT_SIZES)
@@ -336,7 +353,7 @@ export async function updateJobStatus(jobId: string, status: JobStatus) {
 }
 
 export async function getJobById(id: string) {
-  return prisma.job.findUnique({
+  const job = await prisma.job.findUnique({
     where: { id },
     include: {
       customer: true,
@@ -377,10 +394,13 @@ export async function getJobById(id: string) {
       sampleShipments: true,
     },
   });
+
+  // Serialize dates for JSON response
+  return job ? serializeJobForJSON(job) : null;
 }
 
 export async function getJobByJobNo(jobNo: string) {
-  return prisma.job.findUnique({
+  const job = await prisma.job.findUnique({
     where: { jobNo },
     include: {
       customer: true,
@@ -397,6 +417,9 @@ export async function getJobByJobNo(jobNo: string) {
       },
     },
   });
+
+  // Serialize dates for JSON response
+  return job ? serializeJobForJSON(job) : null;
 }
 
 export async function listJobs(filters?: {
@@ -406,7 +429,9 @@ export async function listJobs(filters?: {
   userRole?: string; // CUSTOMER, BROKER_ADMIN, BRADFORD_ADMIN, MANAGER
 }) {
   // Build where clause based on filters and role
-  let whereClause: any = {};
+  let whereClause: any = {
+    deletedAt: null, // Exclude soft deleted jobs
+  };
 
   // Filter by customer
   if (filters?.customerId) {
@@ -422,7 +447,7 @@ export async function listJobs(filters?: {
   // They see jobs where they have purchase orders
   if (filters?.companyId && filters?.userRole === 'BRADFORD_ADMIN') {
     // Bradford sees jobs where they are either origin or target of a PO
-    return prisma.job.findMany({
+    const bradfordJobs = await prisma.job.findMany({
       where: {
         ...whereClause,
         purchaseOrders: {
@@ -437,10 +462,22 @@ export async function listJobs(filters?: {
       include: {
         customer: true,
         quote: true,
+        vendor: true,
+        proofs: {
+          include: {
+            file: true,
+            approvals: true,
+          },
+          orderBy: {
+            version: 'desc',
+          },
+        },
+        files: true,
         purchaseOrders: {
           include: {
             originCompany: true,
             targetCompany: true,
+            targetVendor: true,
           },
         },
         invoices: {
@@ -456,18 +493,33 @@ export async function listJobs(filters?: {
         createdAt: 'desc',
       },
     });
+
+    // Serialize dates for JSON response (fixes 500 error)
+    return bradfordJobs.map(serializeJobForJSON);
   }
 
   // Default: return all matching jobs (for Impact Direct admins or specific customer filter)
-  return prisma.job.findMany({
+  const jobs = await prisma.job.findMany({
     where: whereClause,
     include: {
       customer: true,
       quote: true,
+      vendor: true,
+      proofs: {
+        include: {
+          file: true,
+          approvals: true,
+        },
+        orderBy: {
+          version: 'desc',
+        },
+      },
+      files: true,
       purchaseOrders: {
         include: {
           originCompany: true,
           targetCompany: true,
+          targetVendor: true,
         },
       },
       invoices: {
@@ -483,6 +535,130 @@ export async function listJobs(filters?: {
       createdAt: 'desc',
     },
   });
+
+  // Serialize ALL dates for JSON response (comprehensive fix)
+  return jobs.map(serializeJobForJSON);
+}
+
+/**
+ * Comprehensively serialize all DateTime fields in a job object to ISO strings
+ * This prevents JSON serialization errors when sending data to the client
+ */
+export function serializeJobForJSON(job: any) {
+  return {
+    ...job,
+    // Job-level dates
+    deliveryDate: job.deliveryDate?.toISOString() ?? null,
+    mailDate: job.mailDate?.toISOString() ?? null,
+    inHomesDate: job.inHomesDate?.toISOString() ?? null,
+    approvedAt: job.approvedAt?.toISOString() ?? null,
+    submittedForProductionAt: job.submittedForProductionAt?.toISOString() ?? null,
+    createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString(),
+    completedAt: job.completedAt?.toISOString() ?? null,
+    deletedAt: job.deletedAt?.toISOString() ?? null,
+
+    // Quote dates (if included)
+    quote: job.quote ? {
+      ...job.quote,
+      createdAt: job.quote.createdAt.toISOString(),
+      updatedAt: job.quote.updatedAt.toISOString(),
+    } : null,
+
+    // Customer/Vendor dates
+    customer: job.customer ? {
+      ...job.customer,
+      createdAt: job.customer.createdAt.toISOString(),
+      updatedAt: job.customer.updatedAt.toISOString(),
+    } : null,
+
+    vendor: job.vendor ? {
+      ...job.vendor,
+      createdAt: job.vendor.createdAt.toISOString(),
+      updatedAt: job.vendor.updatedAt.toISOString(),
+    } : null,
+
+    // Purchase orders
+    purchaseOrders: job.purchaseOrders?.map((po: any) => ({
+      ...po,
+      bradfordCutPaidDate: po.bradfordCutPaidDate?.toISOString() ?? null,
+      createdAt: po.createdAt.toISOString(),
+      updatedAt: po.updatedAt.toISOString(),
+      // Nested company dates
+      originCompany: po.originCompany ? {
+        ...po.originCompany,
+        createdAt: po.originCompany.createdAt.toISOString(),
+        updatedAt: po.originCompany.updatedAt.toISOString(),
+      } : null,
+      targetCompany: po.targetCompany ? {
+        ...po.targetCompany,
+        createdAt: po.targetCompany.createdAt.toISOString(),
+        updatedAt: po.targetCompany.updatedAt.toISOString(),
+      } : null,
+      targetVendor: po.targetVendor ? {
+        ...po.targetVendor,
+        createdAt: po.targetVendor.createdAt.toISOString(),
+        updatedAt: po.targetVendor.updatedAt.toISOString(),
+      } : null,
+      pdfFile: po.pdfFile ? {
+        ...po.pdfFile,
+        createdAt: po.pdfFile.createdAt.toISOString(),
+      } : null,
+    })),
+
+    // Proofs
+    proofs: job.proofs?.map((proof: any) => ({
+      ...proof,
+      createdAt: proof.createdAt.toISOString(),
+      shareExpiresAt: proof.shareExpiresAt?.toISOString() ?? null,
+      file: proof.file ? {
+        ...proof.file,
+        createdAt: proof.file.createdAt.toISOString(),
+      } : null,
+      approvals: proof.approvals?.map((approval: any) => ({
+        ...approval,
+        createdAt: approval.createdAt.toISOString(),
+      })),
+    })),
+
+    // Files
+    files: job.files?.map((file: any) => ({
+      ...file,
+      createdAt: file.createdAt.toISOString(),
+    })),
+
+    // Invoices
+    invoices: job.invoices?.map((invoice: any) => ({
+      ...invoice,
+      issuedAt: invoice.issuedAt?.toISOString() ?? null,
+      dueAt: invoice.dueAt?.toISOString() ?? null,
+      paidAt: invoice.paidAt?.toISOString() ?? null,
+      createdAt: invoice.createdAt.toISOString(),
+      updatedAt: invoice.updatedAt.toISOString(),
+      pdfFile: invoice.pdfFile ? {
+        ...invoice.pdfFile,
+        createdAt: invoice.pdfFile.createdAt.toISOString(),
+      } : null,
+      fromCompany: invoice.fromCompany ? {
+        ...invoice.fromCompany,
+        createdAt: invoice.fromCompany.createdAt.toISOString(),
+        updatedAt: invoice.fromCompany.updatedAt.toISOString(),
+      } : null,
+      toCompany: invoice.toCompany ? {
+        ...invoice.toCompany,
+        createdAt: invoice.toCompany.createdAt.toISOString(),
+        updatedAt: invoice.toCompany.updatedAt.toISOString(),
+      } : null,
+    })),
+
+    // Sample shipments
+    sampleShipments: job.sampleShipments?.map((shipment: any) => ({
+      ...shipment,
+      sentAt: shipment.sentAt?.toISOString() ?? null,
+      createdAt: shipment.createdAt.toISOString(),
+      updatedAt: shipment.updatedAt.toISOString(),
+    })),
+  };
 }
 
 // ============================================================================

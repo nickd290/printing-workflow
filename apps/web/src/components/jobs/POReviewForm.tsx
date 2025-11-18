@@ -19,14 +19,32 @@ interface ParsedPOData {
   requiredDataFileCount: number;
 }
 
+interface Customer {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
 interface POReviewFormProps {
   parsedData: ParsedPOData;
+  customers: Customer[];
+  selectedCustomerId: string;
+  onCustomerChange: (customerId: string) => void;
   onConfirm: (data: any) => void;
   onCancel: () => void;
   loading?: boolean;
 }
 
-export function POReviewForm({ parsedData, onConfirm, onCancel, loading = false }: POReviewFormProps) {
+export function POReviewForm({
+  parsedData,
+  customers,
+  selectedCustomerId,
+  onCustomerChange,
+  onConfirm,
+  onCancel,
+  loading = false
+}: POReviewFormProps) {
   const { isBrokerAdmin } = useUser();
   const [formData, setFormData] = useState({
     description: parsedData.description || '',
@@ -103,6 +121,33 @@ export function POReviewForm({ parsedData, onConfirm, onCancel, loading = false 
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Customer Selection */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Customer <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={selectedCustomerId}
+          onChange={(e) => onCustomerChange(e.target.value)}
+          disabled={loading}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <option value="">-- Select a customer --</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name}
+              {customer.email && ` (${customer.email})`}
+            </option>
+          ))}
+        </select>
+        {!selectedCustomerId && (
+          <p className="mt-2 text-sm text-red-600">
+            Please select a customer to create the job
+          </p>
+        )}
       </div>
 
       {/* Form */}

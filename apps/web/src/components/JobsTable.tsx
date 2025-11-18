@@ -14,6 +14,9 @@ interface Job {
   sizeName?: string;
   quantity?: number;
   customerCPM?: number;
+  // Routing fields
+  routingType?: 'BRADFORD_JD' | 'THIRD_PARTY_VENDOR';
+  vendor?: { name: string } | null;
 }
 
 interface JobsTableProps {
@@ -59,6 +62,20 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getRoutingBadge = (job: Job) => {
+    if (job.routingType === 'THIRD_PARTY_VENDOR' && job.vendor) {
+      return {
+        label: `Vendor: ${job.vendor.name}`,
+        color: 'bg-orange-100 text-orange-800 border border-orange-300',
+      };
+    }
+    // Default to Bradford → JD routing
+    return {
+      label: 'Bradford → JD',
+      color: 'bg-indigo-100 text-indigo-800 border border-indigo-300',
+    };
   };
 
   // Filter jobs
@@ -228,6 +245,9 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
                   <SortIcon column="status" />
                 </div>
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Routing
+              </th>
               <th
                 onClick={() => handleSort('createdAt')}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
@@ -286,6 +306,16 @@ export function JobsTable({ jobs, onJobClick, onRefresh }: JobsTableProps) {
                   <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
                     {job.status.replace(/_/g, ' ')}
                   </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {(() => {
+                    const routing = getRoutingBadge(job);
+                    return (
+                      <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-medium ${routing.color}`}>
+                        {routing.label}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(job.createdAt).toLocaleDateString()}

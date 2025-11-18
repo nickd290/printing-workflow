@@ -16,6 +16,7 @@ import {
   CurrencyDollarIcon,
   ChevronDownIcon,
   BuildingOfficeIcon,
+  UsersIcon,
 } from '@/components/ui/Icons';
 
 export function Sidebar() {
@@ -58,6 +59,7 @@ export function Sidebar() {
         { name: 'Files', href: '/files', Icon: FolderIcon, badge: 0 },
         { name: 'Financials', href: '/financials', Icon: ChartBarIcon, badge: 0 },
         { name: 'Vendors', href: '/vendors', Icon: BuildingOfficeIcon, badge: 0 },
+        { name: 'Customers', href: '/admin/customers', Icon: UsersIcon, badge: 0 },
       ];
 
   const isActive = (href: string) => pathname === href;

@@ -206,9 +206,13 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/jobs/grouped - List jobs grouped by customer company
   fastify.get('/grouped', async (request, reply) => {
     const { prisma } = await import('@printing-workflow/db');
+    const { serializeJobForJSON } = await import('../services/job.service.js');
 
-    // Get all jobs with their customer company
+    // Get all jobs with their customer company (excluding soft deleted)
     const jobs = await prisma.job.findMany({
+      where: {
+        deletedAt: null, // Exclude soft deleted jobs
+      },
       include: {
         customer: {
           select: {
@@ -251,7 +255,8 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const customer = customerMap.get(customerId)!;
-      customer.jobs.push(job);
+      // Serialize job dates before adding to customer
+      customer.jobs.push(serializeJobForJSON(job));
       customer.jobCount++;
       customer.totalRevenue += Number(job.customerTotal || 0);
     }
@@ -606,11 +611,13 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/jobs/pending-approval - List jobs requiring approval
   fastify.get('/pending-approval', async (request, reply) => {
     const { prisma } = await import('@printing-workflow/db');
+    const { serializeJobForJSON } = await import('../services/job.service.js');
 
     const jobs = await prisma.job.findMany({
       where: {
         requiresApproval: true,
         approvedBy: null,
+        deletedAt: null, // Exclude soft deleted jobs
         status: {
           not: 'CANCELLED',
         },
@@ -630,6 +637,48 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       },
     });
 
-    return { jobs, count: jobs.length };
+    // Serialize dates for JSON response
+    return { jobs: jobs.map(serializeJobForJSON), count: jobs.length };
+  });
+
+  // DELETE /api/jobs/:id - Soft delete job (admin only)
+  fastify.delete('/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { deletedBy } = request.body as { deletedBy?: string };
+
+    const { prisma } = await import('@printing-workflow/db');
+
+    // Verify job exists
+    const job = await prisma.job.findUnique({
+      where: { id },
+      select: { id: true, jobNo: true, deletedAt: true },
+    });
+
+    if (!job) {
+      return reply.status(404).send({ error: 'Job not found' });
+    }
+
+    if (job.deletedAt) {
+      return reply.status(400).send({ error: 'Job is already deleted' });
+    }
+
+    // Soft delete the job
+    const updatedJob = await prisma.job.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedBy: deletedBy || 'unknown',
+      },
+      select: {
+        id: true,
+        jobNo: true,
+        deletedAt: true,
+        deletedBy: true,
+      },
+    });
+
+    fastify.log.info(`🗑️  Job ${job.jobNo} soft deleted by ${deletedBy || 'unknown'}`);
+
+    return { success: true, job: updatedJob };
   });
 };

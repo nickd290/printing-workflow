@@ -91,6 +91,74 @@ export async function sendJobReadyNotifications(job: {
 
     console.log(`✓ Sent job submission confirmation to customer: ${job.customer.email}`);
   }
+
+  // 3. Send to third-party vendor (if THIRD_PARTY_VENDOR routing)
+  try {
+    // Find PO for this job to check if it's a third-party vendor job
+    const purchaseOrder = await prisma.purchaseOrder.findFirst({
+      where: {
+        jobId: job.id,
+        targetCompanyId: {
+          not: 'jd-graphic', // Exclude JD Graphic (that's BRADFORD_JD routing)
+        },
+      },
+      include: {
+        targetCompany: {
+          select: {
+            name: true,
+            contacts: {
+              where: {
+                isPrimary: true,
+              },
+              select: {
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (purchaseOrder && purchaseOrder.targetCompany.contacts.length > 0) {
+      const vendorEmail = purchaseOrder.targetCompany.contacts[0].email;
+
+      if (vendorEmail) {
+        const vendorTemplate = emailTemplates.vendorJobReady({
+          jobNo: job.jobNo,
+          customerName: job.customer.name,
+          vendorName: purchaseOrder.targetCompany.name,
+          poNumber: purchaseOrder.poNumber,
+          vendorAmount: parseFloat(purchaseOrder.vendorAmount || '0'),
+          artworkCount,
+          dataFileCount,
+          deliveryDate: deliveryDateStr,
+        });
+
+        await queueEmail({
+          to: vendorEmail,
+          subject: vendorTemplate.subject,
+          html: vendorTemplate.html,
+        });
+
+        // Log vendor notification
+        await prisma.notification.create({
+          data: {
+            jobId: job.id,
+            recipient: vendorEmail,
+            subject: vendorTemplate.subject,
+            body: vendorTemplate.html,
+            type: 'VENDOR_JOB_READY',
+            sentAt: new Date(),
+          },
+        });
+
+        console.log(`✓ Sent vendor job ready notification to: ${vendorEmail} for job ${job.jobNo}`);
+      }
+    }
+  } catch (vendorNotificationError) {
+    console.error('❌ Failed to send vendor job ready notification:', vendorNotificationError);
+    // Don't throw - this is a nice-to-have notification
+  }
 }
 
 /**

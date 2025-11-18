@@ -4,6 +4,7 @@ import { parseCustomerPO } from '../services/pdf-parser.service.js';
 import { checkJobReadiness, updateJobReadiness, getJobFileProgress } from '../services/job.service.js';
 import { sendNotification, sendJobReadyNotifications } from '../services/notification.service.js';
 import { sendEmail, emailTemplates } from '../lib/email.js';
+import { generateVendorPOPdf } from '../services/vendor-po.service.js';
 
 const customerRoutes: FastifyPluginAsync = async (server) => {
   // Customer uploads their PO
@@ -199,47 +200,76 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
   /**
    * POST /customer/jobs
    * Create a new job (from PO data or manual entry)
-   * Accepts multipart form data with optional PO file
+   * Accepts JSON request body with job details
+   * Supports BRADFORD_JD and THIRD_PARTY_VENDOR routing types
    */
+  // TypeScript interface for job creation request body
+  interface CreateJobBody {
+    customerId: string;
+    description?: string;
+    paper?: string;
+    flatSize?: string;
+    foldedSize?: string;
+    colors?: string;
+    finishing?: string;
+    total?: string;
+    poNumber?: string;
+    deliveryDate?: string;
+    orderDate?: string;
+    pickupDate?: string;
+    poolDate?: string;
+    samples?: string;
+    sampleInstructions?: string;
+    sampleRecipients?: Array<{
+      quantity: number;
+      recipientName: string;
+      address: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    }>;
+    requiredArtworkCount?: number;
+    requiredDataFileCount?: number;
+    notes?: string;
+    quantity?: string;
+    routingType?: 'BRADFORD_JD' | 'THIRD_PARTY_VENDOR';
+    vendorId?: string;
+    vendorAmount?: number;
+    bradfordCut?: number;
+  }
+
   server.post('/jobs', async (request, reply) => {
     try {
-      // Parse multipart form data with request.parts() for better field handling
-      const parts = request.parts();
-      const fields: Record<string, string> = {};
-      let fileData: { buffer: Buffer; filename: string; mimetype: string } | null = null;
+      // Parse JSON request body
+      const body = request.body as CreateJobBody;
 
-      // Iterate through all parts of the multipart request
-      for await (const part of parts) {
-        if (part.type === 'file') {
-          // Handle file upload
-          const buffer = await part.toBuffer();
-          fileData = {
-            buffer,
-            filename: part.filename,
-            mimetype: part.mimetype,
-          };
-        } else {
-          // Handle form field
-          fields[part.fieldname] = part.value as string;
-        }
-      }
-
-      // Extract fields from collected data
-      const customerId = fields.customerId;
-      const description = fields.description;
-      const paper = fields.paper;
-      const flatSize = fields.flatSize;
-      const foldedSize = fields.foldedSize;
-      const colors = fields.colors;
-      const finishing = fields.finishing;
-      const total = fields.total;
-      const poNumber = fields.poNumber;
-      const deliveryDate = fields.deliveryDate;
-      const samples = fields.samples;
-      const requiredArtworkCount = fields.requiredArtworkCount;
-      const requiredDataFileCount = fields.requiredDataFileCount;
-      const notes = fields.notes;
-      const quantity = fields.quantity;
+      // Extract fields from body
+      const {
+        customerId,
+        description,
+        paper,
+        flatSize,
+        foldedSize,
+        colors,
+        finishing,
+        total,
+        poNumber,
+        deliveryDate,
+        orderDate,
+        pickupDate,
+        poolDate,
+        samples,
+        sampleInstructions,
+        sampleRecipients,
+        requiredArtworkCount,
+        requiredDataFileCount,
+        notes,
+        quantity,
+        routingType,
+        vendorId,
+        vendorAmount,
+        bradfordCut,
+      } = body;
 
       if (!customerId) {
         return reply.code(400).send({ error: 'Customer ID is required' });
@@ -296,10 +326,19 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         colors,
         finishing,
         deliveryDate,
+        orderDate,
+        pickupDate,
+        poolDate,
         samples,
+        sampleInstructions,
+        sampleRecipients,
         notes,
         quantity: quantity ? parseInt(quantity) : undefined,
       };
+
+      // Extract top-level fields for database indexing and display
+      const sizeName = flatSize || foldedSize || null;
+      const quantityNum = quantity ? parseInt(quantity) : null;
 
       // Create job
       // Note: requiredArtworkCount and requiredDataFileCount are optional
@@ -312,9 +351,13 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           customerTotal: String(total || 0),
           customerPONumber: poNumber || undefined,
           deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
-          requiredArtworkCount: requiredArtworkCount ? parseInt(requiredArtworkCount) : null,
-          requiredDataFileCount: requiredDataFileCount ? parseInt(requiredDataFileCount) : null,
+          requiredArtworkCount: requiredArtworkCount || null,
+          requiredDataFileCount: requiredDataFileCount || null,
+          routingType: routingType || 'BRADFORD_JD',
           specs,
+          // Add sizeName and quantity as top-level fields for table display
+          sizeName: sizeName,
+          quantity: quantityNum,
         },
         include: {
           customer: true,
@@ -323,24 +366,120 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
 
       console.log(`✅ Created job ${job.jobNo} for customer ${customerId}`);
 
-      // If a PO file was uploaded, save it
-      let poFile = null;
-      if (fileData) {
-        // Create file record for the original PO
-        poFile = await prisma.file.create({
+      // Handle third-party vendor routing
+      if (routingType === 'THIRD_PARTY_VENDOR') {
+        if (!vendorId || !vendorAmount || bradfordCut === undefined) {
+          return reply.code(400).send({
+            error: 'vendorId, vendorAmount, and bradfordCut are required for THIRD_PARTY_VENDOR routing',
+          });
+        }
+
+        // Create Purchase Order to third-party vendor
+        const poNumber = `PO-${job.jobNo}-${Date.now()}`;
+
+        const createdPO = await prisma.purchaseOrder.create({
           data: {
-            kind: 'PO_PDF',
             jobId: job.id,
-            objectKey: `jobs/${job.id}/po-${Date.now()}.pdf`,
-            fileName: fileData.filename,
-            mimeType: fileData.mimetype,
-            size: fileData.buffer.length,
-            checksum: 'placeholder', // In production: calculate SHA-256
-            uploadedBy: customerId,
+            poNumber,
+            originCompanyId: 'bradford', // Bradford Graphics placing the order
+            targetCompanyId: vendorId, // Third-party vendor
+            originalAmount: String(total || 0), // Customer's payment
+            vendorAmount: String(vendorAmount), // Amount to vendor
+            marginAmount: String(bradfordCut), // Bradford's margin/cut
+            status: 'PENDING',
           },
         });
 
-        console.log(`📄 Stored original PO file for job ${job.jobNo}: ${fileData.filename}`);
+        console.log(`✅ Created PO ${poNumber} to vendor ${vendorId} for job ${job.jobNo}`);
+
+        // Send vendor email notification with PO PDF
+        try {
+          const vendor = await prisma.company.findUnique({
+            where: { id: vendorId },
+            select: {
+              name: true,
+              contacts: {
+                where: {
+                  isPrimary: true,
+                },
+                select: {
+                  email: true,
+                },
+              },
+            },
+          });
+
+          if (vendor && vendor.contacts.length > 0 && vendor.contacts[0].email) {
+            const vendorEmail = vendor.contacts[0].email;
+
+            // Get customer name
+            const customer = await prisma.company.findUnique({
+              where: { id: customerId },
+              select: { name: true },
+            });
+
+            // Generate vendor PO PDF
+            const { pdfBytes, fileName } = await generateVendorPOPdf(createdPO.id);
+
+            // Extract job details from specs
+            const specs = job.specs as any;
+            const vendorEmailData = {
+              jobNo: job.jobNo,
+              customerName: customer?.name || customerId,
+              vendorName: vendor.name,
+              poNumber,
+              vendorAmount,
+              description: specs?.description,
+              quantity: specs?.quantity,
+              deliveryDate: specs?.deliveryDate,
+              paper: specs?.paper,
+              flatSize: specs?.flatSize,
+              foldedSize: specs?.foldedSize,
+              colors: specs?.colors,
+              finishing: specs?.finishing,
+              notes: specs?.notes,
+            };
+
+            const vendorEmailContent = emailTemplates.vendorJobCreated(vendorEmailData);
+
+            await sendEmail({
+              to: vendorEmail,
+              cc: 'nick@jdgraphic.com,steve.gustafson@bgeltd.com',
+              subject: vendorEmailContent.subject,
+              html: vendorEmailContent.html,
+              attachments: [
+                {
+                  filename: fileName,
+                  content: pdfBytes,
+                },
+              ],
+            });
+
+            console.log(`✅ Vendor job creation email sent to: ${vendorEmail} (CC: nick@jdgraphic.com, steve@bgeltd.com) with PO PDF attached`);
+          } else {
+            console.warn(`⚠️ No primary contact email found for vendor ${vendorId}`);
+          }
+        } catch (vendorEmailError) {
+          // Log email errors but don't fail job creation
+          console.error('❌ Failed to send vendor email:', vendorEmailError);
+        }
+      } else {
+        // Default BRADFORD_JD routing: Create PO from Bradford to JD Graphic
+        const poNumber = `PO-${job.jobNo}-${Date.now()}`;
+        await prisma.purchaseOrder.create({
+          data: {
+            jobId: job.id,
+            poNumber,
+            originCompanyId: 'bradford',
+            targetCompanyId: 'jd-graphic',
+            originalAmount: String(total || 0), // Customer's payment
+            vendorAmount: String(total || 0), // Full amount goes to JD Graphic
+            marginAmount: '0', // No margin for direct JD work
+            status: 'PENDING',
+          },
+        });
+
+        console.log(`✅ Created PO ${poNumber} from Bradford to JD Graphic for job ${job.jobNo}`);
       }
 
       // Send job creation confirmation email to all stakeholders
@@ -353,12 +492,9 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
 
         const customerEmail = customerEmailMap[customerId] || 'nick@jdgraphic.com'; // fallback to internal
 
-        // Build recipient list (all will be in TO field so everyone sees who received it)
-        const recipients = [
-          'nick@jdgraphic.com',
-          customerEmail,
-          'steve.gustafson@bgeltd.com'
-        ].join(',');
+        // Set up email recipients: customer as TO, internal team as CC
+        const emailTo = customerEmail;
+        const emailCc = 'nick@jdgraphic.com,steve.gustafson@bgeltd.com';
 
         // Get customer company name
         const customer = await prisma.company.findUnique({
@@ -389,12 +525,13 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         const emailContent = emailTemplates.jobCreatedWithDetails(emailData);
 
         await sendEmail({
-          to: recipients,
+          to: emailTo,
+          cc: emailCc,
           subject: emailContent.subject,
           html: emailContent.html,
         });
 
-        console.log(`✅ Job creation email sent to: ${recipients}`);
+        console.log(`✅ Job creation email sent to: ${emailTo} (CC: ${emailCc})`);
       } catch (emailError) {
         // Log email errors but don't fail job creation
         console.error('❌ Failed to send job creation email:', emailError);
@@ -410,10 +547,6 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           requiredArtworkCount: job.requiredArtworkCount,
           requiredDataFileCount: job.requiredDataFileCount,
         },
-        poFile: poFile ? {
-          id: poFile.id,
-          fileName: poFile.fileName,
-        } : null,
       };
     } catch (error: any) {
       console.error('Job creation failed:', error);
@@ -488,11 +621,12 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
 
           await sendEmail({
             to: 'nick@jdgraphic.com',
+            cc: 'steve.gustafson@bgeltd.com',
             subject: emailContent.subject,
             html: emailContent.html,
           });
 
-          console.log(`✅ File upload notification sent to nick@jdgraphic.com for job ${job.jobNo}`);
+          console.log(`✅ File upload notification sent to nick@jdgraphic.com (CC: steve@bgeltd.com) for job ${job.jobNo}`);
         }
       } catch (emailError) {
         // Log email errors but don't fail the file upload

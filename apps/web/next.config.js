@@ -108,6 +108,18 @@ const nextConfig = {
     // TODO: Fix all ESLint warnings and re-enable strict checking
     ignoreDuringBuilds: true,
   },
+  // Proxy API requests to the Fastify backend server
+  async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    console.log(`📡 Configuring API proxy: /api/* → ${apiUrl}/api/*`);
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiUrl}/api/:path*`,
+      },
+    ];
+  },
 };
 
 console.log('✅ Next.js configuration loaded successfully');

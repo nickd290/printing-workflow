@@ -26,13 +26,20 @@ export default function VendorsPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await vendorsAPI.list({
-        isActive: showActiveOnly ? true : undefined,
-        search: searchTerm || undefined,
-      });
+      const filters: any = {};
+      if (showActiveOnly) {
+        filters.isActive = true;
+      }
+      if (searchTerm && searchTerm.trim().length > 0) {
+        filters.search = searchTerm.trim();
+      }
+      console.log('📋 Loading vendors with filters:', filters);
+      const data = await vendorsAPI.list(filters);
+      console.log(`✅ Loaded ${data.length} vendors`);
       setVendors(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load vendors';
+      console.error('❌ Failed to load vendors:', err);
       setError(message);
       toast.error(message);
     } finally {
@@ -73,20 +80,44 @@ export default function VendorsPage() {
     e.preventDefault();
 
     try {
+      let vendorName = formData.name;
+      console.log('💾 Submitting vendor form:', {
+        editing: !!editingVendor,
+        formData: formData
+      });
+
       if (editingVendor) {
         // Update existing vendor
-        await vendorsAPI.update(editingVendor.id, formData);
-        toast.success('Vendor updated successfully');
+        console.log(`📝 Updating vendor ${editingVendor.id}...`);
+        const updated = await vendorsAPI.update(editingVendor.id, formData);
+        console.log('✅ Vendor updated:', updated);
+        toast.success(`Vendor "${vendorName}" updated successfully`);
       } else {
         // Create new vendor
-        await vendorsAPI.create(formData);
-        toast.success('Vendor created successfully');
+        console.log('➕ Creating new vendor...');
+        const newVendor = await vendorsAPI.create(formData);
+        console.log('✅ Vendor created:', newVendor);
+        vendorName = newVendor.name;
+        toast.success(`Vendor "${vendorName}" created successfully`);
       }
 
       setIsModalOpen(false);
-      loadVendors();
+
+      // Wait for vendors list to reload before clearing the form
+      console.log('🔄 Reloading vendors list...');
+      await loadVendors();
+      console.log('✅ Vendors list reloaded');
+
+      // Reset form data
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save vendor';
+      console.error('❌ Vendor save error:', err);
       toast.error(message);
     }
   };

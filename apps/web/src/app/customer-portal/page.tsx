@@ -48,22 +48,48 @@ export default function CustomerPortalPage() {
   }, [user, isCustomer]);
 
   const loadJobs = async () => {
-    if (!user?.companyId) return;
+    if (!user?.companyId) {
+      console.warn('⚠️ Cannot load jobs: user.companyId is missing');
+      return;
+    }
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/jobs?customerId=${user.companyId}`);
+      const apiUrl = `${API_URL}/api/jobs?customerId=${user.companyId}`;
+
+      console.log('🔍 Customer Portal Debug - Loading jobs:', {
+        customerId: user.companyId,
+        userEmail: user.email,
+        userRole: user.role,
+        apiUrl,
+      });
+
+      const response = await fetch(apiUrl);
+
+      console.log('🔍 API Response Status:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      });
+
       const data = await response.json();
 
       console.log('🔍 Customer Portal Debug - Jobs loaded:', {
         totalJobs: data.jobs?.length || 0,
         firstJob: data.jobs?.[0],
-        allStatuses: data.jobs?.map((j: any) => ({ jobNo: j.jobNo, status: j.status })),
+        lastJob: data.jobs?.[data.jobs?.length - 1],
+        allJobs: data.jobs?.map((j: any) => ({
+          jobNo: j.jobNo,
+          status: j.status,
+          customerId: j.customerId,
+          createdAt: j.createdAt,
+          deletedAt: j.deletedAt,
+        })),
       });
 
       setJobs(data.jobs || []);
     } catch (error) {
-      console.error('Failed to load jobs:', error);
+      console.error('❌ Failed to load jobs:', error);
       toast.error('Failed to load your orders');
     } finally {
       setLoading(false);

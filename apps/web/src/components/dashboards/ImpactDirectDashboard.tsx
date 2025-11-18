@@ -21,38 +21,42 @@ import { ClipboardList as ClipboardListIcon, FileText as FileTextIcon } from 'lu
 import { POFlowChart } from './POFlowChart';
 import { BradfordOwedBreakdownModal } from '@/components/BradfordOwedBreakdownModal';
 
-export function ImpactDirectDashboard() {
+interface ImpactDirectDashboardProps {
+  jobs: any[];
+  loading: boolean;
+  onCreateJob?: () => void;
+  onJobsChanged?: () => void;
+}
+
+export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChanged }: ImpactDirectDashboardProps) {
   const router = useRouter();
   const [metrics, setMetrics] = useState<any>(null);
   const [poFlowData, setPoFlowData] = useState<POFlowMetrics | null>(null);
-  const [jobs, setJobs] = useState<any[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [breakdownJob, setBreakdownJob] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [metricsLoading, setMetricsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
 
   useEffect(() => {
-    loadData();
+    loadMetrics();
   }, []);
 
-  const loadData = async () => {
+  const loadMetrics = async () => {
     try {
-      setLoading(true);
-      const [metricsData, jobsData, poFlowMetrics] = await Promise.all([
+      setMetricsLoading(true);
+      const [metricsData, poFlowMetrics] = await Promise.all([
         revenueAPI.getMetrics(),
-        jobsAPI.list(),
         revenueAPI.getPOFlowMetrics(),
       ]);
       setMetrics(metricsData);
-      setJobs(jobsData.jobs);
       setPoFlowData(poFlowMetrics);
       setError(null);
     } catch (err) {
-      console.error('Failed to load dashboard:', err);
+      console.error('Failed to load dashboard metrics:', err);
       setError('Failed to load dashboard data. Make sure the API is running on port 3001.');
     } finally {
-      setLoading(false);
+      setMetricsLoading(false);
     }
   };
 
@@ -68,6 +72,24 @@ export function ImpactDirectDashboard() {
     }
   };
 
+  const handleDeleteJob = async (jobId: string, jobNo: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete job ${jobNo}?\n\nThis action will soft delete the job and hide it from all views.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await jobsAPI.delete(jobId, 'admin'); // You could pass actual user email here
+      alert(`Job ${jobNo} deleted successfully`);
+      await loadMetrics(); // Refresh metrics
+      onJobsChanged?.(); // Notify parent to refresh jobs
+    } catch (err) {
+      console.error('Failed to delete job:', err);
+      alert('Failed to delete job. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -77,7 +99,7 @@ export function ImpactDirectDashboard() {
   }
 
   if (error) {
-    return <GenericError onRetry={loadData} description={error} />;
+    return <GenericError onRetry={() => { loadMetrics(); onJobsChanged?.(); }} description={error} />;
   }
 
   if (!metrics) return null;
@@ -148,7 +170,7 @@ export function ImpactDirectDashboard() {
         actions={
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push('/jobs/create')}
+              onClick={onCreateJob}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,7 +203,7 @@ export function ImpactDirectDashboard() {
       <StatsBar stats={stats} />
 
       {/* Jobs Requiring Approval */}
-      <JobApprovalSection onJobUpdated={loadData} />
+      <JobApprovalSection onJobUpdated={() => { loadMetrics(); onJobsChanged?.(); }} />
 
       {/* PO Flow Chart */}
       {poFlowData && <POFlowChart data={poFlowData} />}
@@ -206,6 +228,7 @@ export function ImpactDirectDashboard() {
                 <th>Owed to Bradford</th>
                 <th>Status</th>
                 <th>Date</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -278,6 +301,20 @@ export function ImpactDirectDashboard() {
                   <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground">
                     {new Date(job.createdAt).toLocaleDateString()}
                   </td>
+                  <td className="px-6 py-3 whitespace-nowrap text-sm">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteJob(job.id, job.jobNo);
+                      }}
+                      className="text-danger hover:text-danger-dark transition-colors p-2 hover:bg-danger/10 rounded"
+                      title="Delete job"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -296,7 +333,8 @@ export function ImpactDirectDashboard() {
           jobId={selectedJobId}
           onClose={() => {
             setSelectedJobId(null);
-            loadData();
+            loadMetrics();
+            onJobsChanged?.();
           }}
         />
       )}

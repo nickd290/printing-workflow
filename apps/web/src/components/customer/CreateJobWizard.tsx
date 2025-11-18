@@ -148,45 +148,38 @@ export function CreateJobWizard({ customerId, onJobCreated }: CreateJobWizardPro
       setLoading(true);
       toast.loading('Creating your order...', { id: 'create-job' });
 
-      // Create FormData to send both the PO file and the parsed data
-      const formData = new FormData();
-
-      // Add the original PO PDF if available
-      if (selectedFile) {
-        formData.append('file', selectedFile);
-      }
-
-      // Add all the job data fields
-      formData.append('customerId', customerId);
-      if (confirmedData.description) formData.append('description', confirmedData.description);
-      if (confirmedData.paper) formData.append('paper', confirmedData.paper);
-      if (confirmedData.flatSize) formData.append('flatSize', confirmedData.flatSize);
-      if (confirmedData.foldedSize) formData.append('foldedSize', confirmedData.foldedSize);
-      if (confirmedData.colors) formData.append('colors', confirmedData.colors);
-      if (confirmedData.finishing) formData.append('finishing', confirmedData.finishing);
-      if (confirmedData.total !== undefined) formData.append('total', String(confirmedData.total));
-      if (confirmedData.poNumber) formData.append('poNumber', confirmedData.poNumber);
-      if (confirmedData.quantity !== undefined) formData.append('quantity', String(confirmedData.quantity));
-      if (confirmedData.orderDate) formData.append('orderDate', confirmedData.orderDate);
-      if (confirmedData.deliveryDate) formData.append('deliveryDate', confirmedData.deliveryDate);
-      if (confirmedData.pickupDate) formData.append('pickupDate', confirmedData.pickupDate);
-      if (confirmedData.poolDate) formData.append('poolDate', confirmedData.poolDate);
-      if (confirmedData.samples) formData.append('samples', confirmedData.samples);
-      if (confirmedData.sampleInstructions) formData.append('sampleInstructions', confirmedData.sampleInstructions);
-      if (confirmedData.sampleRecipients && confirmedData.sampleRecipients.length > 0) {
-        formData.append('sampleRecipients', JSON.stringify(confirmedData.sampleRecipients));
-      }
-      if (confirmedData.requiredArtworkCount !== undefined) {
-        formData.append('requiredArtworkCount', String(confirmedData.requiredArtworkCount));
-      }
-      if (confirmedData.requiredDataFileCount !== undefined) {
-        formData.append('requiredDataFileCount', String(confirmedData.requiredDataFileCount));
-      }
-      if (confirmedData.notes) formData.append('notes', confirmedData.notes);
+      // Create JSON payload for job creation
+      const requestBody = {
+        customerId,
+        description: confirmedData.description || undefined,
+        paper: confirmedData.paper || undefined,
+        flatSize: confirmedData.flatSize || undefined,
+        foldedSize: confirmedData.foldedSize || undefined,
+        colors: confirmedData.colors || undefined,
+        finishing: confirmedData.finishing || undefined,
+        total: confirmedData.total?.toString(),
+        poNumber: confirmedData.poNumber || undefined,
+        quantity: confirmedData.quantity?.toString(),
+        orderDate: confirmedData.orderDate || undefined,
+        deliveryDate: confirmedData.deliveryDate || undefined,
+        pickupDate: confirmedData.pickupDate || undefined,
+        poolDate: confirmedData.poolDate || undefined,
+        samples: confirmedData.samples || undefined,
+        sampleInstructions: confirmedData.sampleInstructions || undefined,
+        sampleRecipients: confirmedData.sampleRecipients && confirmedData.sampleRecipients.length > 0
+          ? confirmedData.sampleRecipients
+          : undefined,
+        requiredArtworkCount: confirmedData.requiredArtworkCount,
+        requiredDataFileCount: confirmedData.requiredDataFileCount,
+        notes: confirmedData.notes || undefined,
+      };
 
       const response = await fetch(`${API_URL}/api/customer/jobs`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
