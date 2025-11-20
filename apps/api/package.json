@@ -16,7 +16,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,js,json}\""
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\"",
+    "repair:pos": "tsx --env-file=../../.env src/scripts/repair-missing-pos.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

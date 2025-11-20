@@ -292,6 +292,25 @@ export const jobsAPI = {
     });
     return handleResponse(response);
   },
+
+  regenerateInvoicePdfs: async (jobId: string) => {
+    const response = await fetch(`${API_URL}/api/jobs/${jobId}/regenerate-invoice-pdfs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse<{
+      success: boolean;
+      message: string;
+      count: number;
+      total: number;
+      results: Array<{
+        invoiceId: string;
+        invoiceNo: string;
+        success: boolean;
+        error?: string;
+      }>;
+    }>(response);
+  },
 };
 
 // ============================================================================
@@ -574,15 +593,17 @@ export const invoicesAPI = {
   generatePdf: async (invoiceId: string) => {
     const response = await fetch(`${API_URL}/api/invoices/${invoiceId}/generate-pdf`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
     });
     return handleResponse(response);
   },
 
-  generate: async (jobId: string) => {
+  generate: async (jobId: string, data: { toCompanyId: string; fromCompanyId: string }) => {
     const response = await fetch(`${API_URL}/api/invoices/${jobId}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
     });
     return handleResponse(response);
   },
@@ -690,7 +711,9 @@ export const reportsAPI = {
       ? `${API_URL}/api/reports/daily-summary?date=${date}`
       : `${API_URL}/api/reports/daily-summary`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      credentials: 'include',
+    });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Failed to download report' }));

@@ -103,9 +103,18 @@ export const invoiceRoutes: FastifyPluginAsync = async (fastify) => {
         message: 'PDF generated successfully',
       };
     } catch (error: any) {
-      console.error('Error generating invoice PDF:', error);
+      console.error('='.repeat(80));
+      console.error('❌ Error generating invoice PDF');
+      console.error('='.repeat(80));
+      console.error('Invoice ID:', id);
+      console.error('Error Message:', error.message);
+      console.error('Error Stack:', error.stack);
+      console.error('Error Type:', error.constructor.name);
+      console.error('='.repeat(80));
+
       return reply.status(400).send({
         error: error.message || 'Failed to generate PDF',
+        invoiceId: id,
       });
     }
   });
@@ -113,10 +122,18 @@ export const invoiceRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/invoices/:jobId/generate - Generate invoice for job
   fastify.post('/:jobId/generate', async (request, reply) => {
     const { jobId } = request.params as { jobId: string };
+
+    // Debug logging
+    console.log('[Invoice Generate] Request body:', request.body);
+    console.log('[Invoice Generate] Job ID:', jobId);
+
     const { toCompanyId, fromCompanyId } = request.body as {
       toCompanyId: string;
       fromCompanyId: string;
     };
+
+    console.log('[Invoice Generate] toCompanyId:', toCompanyId);
+    console.log('[Invoice Generate] fromCompanyId:', fromCompanyId);
 
     // Create invoice
     const invoice = await createInvoiceForJob({

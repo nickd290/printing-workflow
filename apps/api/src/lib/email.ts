@@ -279,7 +279,6 @@ function emailTemplate(content: string, preheader?: string): string {
         <div class="email-container">
           <div class="header">
             <h1>Impact Direct</h1>
-            <p>PRINT-NATIVE AGENCY</p>
           </div>
           <div class="content">
             ${content}
@@ -287,8 +286,8 @@ function emailTemplate(content: string, preheader?: string): string {
           <div class="footer">
             <p><strong>Impact Direct</strong></p>
             <p>Brandon Ferris | brandon@impactdirectprinting.com</p>
-            <p>1550 North Northwest Highway, Suite 108, 60068</p>
-            <p style="margin-top: 15px; color: #718096;">Professional production partner for agencies, printers, and brokers.</p>
+            <p>1550 North Northwest Highway, Suite 108</p>
+            <p>Park Ridge, IL 60068</p>
           </div>
         </div>
       </td>
@@ -302,25 +301,24 @@ function emailTemplate(content: string, preheader?: string): string {
 // Email templates
 export const emailTemplates = {
   quoteReady: (quoteName: string, quoteId: string) => ({
-    subject: '📋 Your Quote is Ready for Review',
+    subject: 'Your Quote is Ready for Review',
     html: emailTemplate(
       `
         <h2>Your Quote is Ready</h2>
-        <p>Great news! We've prepared your quote for <strong>${quoteName}</strong>.</p>
+        <p>Your quote for <strong>${quoteName}</strong> is ready for review.</p>
 
         <div class="info-box">
           <p><strong>Quote ID:</strong> ${quoteId}</p>
-          <p style="margin: 10px 0 0;">Review the details and pricing at your convenience.</p>
         </div>
 
         <center>
-          <a href="${env.NEXTAUTH_URL}/quotes/${quoteId}" class="button">View Quote Details</a>
+          <a href="${env.NEXTAUTH_URL}/quotes/${quoteId}" class="button">View Quote</a>
         </center>
 
         <div class="divider"></div>
 
         <p style="color: #718096; font-size: 14px;">
-          Have questions? Feel free to reach out to our team at any time.
+          Questions? Contact our team at any time.
         </p>
       `,
       'Your quote is ready for review'
@@ -328,20 +326,20 @@ export const emailTemplates = {
   }),
 
   proofReady: (jobNo: string, proofId: string, version: number, shareToken?: string, customerEmail?: string) => ({
-    subject: `🎨 Proof Ready for Review - Job ${jobNo}`,
+    subject: `Proof Ready for Review - Job ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Your Proof is Ready</h2>
-        <p>We've prepared proof <strong>version ${version}</strong> for your review.</p>
+        <p>Proof <strong>version ${version}</strong> is ready for your review.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${jobNo}</p>
           <p><strong>Proof Version:</strong> ${version}</p>
-          <p style="margin: 10px 0 0;">Please review carefully and provide your approval or requested changes.</p>
+          <p style="margin: 10px 0 0;">Review and approve or request changes.</p>
         </div>
 
         <center>
-          <a href="${shareToken ? `${env.NEXTAUTH_URL}/proof/share/${shareToken}` : `${env.NEXTAUTH_URL}/proof/view/${proofId}`}" class="button">Review & Approve Proof</a>
+          <a href="${shareToken ? `${env.NEXTAUTH_URL}/proof/share/${shareToken}` : `${env.NEXTAUTH_URL}/proof/view/${proofId}`}" class="button">Review Proof</a>
         </center>
 
         ${shareToken ? `
@@ -353,23 +351,17 @@ export const emailTemplates = {
           <span style="color: #E53E3E; font-size: 12px;">⏰ This link expires in 7 days</span>
         </p>
         ` : ''}
-
-        <div class="divider"></div>
-
-        <p style="color: #718096; font-size: 14px;">
-          <strong>Important:</strong> Production will begin once you approve this proof. Please ensure all details are correct.
-        </p>
       `,
       `Proof version ${version} ready for job ${jobNo}`
     ),
   }),
 
   proofApproved: (jobNo: string, version: number) => ({
-    subject: `✅ Proof Approved - Job ${jobNo}`,
+    subject: `Proof Approved - Job ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Proof Approved - Production Starting</h2>
-        <p>Thank you for approving proof version ${version} for job ${jobNo}.</p>
+        <p>You approved proof version ${version} for job ${jobNo}.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${jobNo}</p>
@@ -377,24 +369,18 @@ export const emailTemplates = {
           <p style="margin: 10px 0 0;">✅ Your job has been moved to production and will be completed soon.</p>
         </div>
 
-        <p style="margin-top: 25px;">We'll notify you when your order is ready for shipment.</p>
-
-        <div class="divider"></div>
-
-        <p style="color: #718096; font-size: 14px;">
-          Thank you for choosing IDP Production for your printing needs!
-        </p>
+        <p style="margin-top: 25px;">You'll receive a shipment notification when your order is ready.</p>
       `,
       `Proof approved - production starting for job ${jobNo}`
     ),
   }),
 
   shipmentScheduled: (jobNo: string, carrier: string, trackingNo?: string) => ({
-    subject: `📦 Your Order is On the Way - Job ${jobNo}`,
+    subject: `Your Order is On the Way - Job ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Order Shipped!</h2>
-        <p>Great news! Your order has been shipped and is on its way to you.</p>
+        <p>Your order has been shipped and is on its way.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${jobNo}</p>
@@ -404,14 +390,14 @@ export const emailTemplates = {
 
         ${trackingNo ? `
           <center>
-            <a href="https://www.google.com/search?q=${encodeURIComponent(carrier + ' tracking ' + trackingNo)}" class="button">Track Shipment</a>
+            <a href="https://www.google.com/search?q=${encodeURIComponent(carrier + ' tracking ' + trackingNo)}" class="button">Track Order</a>
           </center>
         ` : ''}
 
         <div class="divider"></div>
 
         <p style="color: #718096; font-size: 14px;">
-          You'll receive your order soon. Thank you for your business!
+          Your order will arrive soon.
         </p>
       `,
       `Your order ${jobNo} has shipped`
@@ -419,11 +405,11 @@ export const emailTemplates = {
   }),
 
   invoiceSent: (invoiceNo: string, jobNo: string, amount: number) => ({
-    subject: `💰 Invoice ${invoiceNo} - Job ${jobNo}`,
+    subject: `Invoice ${invoiceNo} - Job ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Invoice Attached</h2>
-        <p>Please find your invoice attached to this email.</p>
+        <p>Your invoice is attached.</p>
 
         <div class="info-box">
           <p><strong>Invoice Number:</strong> ${invoiceNo}</p>
@@ -432,13 +418,7 @@ export const emailTemplates = {
         </div>
 
         <p style="margin-top: 25px;">
-          Payment is due within 30 days of the invoice date. If you have any questions about this invoice, please don't hesitate to contact us.
-        </p>
-
-        <div class="divider"></div>
-
-        <p style="color: #718096; font-size: 14px;">
-          Thank you for your continued business!
+          Payment is due within 30 days. Questions? Contact us anytime.
         </p>
       `,
       `Invoice ${invoiceNo} for $${amount.toFixed(2)}`
@@ -447,11 +427,11 @@ export const emailTemplates = {
 
   // New: Job Created notification
   jobCreated: (jobNo: string, customerName: string, total: number) => ({
-    subject: `🎯 New Job Created - ${jobNo}`,
+    subject: `New Job Created - ${jobNo}`,
     html: emailTemplate(
       `
         <h2>New Job Confirmation</h2>
-        <p>Your job has been successfully created and is now in our system.</p>
+        <p>Job created: ${jobNo}</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${jobNo}</p>
@@ -460,13 +440,13 @@ export const emailTemplates = {
         </div>
 
         <center>
-          <a href="${env.NEXTAUTH_URL}/jobs" class="button">View Job Details</a>
+          <a href="${env.NEXTAUTH_URL}/jobs" class="button">View Job</a>
         </center>
 
         <div class="divider"></div>
 
         <p style="color: #718096; font-size: 14px;">
-          We'll keep you updated as your job progresses through production.
+          You'll receive updates as production progresses.
         </p>
       `,
       `New job ${jobNo} created successfully`
@@ -475,7 +455,7 @@ export const emailTemplates = {
 
   // New: Bradford PO Created notification
   bradfordPOCreated: (jobNo: string, amount: number) => ({
-    subject: `📄 Purchase Order Created - Job ${jobNo}`,
+    subject: `Purchase Order Created - Job ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Purchase Order Created</h2>
@@ -499,7 +479,7 @@ export const emailTemplates = {
 
   // Bradford PO to JD Graphic
   bradfordPOToJD: (componentId: string, jobNo: string, poNumber: string, vendorAmount: number) => ({
-    subject: `📋 New Purchase Order - ${componentId}`,
+    subject: `New Purchase Order - ${componentId}`,
     html: emailTemplate(
       `
         <h2>New Purchase Order Received</h2>
@@ -533,11 +513,11 @@ export const emailTemplates = {
 
   // Job Ready for Production (Internal Team)
   jobReadyForProduction: (jobNo: string, customerName: string, artworkCount: number, dataFileCount: number, customerPO?: string) => ({
-    subject: `🚀 Job Ready for Production - ${jobNo}`,
+    subject: `Job Ready for Production - ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Job Ready to Start Production</h2>
-        <p>All required files have been uploaded and the job is ready to begin production.</p>
+        <p>Job ready for production.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${jobNo}</p>
@@ -548,14 +528,8 @@ export const emailTemplates = {
         </div>
 
         <center>
-          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">View Job & Start Production</a>
+          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">View Job</a>
         </center>
-
-        <div class="divider"></div>
-
-        <p style="color: #718096; font-size: 14px;">
-          <strong>Next Steps:</strong> Review all files and specifications before starting production.
-        </p>
       `,
       `Job ${jobNo} ready for production`
     ),
@@ -563,11 +537,11 @@ export const emailTemplates = {
 
   // Job Submitted Confirmation (Customer)
   jobSubmittedConfirmation: (jobNo: string, customerName: string, artworkCount: number, dataFileCount: number, deliveryDate?: string) => ({
-    subject: `✅ Job ${jobNo} Submitted Successfully`,
+    subject: `Job ${jobNo} Submitted Successfully`,
     html: emailTemplate(
       `
-        <h2>Thank You - Your Job Has Been Submitted!</h2>
-        <p>We've received all your files and your job is now queued for production.</p>
+        <h2>Job Submitted</h2>
+        <p>Job ${jobNo} received and queued for production.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${jobNo}</p>
@@ -578,18 +552,12 @@ export const emailTemplates = {
         </div>
 
         <p style="margin-top: 25px;">
-          Our production team will review your files and begin work on your order. We'll send you a proof for approval before finalizing production.
+          We'll send you a proof for approval before finalizing production.
         </p>
 
         <center>
-          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">Track Your Order</a>
+          <a href="${env.NEXTAUTH_URL}/jobs/${jobNo}" class="button">Track Order</a>
         </center>
-
-        <div class="divider"></div>
-
-        <p style="color: #718096; font-size: 14px;">
-          <strong>What's Next?</strong> You'll receive a proof for approval within 1-2 business days. Production will begin immediately after your approval.
-        </p>
       `,
       `Job ${jobNo} submitted and ready for production`
     ),
@@ -597,11 +565,11 @@ export const emailTemplates = {
 
   // Invoice Chain - Job Completed
   invoiceChainGenerated: (invoiceNo: string, jobNo: string, amount: number, fromCompany: string, toCompany: string, customerPONumber?: string) => ({
-    subject: `💰 Invoice ${invoiceNo} - Job ${jobNo}`,
+    subject: `Invoice ${invoiceNo} - Job ${jobNo}`,
     html: emailTemplate(
       `
         <h2>Invoice for Job ${jobNo}</h2>
-        <p>Please find the attached invoice for the completed job.</p>
+        <p>Invoice attached.</p>
 
         <div class="info-box">
           <p><strong>Invoice Number:</strong> ${invoiceNo}</p>
@@ -613,13 +581,13 @@ export const emailTemplates = {
         </div>
 
         <p style="margin-top: 25px;">
-          The invoice is attached as a PDF. Payment is due within 30 days of the invoice date.
+          Payment is due within 30 days.
         </p>
 
         <div class="divider"></div>
 
         <p style="color: #718096; font-size: 14px;">
-          If you have any questions about this invoice, please contact us. Thank you for your business!
+          Questions? Contact us.
         </p>
       `,
       `Invoice ${invoiceNo} for $${amount.toFixed(2)}`
@@ -635,7 +603,7 @@ export const emailTemplates = {
     netProfit: number;
     transferNumber: string;
   }) => ({
-    subject: `💸 Payment Batch Confirmed - Transfer ${data.transferNumber}`,
+    subject: `Payment Batch Confirmed - Transfer ${data.transferNumber}`,
     html: emailTemplate(
       `
         <h2>Payment Batch Processed</h2>
@@ -747,7 +715,7 @@ export const emailTemplates = {
     html: emailTemplate(
       `
         <h2>New Order Confirmation</h2>
-        <p>A new order has been successfully created and is now in the IDP Production system.</p>
+        <p>Your order has been created and is ready for production.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${data.jobNo}</p>
@@ -816,7 +784,7 @@ export const emailTemplates = {
         <div class="divider"></div>
 
         <p style="color: #718096; font-size: 14px;">
-          We'll keep you updated as your job progresses through production.
+          You'll receive updates as production progresses.
         </p>
       `,
       `New order ${data.jobNo} created successfully`
@@ -854,7 +822,7 @@ export const emailTemplates = {
 
           ${data.uploadedArtwork >= data.requiredArtwork && data.uploadedDataFiles >= data.requiredDataFiles
             ? `<p style="color: #16a34a; font-weight: 600; margin-top: 10px;">✓ All files received! Job is ready for production.</p>`
-            : `<p style="color: #2563eb; margin-top: 10px;">⏳ Waiting for ${data.requiredArtwork - data.uploadedArtwork > 0 ? `${data.requiredArtwork - data.uploadedArtwork} more artwork file(s)` : ''}${data.requiredArtwork - data.uploadedArtwork > 0 && data.requiredDataFiles - data.uploadedDataFiles > 0 ? ' and ' : ''}${data.requiredDataFiles - data.uploadedDataFiles > 0 ? `${data.requiredDataFiles - data.uploadedDataFiles} more data file(s)` : ''}</p>`
+            : `<p style="color: #2563eb; margin-top: 10px;">Waiting for ${data.requiredArtwork - data.uploadedArtwork > 0 ? `${data.requiredArtwork - data.uploadedArtwork} more artwork file(s)` : ''}${data.requiredArtwork - data.uploadedArtwork > 0 && data.requiredDataFiles - data.uploadedDataFiles > 0 ? ' and ' : ''}${data.requiredDataFiles - data.uploadedDataFiles > 0 ? `${data.requiredDataFiles - data.uploadedDataFiles} more data file(s)` : ''}</p>`
           }
         </div>
 
@@ -996,14 +964,14 @@ export const emailTemplates = {
               </div>
             `).join('')}
             <p style="margin-top: 15px; color: #16a34a; font-size: 12px;">
-              ⏰ Download links expire in 7 days
+              Download links expire in 7 days
             </p>
           </div>
         ` : `
           <div class="info-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; margin-top: 20px;">
-            <p style="margin: 0; color: #92400e; font-weight: 600;">📁 Production Files</p>
+            <p style="margin: 0; color: #92400e; font-weight: 600;">Production Files</p>
             <p style="margin: 10px 0 0; color: #92400e;">
-              Production files (artwork and data files) are being uploaded by the customer. You will receive a separate email with secure download links once all files are ready.
+              Files are being uploaded by the customer. You will receive a separate email with download links once all files are ready.
             </p>
           </div>
         `}
@@ -1044,8 +1012,8 @@ export const emailTemplates = {
     subject: `Job Ready for Production - Job #${data.jobNo}`,
     html: emailTemplate(
       `
-        <h2>Job Ready to Start Production</h2>
-        <p>All files have been received and the proof has been approved by the customer. This job is ready to begin production.</p>
+        <h2>Job Ready for Production</h2>
+        <p>All files received and proof approved. Ready to start production.</p>
 
         <div class="info-box">
           <p><strong>Job Number:</strong> ${data.jobNo}</p>
@@ -1085,7 +1053,7 @@ export const emailTemplates = {
               </div>
             `).join('')}
             <p style="margin-top: 15px; color: #16a34a; font-size: 12px;">
-              ⏰ Download links expire in 7 days
+              Download links expire in 7 days
             </p>
           </div>
         ` : `
@@ -1097,7 +1065,7 @@ export const emailTemplates = {
         <div class="divider"></div>
 
         <p style="color: #718096; font-size: 14px;">
-          <strong>Important:</strong> Please confirm receipt and provide an estimated completion date if possible. Contact Bradford Graphics if you have any questions about the specifications.
+          Please confirm receipt and provide an estimated completion date. Contact Bradford Graphics with any questions.
         </p>
       `,
       `Job ${data.jobNo} ready for production`

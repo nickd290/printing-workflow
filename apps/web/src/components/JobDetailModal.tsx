@@ -10,6 +10,8 @@ import { POViewer } from '@/components/jobs/POViewer';
 import { SampleShipmentCard } from '@/components/jobs/SampleShipmentCard';
 import { FileUploadSection } from '@/components/customer/FileUploadSection';
 import { ProofViewer } from '@/components/ProofViewer';
+import { InvoiceAmountDialog } from '@/components/ui/InvoiceAmountDialog';
+import { COMPANY_IDS } from '@printing-workflow/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -64,6 +66,16 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
   // PDF generation state
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+
+  // Individual invoice creation state
+  const [creatingInvoiceType, setCreatingInvoiceType] = useState<string | null>(null);
+  const [showCreateInvoiceDialog, setShowCreateInvoiceDialog] = useState(false);
+  const [pendingInvoiceData, setPendingInvoiceData] = useState<{
+    fromCompanyId: string;
+    toCompanyId: string;
+    invoiceType: string;
+    suggestedAmount: number;
+  } | null>(null);
 
   // File upload state
   const [showFileUpload, setShowFileUpload] = useState(false);
@@ -313,8 +325,13 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
   };
 
   const handleGenerateInvoice = async () => {
+    if (!job) return;
+
     try {
-      await invoicesAPI.generate(jobId);
+      await invoicesAPI.generate(jobId, {
+        toCompanyId: job.customerId,
+        fromCompanyId: 'impact-direct',
+      });
       await loadJob();
       toast.success('Invoice generated successfully!');
     } catch (err) {
@@ -330,12 +347,77 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
       await invoicesAPI.generatePdf(invoiceId);
       await loadJob();
       toast.success('Invoice PDF generated successfully!', { id: 'gen-pdf' });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to generate invoice PDF:', err);
-      toast.error('Failed to generate invoice PDF', { id: 'gen-pdf' });
+
+      // Display specific error message from the API
+      const errorMessage = err?.message || err?.data?.error || 'Failed to generate invoice PDF';
+
+      // Show a more detailed error in the UI
+      toast.error(errorMessage, {
+        id: 'gen-pdf',
+        duration: 8000, // Show for 8 seconds so user can read it
+      });
     } finally {
       setGeneratingPdfId(null);
     }
+  };
+
+  const handleCreateIndividualInvoice = (fromCompanyId: string, toCompanyId: string, invoiceType: string) => {
+    if (!job) return;
+
+    // Calculate suggested amount based on invoice type
+    let suggestedAmount = 0;
+    if (fromCompanyId === COMPANY_IDS.JD_GRAPHIC && toCompanyId === COMPANY_IDS.BRADFORD) {
+      suggestedAmount = job.jdTotal || 0;
+    } else if (fromCompanyId === COMPANY_IDS.BRADFORD && toCompanyId === COMPANY_IDS.IMPACT_DIRECT) {
+      suggestedAmount = job.bradfordTotal || 0;
+    } else if (fromCompanyId === COMPANY_IDS.IMPACT_DIRECT) {
+      suggestedAmount = job.customerTotal || 0;
+    }
+
+    // Show dialog with suggested amount
+    setPendingInvoiceData({
+      fromCompanyId,
+      toCompanyId,
+      invoiceType,
+      suggestedAmount,
+    });
+    setShowCreateInvoiceDialog(true);
+  };
+
+  const handleConfirmInvoiceCreation = async (amount: number) => {
+    if (!job || !pendingInvoiceData) return;
+
+    try {
+      setCreatingInvoiceType(pendingInvoiceData.invoiceType);
+      toast.loading(`Creating ${pendingInvoiceData.invoiceType} invoice...`, { id: 'create-invoice' });
+
+      // Create invoice with specified amount
+      await invoicesAPI.generate(jobId, {
+        fromCompanyId: pendingInvoiceData.fromCompanyId,
+        toCompanyId: pendingInvoiceData.toCompanyId
+      });
+
+      // Note: If the API doesn't support setting amount during creation,
+      // we'll need to update it after creation
+
+      await loadJob();
+      toast.success(`${pendingInvoiceData.invoiceType} invoice created successfully!`, { id: 'create-invoice' });
+      setShowCreateInvoiceDialog(false);
+      setPendingInvoiceData(null);
+    } catch (err: any) {
+      console.error('Failed to create invoice:', err);
+      const errorMessage = err?.message || err?.data?.error || 'Failed to create invoice';
+      toast.error(errorMessage, { id: 'create-invoice', duration: 8000 });
+    } finally {
+      setCreatingInvoiceType(null);
+    }
+  };
+
+  const handleCancelInvoiceCreation = () => {
+    setShowCreateInvoiceDialog(false);
+    setPendingInvoiceData(null);
   };
 
   const handleGeneratePOPdf = async (poId: string) => {
@@ -1481,145 +1563,228 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
               {/* Invoice */}
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Invoice</h3>
-                  {(!job.invoices || job.invoices.length === 0) && canGenerateInvoice && (
-                    <button
-                      onClick={handleGenerateInvoice}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-                    >
-                      Generate Invoice
-                    </button>
-                  )}
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoices</h3>
                 {(() => {
-                  // Filter invoices based on user role - customers only see invoices addressed to them
-                  const filteredInvoices = isCustomer
-                    ? (job.invoices || []).filter((invoice: any) => invoice.toCompany?.id === user?.companyId)
-                    : (job.invoices || []);
+                  // Helper function to find invoice by company IDs
+                  const findInvoice = (fromId: string, toId: string) => {
+                    return (job.invoices || []).find((inv: any) =>
+                      inv.fromCompany?.id === fromId && inv.toCompany?.id === toId
+                    );
+                  };
 
-                  return filteredInvoices && filteredInvoices.length > 0 ? (
-                  <div className="space-y-3">
-                    {filteredInvoices.map((invoice: any) => {
-                      const isEditing = editingInvoiceId === invoice.id;
+                  // Define invoice types with company IDs
+                  const invoiceTypes = [
+                    {
+                      id: 'jd-bradford',
+                      label: 'JD Graphic → Bradford',
+                      fromCompanyId: COMPANY_IDS.JD_GRAPHIC,
+                      toCompanyId: COMPANY_IDS.BRADFORD,
+                      invoice: findInvoice(COMPANY_IDS.JD_GRAPHIC, COMPANY_IDS.BRADFORD),
+                    },
+                    {
+                      id: 'bradford-impact',
+                      label: 'Bradford → Impact Direct',
+                      fromCompanyId: COMPANY_IDS.BRADFORD,
+                      toCompanyId: COMPANY_IDS.IMPACT_DIRECT,
+                      invoice: findInvoice(COMPANY_IDS.BRADFORD, COMPANY_IDS.IMPACT_DIRECT),
+                    },
+                    {
+                      id: 'impact-customer',
+                      label: 'Impact Direct → Customer',
+                      fromCompanyId: COMPANY_IDS.IMPACT_DIRECT,
+                      toCompanyId: job.customerId,
+                      invoice: findInvoice(COMPANY_IDS.IMPACT_DIRECT, job.customerId),
+                    },
+                  ];
 
-                      return (
-                        <div key={invoice.id} className={`p-4 rounded-lg border ${isEditing ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'}`}>
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">{invoice.invoiceNo}</p>
-                              <p className="text-xs text-gray-500">
-                                {invoice.fromCompany.name} → {invoice.toCompany?.name || 'Customer'}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              {isEditing ? (
-                                <div className="space-y-2">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={editInvoiceData.amount}
-                                    onChange={(e) => setEditInvoiceData({ ...editInvoiceData, amount: e.target.value })}
-                                    className="w-32 px-2 py-1 border border-gray-300 rounded text-sm text-right"
-                                  />
-                                  <select
-                                    value={editInvoiceData.status}
-                                    onChange={(e) => setEditInvoiceData({ ...editInvoiceData, status: e.target.value })}
-                                    className="w-32 px-2 py-1 border border-gray-300 rounded text-xs"
-                                  >
-                                    <option value="DRAFT">DRAFT</option>
-                                    <option value="SENT">SENT</option>
-                                    <option value="PAID">PAID</option>
-                                    <option value="CANCELLED">CANCELLED</option>
-                                  </select>
-                                </div>
-                              ) : (
-                                <>
-                                  <p className="text-lg font-bold text-gray-900">${Number(invoice.amount).toLocaleString()}</p>
-                                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                    invoice.status === 'PAID' ? 'bg-green-100 text-green-800' :
-                                    invoice.status === 'SENT' ? 'bg-blue-100 text-blue-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
-                                    {invoice.status}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>{new Date(invoice.createdAt).toLocaleDateString()}</span>
-                            <div className="flex gap-2">
-                              {invoice.pdfFile ? (
-                                <button
-                                  onClick={() => handleDownloadPdf(invoice.pdfFile.id, invoice.pdfFile.fileName)}
-                                  className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  Download PDF
-                                </button>
-                              ) : canEditJob && (
-                                <button
-                                  onClick={() => handleGenerateInvoicePdf(invoice.id)}
-                                  disabled={generatingPdfId === invoice.id}
-                                  className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50 flex items-center gap-1"
-                                >
-                                  {generatingPdfId === invoice.id ? (
-                                    <>
-                                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                      </svg>
-                                      Generating...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                      </svg>
-                                      Generate PDF
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                              {canEditJob && (
-                                isEditing ? (
+                  // Filter invoice types based on user role
+                  const visibleInvoiceTypes = isCustomer
+                    ? invoiceTypes.filter(type => type.id === 'impact-customer')
+                    : invoiceTypes;
+
+                  return (
+                    <div className="space-y-3">
+                      {visibleInvoiceTypes.map((type) => {
+                        const invoice = type.invoice;
+                        const isEditing = invoice && editingInvoiceId === invoice.id;
+                        const isCreating = creatingInvoiceType === type.id;
+                        const isGeneratingPdf = invoice && generatingPdfId === invoice.id;
+
+                        return (
+                          <div key={type.id} className={`p-4 rounded-lg border ${
+                            isEditing ? 'bg-blue-50 border-blue-300' :
+                            invoice ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-300 border-dashed'
+                          }`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-700">{type.label}</p>
+                                {invoice ? (
+                                  <p className="text-xs font-semibold text-gray-900 mt-1">{invoice.invoiceNo}</p>
+                                ) : (
+                                  <p className="text-xs text-gray-500 mt-1">Not Created</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                {invoice && isEditing ? (
+                                  <div className="space-y-2">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={editInvoiceData.amount}
+                                      onChange={(e) => setEditInvoiceData({ ...editInvoiceData, amount: e.target.value })}
+                                      className="w-32 px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                    />
+                                    <select
+                                      value={editInvoiceData.status}
+                                      onChange={(e) => setEditInvoiceData({ ...editInvoiceData, status: e.target.value })}
+                                      className="w-32 px-2 py-1 border border-gray-300 rounded text-xs"
+                                    >
+                                      <option value="DRAFT">DRAFT</option>
+                                      <option value="SENT">SENT</option>
+                                      <option value="PAID">PAID</option>
+                                      <option value="CANCELLED">CANCELLED</option>
+                                    </select>
+                                  </div>
+                                ) : invoice ? (
                                   <>
-                                    <button
-                                      onClick={() => handleSaveInvoice(invoice.id)}
-                                      disabled={saving}
-                                      className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={() => setEditingInvoiceId(null)}
-                                      disabled={saving}
-                                      className="text-gray-600 hover:text-gray-800 disabled:opacity-50"
-                                    >
-                                      Cancel
-                                    </button>
+                                    <p className="text-lg font-bold text-gray-900">${Number(invoice.amount).toLocaleString()}</p>
+                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                      invoice.status === 'PAID' ? 'bg-green-100 text-green-800' :
+                                      invoice.status === 'SENT' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {invoice.status}
+                                    </span>
                                   </>
                                 ) : (
+                                  <span className="text-sm text-gray-400">—</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-500">
+                                {invoice ? new Date(invoice.createdAt).toLocaleDateString() : ''}
+                              </span>
+                              <div className="flex gap-2">
+                                {!invoice && canGenerateInvoice && (
                                   <button
-                                    onClick={() => handleEditInvoice(invoice)}
-                                    className="text-blue-600 hover:text-blue-800 font-medium"
+                                    onClick={() => handleCreateIndividualInvoice(type.fromCompanyId, type.toCompanyId, type.label)}
+                                    disabled={isCreating}
+                                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                                   >
-                                    Edit
+                                    {isCreating ? (
+                                      <>
+                                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Creating...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Create Invoice
+                                      </>
+                                    )}
                                   </button>
-                                )
-                              )}
+                                )}
+                                {invoice && invoice.pdfFile && (
+                                  <>
+                                    <button
+                                      onClick={() => handleDownloadPdf(invoice.pdfFile.id, invoice.pdfFile.fileName)}
+                                      className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      Download
+                                    </button>
+                                    {canEditJob && (
+                                      <button
+                                        onClick={() => handleGenerateInvoicePdf(invoice.id)}
+                                        disabled={isGeneratingPdf}
+                                        className="text-orange-600 hover:text-orange-700 font-medium disabled:opacity-50 flex items-center gap-1"
+                                      >
+                                        {isGeneratingPdf ? (
+                                          <>
+                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Regenerating...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            Regenerate
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                {invoice && !invoice.pdfFile && canEditJob && (
+                                  <button
+                                    onClick={() => handleGenerateInvoicePdf(invoice.id)}
+                                    disabled={isGeneratingPdf}
+                                    className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50 flex items-center gap-1"
+                                  >
+                                    {isGeneratingPdf ? (
+                                      <>
+                                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Generating...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Generate PDF
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                                {invoice && canEditJob && (
+                                  isEditing ? (
+                                    <>
+                                      <button
+                                        onClick={() => handleSaveInvoice(invoice.id)}
+                                        disabled={saving}
+                                        className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingInvoiceId(null)}
+                                        disabled={saving}
+                                        className="text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleEditInvoice(invoice)}
+                                      className="text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                      Edit
+                                    </button>
+                                  )
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center py-8 bg-gray-50 rounded-lg">No invoice generated yet</p>
-                );
+                        );
+                      })}
+                    </div>
+                  );
                 })()}
               </div>
             </div>
@@ -1654,6 +1819,16 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
           </div>
         </div>
       )}
+
+      {/* Invoice Amount Confirmation Dialog */}
+      <InvoiceAmountDialog
+        isOpen={showCreateInvoiceDialog}
+        onClose={handleCancelInvoiceCreation}
+        onConfirm={handleConfirmInvoiceCreation}
+        title={`Create Invoice - ${pendingInvoiceData?.invoiceType || ''}`}
+        suggestedAmount={pendingInvoiceData?.suggestedAmount || 0}
+        isLoading={creatingInvoiceType !== null}
+      />
     </div>
   );
 }

@@ -5,9 +5,8 @@ import { revenueAPI, jobsAPI, purchaseOrdersAPI, invoicesAPI, reportsAPI } from 
 import { JobDetailModal } from '@/components/JobDetailModal';
 import { StatsBar, type Stat } from '@/components/ui/StatsBar';
 import { BradfordJobsTab } from '@/components/bradford/BradfordJobsTab';
-import { BradfordPOsTab } from '@/components/bradford/BradfordPOsTab';
-import { BradfordInvoicesTab } from '@/components/bradford/BradfordInvoicesTab';
-import { BradfordPaperTab } from '@/components/bradford/BradfordPaperTab';
+import { BradfordPrioritySection } from '@/components/bradford/BradfordPrioritySection';
+import { BradfordPOEntryModal } from '@/components/bradford/BradfordPOEntryModal';
 import toast, { Toaster } from 'react-hot-toast';
 import {
   ClipboardListIcon,
@@ -42,10 +41,7 @@ interface BradfordMetrics {
   };
 }
 
-type TabType = 'overview' | 'jobs' | 'pos' | 'invoices' | 'paper';
-
 export function BradfordDashboard() {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [metrics, setMetrics] = useState<BradfordMetrics | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
@@ -54,6 +50,8 @@ export function BradfordDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [showCreatePO, setShowCreatePO] = useState(false);
+  const [selectedJobForPO, setSelectedJobForPO] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -109,6 +107,11 @@ export function BradfordDashboard() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  const handleCreatePO = (jobId: string) => {
+    setSelectedJobForPO(jobId);
+    setShowCreatePO(true);
   };
 
   // Calculate incoming vs outgoing PO metrics for stats bar
@@ -233,105 +236,41 @@ export function BradfordDashboard() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Priority Section - Jobs Needing PO */}
       <div className="mt-6 mx-8">
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200">
-          <div className="flex gap-8">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'overview'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('jobs')}
-              className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'jobs'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Jobs ({jobs.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('pos')}
-              className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'pos'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Purchase Orders ({purchaseOrders.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('invoices')}
-              className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'invoices'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Invoices ({invoices.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('paper')}
-              className={`pb-4 px-1 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'paper'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Paper & Materials
-            </button>
-          </div>
-        </div>
+        <BradfordPrioritySection
+          jobs={jobs}
+          onCreatePO={handleCreatePO}
+        />
 
-        {/* Tab Content */}
+        {/* All Jobs Section */}
         <div className="mt-6">
-          {activeTab === 'overview' && (
-            <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-              <ClipboardListIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-4 text-gray-600">Quick overview and metrics coming soon</p>
-              <p className="text-sm text-gray-500 mt-2">Use the tabs above to navigate to specific sections</p>
-            </div>
-          )}
-
-          {activeTab === 'jobs' && (
-            <BradfordJobsTab
-              jobs={jobs}
-              onJobClick={(jobId) => setSelectedJobId(jobId)}
-              onRefresh={loadData}
-            />
-          )}
-
-          {activeTab === 'pos' && (
-            <BradfordPOsTab
-              purchaseOrders={purchaseOrders}
-              jobs={jobs}
-              onRefresh={loadData}
-            />
-          )}
-
-          {activeTab === 'invoices' && (
-            <BradfordInvoicesTab
-              invoices={invoices}
-              onRefresh={loadData}
-            />
-          )}
-
-          {activeTab === 'paper' && (
-            <BradfordPaperTab
-              jobs={jobs}
-              onJobClick={(jobId) => setSelectedJobId(jobId)}
-            />
-          )}
+          <h2 className="text-2xl font-bold mb-4">All Jobs ({jobs.length})</h2>
+          <BradfordJobsTab
+            jobs={jobs}
+            onJobClick={(jobId) => setSelectedJobId(jobId)}
+            onRefresh={loadData}
+          />
         </div>
       </div>
+
+      {/* Create PO Modal */}
+      {showCreatePO && (
+        <BradfordPOEntryModal
+          jobs={jobs}
+          preselectedJobId={selectedJobForPO}
+          onClose={() => {
+            setShowCreatePO(false);
+            setSelectedJobForPO(null);
+          }}
+          onSuccess={() => {
+            setShowCreatePO(false);
+            setSelectedJobForPO(null);
+            loadData();
+            toast.success('Purchase order created successfully!');
+          }}
+        />
+      )}
 
       {/* Job Detail Modal */}
       {selectedJobId && (

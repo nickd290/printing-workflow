@@ -16,6 +16,7 @@ interface JobFormData {
   customerId?: string;
   employeeId?: string;
   description: string;
+  quantity?: number;
   paper: string;
   flatSize: string;
   foldedSize: string;
@@ -62,6 +63,7 @@ export function UnifiedJobCreationWizard({
   const [formData, setFormData] = useState<JobFormData>({
     customerId: defaultCustomerId,
     description: '',
+    quantity: undefined,
     paper: '',
     flatSize: '',
     foldedSize: '',
@@ -154,6 +156,7 @@ export function UnifiedJobCreationWizard({
       setFormData({
         customerId: defaultCustomerId,
         description: '',
+        quantity: undefined,
         paper: '',
         flatSize: '',
         foldedSize: '',
@@ -196,6 +199,7 @@ export function UnifiedJobCreationWizard({
       // Populate form data with parsed results
       const parsedData = {
         description: parseResult.parsed.description || '',
+        quantity: parseResult.parsed.quantity || undefined,
         paper: parseResult.parsed.paper || '',
         flatSize: parseResult.parsed.flatSize || '',
         foldedSize: parseResult.parsed.foldedSize || '',
@@ -598,6 +602,13 @@ export function UnifiedJobCreationWizard({
                   <div>
                     <div className="text-sm font-medium text-gray-500 dark:text-slate-400">Description</div>
                     <div className="text-base text-gray-900 dark:text-white">{formData.description}</div>
+                  </div>
+                )}
+
+                {formData.quantity && (
+                  <div>
+                    <div className="text-sm font-medium text-gray-500 dark:text-slate-400">Quantity</div>
+                    <div className="text-base text-gray-900 dark:text-white">{formData.quantity.toLocaleString()} pieces</div>
                   </div>
                 )}
 

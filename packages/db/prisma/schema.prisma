@@ -474,6 +474,7 @@ model ProofApproval {
 enum POStatus {
   PENDING
   ACCEPTED
+  REJECTED
   IN_PROGRESS
   COMPLETED
   CANCELLED
@@ -521,6 +522,10 @@ model PurchaseOrder {
 
   status          POStatus @default(PENDING)
 
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -545,11 +550,11 @@ model Invoice {
 
   // To company (customer)
   toCompanyId   String
-  toCompany     Company    @relation("InvoiceToCompany", fields: [toCompanyId], references: [id])
+  toCompany     Company    @relation("InvoiceToCompany", fields: [toCompanyId], references: [id], onDelete: Restrict)
 
   // From company (issuer)
   fromCompanyId String
-  fromCompany   Company    @relation("InvoiceFromCompany", fields: [fromCompanyId], references: [id])
+  fromCompany   Company    @relation("InvoiceFromCompany", fields: [fromCompanyId], references: [id], onDelete: Restrict)
 
   invoiceNo  String        @unique
   amount     Decimal
@@ -685,6 +690,9 @@ enum NotificationType {
   SHIPMENT_SCHEDULED
   INVOICE_SENT
   PO_CREATED
+  PO_ACCEPTED
+  PO_REJECTED
+  BRADFORD_PO_CREATED
   JOB_READY_FOR_PRODUCTION
   JOB_SUBMITTED_CONFIRMATION
 }

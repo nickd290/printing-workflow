@@ -62,6 +62,8 @@ export async function createInvoiceForJob(data: {
  * Called by the PDF worker
  */
 export async function generateInvoicePdf(invoiceId: string) {
+  console.log(`[Invoice PDF] Starting PDF generation for invoice ${invoiceId}`);
+
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: {
@@ -77,133 +79,299 @@ export async function generateInvoicePdf(invoiceId: string) {
   });
 
   if (!invoice) {
-    throw new Error('Invoice not found');
+    throw new Error(`Invoice not found: ${invoiceId}`);
   }
 
-  // Create PDF
+  console.log(`[Invoice PDF] Found invoice: ${invoice.invoiceNo}`);
+  console.log(`[Invoice PDF] Amount: $${invoice.amount}`);
+  console.log(`[Invoice PDF] From Company ID: ${invoice.fromCompanyId}`);
+  console.log(`[Invoice PDF] To Company ID: ${invoice.toCompanyId}`);
+  console.log(`[Invoice PDF] Job ID: ${invoice.jobId || 'N/A'}`);
+
+  // Validate required company information
+  if (!invoice.fromCompany) {
+    throw new Error(
+      `Cannot generate PDF: "From" company is missing for invoice ${invoice.invoiceNo} (ID: ${invoiceId}). ` +
+      `Expected company ID "${invoice.fromCompanyId}" was not found in the database. ` +
+      `This invoice may reference a deleted company.`
+    );
+  }
+
+  if (!invoice.toCompany) {
+    throw new Error(
+      `Cannot generate PDF: "Bill To" company is missing for invoice ${invoice.invoiceNo} (ID: ${invoiceId}). ` +
+      `Expected company ID "${invoice.toCompanyId}" was not found in the database. ` +
+      `This invoice may reference a deleted company.`
+    );
+  }
+
+  // Validate invoice amount
+  const invoiceAmount = parseFloat(invoice.amount.toString());
+  if (invoiceAmount <= 0) {
+    throw new Error(
+      `Cannot generate PDF: Invoice ${invoice.invoiceNo} has an invalid amount of $${invoiceAmount}. ` +
+      `Invoice amount must be greater than $0.`
+    );
+  }
+
+  console.log(`[Invoice PDF] Validation passed. From: ${invoice.fromCompany.name}, To: ${invoice.toCompany.name}`);
+
+  // Create PDF with professional template
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([612, 792]); // Letter size
+  const page = pdfDoc.addPage([612, 792]); // Letter size (8.5" x 11")
   const { width, height } = page.getSize();
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  let y = height - 50;
+  // Define colors
+  const headerBlue = rgb(0.117, 0.227, 0.541); // #1e3a8a
+  const borderBlue = rgb(0.2, 0.3, 0.6);
+  const textGray = rgb(0.4, 0.4, 0.4);
+  const white = rgb(1, 1, 1);
+  const black = rgb(0, 0, 0);
 
-  // Header
+  // ===== HEADER SECTION =====
+  // Blue header background
+  page.drawRectangle({
+    x: 0,
+    y: height - 120,
+    width: width,
+    height: 120,
+    color: headerBlue,
+  });
+
+  // "INVOICE" text in white
   page.drawText('INVOICE', {
     x: 50,
-    y,
-    size: 24,
+    y: height - 70,
+    size: 36,
     font: boldFont,
-    color: rgb(0, 0, 0),
+    color: white,
   });
 
-  y -= 30;
-
-  // Invoice details
-  page.drawText(`Invoice #: ${invoice.invoiceNo}`, {
+  // Company name under INVOICE
+  page.drawText(invoice.fromCompany.name, {
     x: 50,
-    y,
-    size: 12,
-    font,
-  });
-
-  y -= 20;
-
-  page.drawText(
-    `Date: ${invoice.createdAt.toLocaleDateString()}`,
-    {
-      x: 50,
-      y,
-      size: 12,
-      font,
-    }
-  );
-
-  y -= 20;
-
-  page.drawText(
-    `Due Date: ${invoice.dueAt?.toLocaleDateString() || 'N/A'}`,
-    {
-      x: 50,
-      y,
-      size: 12,
-      font,
-    }
-  );
-
-  y -= 40;
-
-  // From/To
-  page.drawText('From:', { x: 50, y, size: 12, font: boldFont });
-  page.drawText('Bill To:', { x: 300, y, size: 12, font: boldFont });
-
-  y -= 20;
-
-  page.drawText(invoice.fromCompany.name, { x: 50, y, size: 10, font });
-  page.drawText(invoice.toCompany.name, { x: 300, y, size: 10, font });
-
-  y -= 15;
-
-  if (invoice.fromCompany.address) {
-    page.drawText(invoice.fromCompany.address, { x: 50, y, size: 10, font });
-  }
-  if (invoice.toCompany.address) {
-    page.drawText(invoice.toCompany.address, { x: 300, y, size: 10, font });
-  }
-
-  y -= 40;
-
-  // Job details
-  page.drawText('Job Details:', { x: 50, y, size: 12, font: boldFont });
-
-  y -= 20;
-
-  if (invoice.job) {
-    page.drawText(`Job #: ${invoice.job.jobNo}`, { x: 50, y, size: 10, font });
-    y -= 15;
-
-    // Add customer PO# if available
-    if (invoice.job.customerPONumber) {
-      page.drawText(`Re: Your PO# ${invoice.job.customerPONumber}`, {
-        x: 50,
-        y,
-        size: 10,
-        font: boldFont,
-        color: rgb(0, 0, 0.6), // Slight blue tint
-      });
-      y -= 15;
-    }
-
-    // Add size if available
-    if (invoice.job.sizeName) {
-      page.drawText(`Size: ${invoice.job.sizeName}`, { x: 50, y, size: 10, font });
-      y -= 15;
-    }
-
-    // Add quantity if available
-    if (invoice.job.quantity) {
-      page.drawText(`Quantity: ${invoice.job.quantity.toLocaleString()} pieces`, { x: 50, y, size: 10, font });
-      y -= 15;
-    }
-
-    // Add paper type if available
-    if (invoice.job.paperType) {
-      page.drawText(`Paper: ${invoice.job.paperType}`, { x: 50, y, size: 10, font });
-      y -= 5; // Small extra spacing after paper type
-    }
-  }
-
-  y -= 40;
-
-  // Amount
-  page.drawText('Amount Due:', { x: 50, y, size: 14, font: boldFont });
-  page.drawText(`$${invoice.amount.toFixed(2)}`, {
-    x: 300,
-    y,
+    y: height - 95,
     size: 14,
     font: boldFont,
+    color: white,
+  });
+
+  // Invoice details (top right)
+  let rightX = width - 220;
+  page.drawText(`Invoice #: ${invoice.invoiceNo}`, {
+    x: rightX,
+    y: height - 50,
+    size: 10,
+    font: boldFont,
+    color: white,
+  });
+
+  page.drawText(`Date: ${invoice.createdAt.toLocaleDateString()}`, {
+    x: rightX,
+    y: height - 68,
+    size: 9,
+    font,
+    color: white,
+  });
+
+  page.drawText(`Due: ${invoice.dueAt?.toLocaleDateString() || 'Upon Receipt'}`, {
+    x: rightX,
+    y: height - 83,
+    size: 9,
+    font,
+    color: white,
+  });
+
+  // ===== COMPANY INFORMATION SECTION =====
+  let y = height - 150;
+
+  // FROM section
+  page.drawText('FROM:', { x: 50, y, size: 11, font: boldFont, color: black });
+  y -= 18;
+
+  page.drawText(invoice.fromCompany.name, { x: 50, y, size: 10, font: boldFont });
+  y -= 14;
+
+  if (invoice.fromCompany.address) {
+    page.drawText(invoice.fromCompany.address, { x: 50, y, size: 9, font, color: textGray });
+    y -= 12;
+  }
+
+  if (invoice.fromCompany.email) {
+    page.drawText(invoice.fromCompany.email, { x: 50, y, size: 9, font, color: textGray });
+    y -= 12;
+  }
+
+  if (invoice.fromCompany.phone) {
+    page.drawText(invoice.fromCompany.phone, { x: 50, y, size: 9, font, color: textGray });
+  }
+
+  // BILL TO section (right side)
+  y = height - 150;
+  const billToX = 320;
+
+  page.drawText('BILL TO:', { x: billToX, y, size: 11, font: boldFont, color: black });
+  y -= 18;
+
+  page.drawText(invoice.toCompany.name, { x: billToX, y, size: 10, font: boldFont });
+  y -= 14;
+
+  if (invoice.toCompany.address) {
+    page.drawText(invoice.toCompany.address, { x: billToX, y, size: 9, font, color: textGray });
+    y -= 12;
+  }
+
+  if (invoice.toCompany.email) {
+    page.drawText(invoice.toCompany.email, { x: billToX, y, size: 9, font, color: textGray });
+    y -= 12;
+  }
+
+  if (invoice.toCompany.phone) {
+    page.drawText(invoice.toCompany.phone, { x: billToX, y, size: 9, font, color: textGray });
+  }
+
+  // ===== JOB DETAILS SECTION (BORDERED BOX) =====
+  y = height - 280;
+  const boxX = 50;
+  const boxWidth = width - 100;
+  const boxHeight = 180;
+
+  // Draw border
+  page.drawRectangle({
+    x: boxX,
+    y: y - boxHeight,
+    width: boxWidth,
+    height: boxHeight,
+    borderColor: borderBlue,
+    borderWidth: 2,
+  });
+
+  // Job Details header
+  y -= 20;
+  page.drawText('JOB DETAILS', { x: boxX + 15, y, size: 11, font: boldFont, color: borderBlue });
+  y -= 20;
+
+  // Job number
+  const jobNo = invoice.job?.jobNo || 'N/A';
+  page.drawText(`Job #: ${jobNo}`, { x: boxX + 15, y, size: 10, font: boldFont, color: black });
+  y -= 14;
+
+  // Customer PO number
+  const customerPO = invoice.job?.customerPONumber || 'N/A';
+  page.drawText(`Customer PO: ${customerPO}`, { x: boxX + 15, y, size: 9, font, color: textGray });
+  y -= 18;
+
+  // Description
+  if (invoice.job?.description) {
+    page.drawText('Description:', { x: boxX + 15, y, size: 9, font: boldFont });
+    y -= 12;
+
+    // Word wrap description
+    const desc = invoice.job.description;
+    const maxWidth = 70;
+    const words = desc.split(' ');
+    let line = '';
+
+    for (const word of words) {
+      const testLine = line + (line ? ' ' : '') + word;
+      if (testLine.length > maxWidth) {
+        page.drawText(line, { x: boxX + 15, y, size: 9, font, color: textGray });
+        y -= 12;
+        line = word;
+      } else {
+        line = testLine;
+      }
+    }
+
+    if (line) {
+      page.drawText(line, { x: boxX + 15, y, size: 9, font, color: textGray });
+      y -= 16;
+    }
+  }
+
+  // Size
+  const sizeName = invoice.job?.sizeName || 'N/A';
+  page.drawText(`Size: ${sizeName}`, { x: boxX + 15, y, size: 9, font });
+  y -= 14;
+
+  // Paper
+  const paperType = invoice.job?.paperType || 'N/A';
+  page.drawText(`Paper: ${paperType}`, { x: boxX + 15, y, size: 9, font });
+  y -= 14;
+
+  // Quantity
+  const quantity = invoice.job?.quantity || 0;
+  page.drawText(`Quantity: ${quantity.toLocaleString()} pcs`, { x: boxX + 15, y, size: 9, font });
+
+  // ===== TOTAL AMOUNT SECTION =====
+  y = height - 490;
+  const totalBoxX = width - 270;
+
+  // Draw total amount box
+  page.drawRectangle({
+    x: totalBoxX,
+    y: y - 50,
+    width: 220,
+    height: 70,
+    borderColor: borderBlue,
+    borderWidth: 2,
+  });
+
+  page.drawText('TOTAL AMOUNT DUE', {
+    x: totalBoxX + 15,
+    y: y - 15,
+    size: 11,
+    font: boldFont,
+    color: borderBlue,
+  });
+
+  const amountText = `$${parseFloat(invoice.amount.toString()).toFixed(2)}`;
+  page.drawText(amountText, {
+    x: totalBoxX + 15,
+    y: y - 40,
+    size: 24,
+    font: boldFont,
+    color: black,
+  });
+
+  // ===== FOOTER SECTION =====
+  const footerY = 50;
+
+  page.drawText('Payment Terms: Net 10 Days', {
+    x: 50,
+    y: footerY + 15,
+    size: 9,
+    font,
+    color: textGray,
+  });
+
+  page.drawText('Thank you for your business!', {
+    x: 50,
+    y: footerY,
+    size: 9,
+    font,
+    color: textGray,
+  });
+
+  // Generation timestamp (right aligned)
+  const timestamp = new Date().toLocaleString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  page.drawText(`Generated on ${timestamp}`, {
+    x: width - 230,
+    y: footerY,
+    size: 8,
+    font,
+    color: textGray,
   });
 
   // Save PDF
@@ -1005,7 +1173,7 @@ export async function completeJobAndGenerateInvoices(jobId: string) {
       page.drawText('Please include invoice number with your payment.', { x: 50, y, size: 8, font, color: mediumGray });
 
       y -= 24;
-      page.drawText('Thank you for your business!', { x: 50, y, size: 10, font: boldFont, color: accentColor });
+      page.drawText('Questions? Contact us anytime.', { x: 50, y, size: 10, font: boldFont, color: accentColor });
 
       const pdfBytes = await pdfDoc.save();
 

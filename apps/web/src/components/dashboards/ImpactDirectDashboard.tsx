@@ -4,12 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { revenueAPI, jobsAPI, reportsAPI, type POFlowMetrics } from '@/lib/api-client';
 import { JobDetailModal } from '@/components/JobDetailModal';
-import { JobApprovalSection } from '@/components/JobApprovalSection';
 import { StatsBar, type Stat } from '@/components/ui/StatsBar';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { GenericError } from '@/components/ui/EmptyState';
-import { StatusBadge } from '@/components/ui/Badge';
 import {
   CurrencyDollarIcon,
   TrendingUpIcon,
@@ -17,7 +15,7 @@ import {
   DocumentIcon,
   ReceiptIcon
 } from '@/components/ui/Icons';
-import { ClipboardList as ClipboardListIcon, FileText as FileTextIcon } from 'lucide-react';
+import { ClipboardList as ClipboardListIcon } from 'lucide-react';
 import { POFlowChart } from './POFlowChart';
 import { BradfordOwedBreakdownModal } from '@/components/BradfordOwedBreakdownModal';
 
@@ -104,10 +102,7 @@ export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChange
 
   if (!metrics) return null;
 
-  // Prepare stats for horizontal bar
-  const pendingProofs = jobs.filter(job => job.proofs?.some((proof: any) => proof.status === 'PENDING')).length;
-  const inProduction = jobs.filter(job => job.status === 'IN_PRODUCTION').length;
-
+  // Prepare stats for horizontal bar - Focus on financial metrics only
   const stats: Stat[] = [
     {
       label: 'Revenue',
@@ -140,18 +135,6 @@ export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChange
       label: 'Total Jobs',
       value: jobs.length.toString(),
       icon: <ClipboardListIcon className="h-4 w-4" />,
-    },
-    {
-      label: 'Pending Proofs',
-      value: pendingProofs.toString(),
-      icon: <FileTextIcon className="h-4 w-4" />,
-      valueClassName: pendingProofs > 0 ? 'text-warning' : '',
-    },
-    {
-      label: 'In Production',
-      value: inProduction.toString(),
-      icon: <ChartBarIcon className="h-4 w-4" />,
-      valueClassName: 'text-info',
     },
     {
       label: 'Revenue MTD',
@@ -205,9 +188,6 @@ export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChange
       {/* Horizontal Stats Bar */}
       <StatsBar stats={stats} />
 
-      {/* Jobs Requiring Approval */}
-      <JobApprovalSection onJobUpdated={() => { loadMetrics(); onJobsChanged?.(); }} />
-
       {/* PO Flow Chart */}
       {poFlowData && <POFlowChart data={poFlowData} />}
 
@@ -229,7 +209,6 @@ export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChange
                 <th>Total</th>
                 <th>Margin</th>
                 <th>Owed to Bradford</th>
-                <th>Status</th>
                 <th>Date</th>
                 <th>Actions</th>
               </tr>
@@ -297,9 +276,6 @@ export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChange
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-6 py-3 whitespace-nowrap">
-                    <StatusBadge status={job.status} />
                   </td>
                   <td className="px-6 py-3 whitespace-nowrap text-sm text-foreground">
                     {new Date(job.createdAt).toLocaleDateString()}

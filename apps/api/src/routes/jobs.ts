@@ -176,6 +176,21 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     const { status } = request.body as { status: JobStatus };
 
     const job = await updateJobStatus(id, status);
+
+    // Auto-generate invoices when job is completed
+    if (status === JobStatus.COMPLETED) {
+      try {
+        console.log(`🧾 Auto-generating invoices for completed job ${job.jobNo}...`);
+
+        const invoices = await completeJobAndGenerateInvoices(id);
+
+        console.log(`✅ Generated ${invoices.length} invoices for job ${job.jobNo}`);
+      } catch (error) {
+        console.error(`❌ Failed to auto-generate invoices for job ${job.jobNo}:`, error);
+        // Don't fail the status update if invoice generation fails
+      }
+    }
+
     return job;
   });
 
@@ -431,6 +446,66 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({
         success: false,
         error: error.message || 'Failed to complete job and generate invoices',
+      });
+    }
+  });
+
+  // POST /api/jobs/:id/regenerate-invoice-pdfs - Regenerate PDFs for all job invoices
+  fastify.post('/:id/regenerate-invoice-pdfs', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const { prisma } = await import('@printing-workflow/db');
+      const { generateInvoicePdf } = await import('../services/invoice.service.js');
+
+      // Get all invoices for this job
+      const invoices = await prisma.invoice.findMany({
+        where: { jobId: id },
+        select: { id: true, invoiceNo: true },
+      });
+
+      if (invoices.length === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: 'No invoices found for this job',
+        });
+      }
+
+      console.log(`🔄 Regenerating PDFs for ${invoices.length} invoices...`);
+
+      // Regenerate PDF for each invoice
+      const results = [];
+      for (const invoice of invoices) {
+        try {
+          console.log(`  - Regenerating PDF for invoice ${invoice.invoiceNo}...`);
+          await generateInvoicePdf(invoice.id);
+          results.push({ invoiceId: invoice.id, invoiceNo: invoice.invoiceNo, success: true });
+        } catch (error: any) {
+          console.error(`  ❌ Failed to regenerate PDF for invoice ${invoice.invoiceNo}:`, error.message);
+          results.push({
+            invoiceId: invoice.id,
+            invoiceNo: invoice.invoiceNo,
+            success: false,
+            error: error.message
+          });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`✅ Regenerated ${successCount}/${invoices.length} invoice PDFs`);
+
+      return {
+        success: true,
+        message: `Regenerated ${successCount}/${invoices.length} invoice PDFs`,
+        count: successCount,
+        total: invoices.length,
+        results,
+      };
+    } catch (error: any) {
+      console.error('❌ Error regenerating invoice PDFs:', error);
+      return reply.status(400).send({
+        success: false,
+        error: error.message || 'Failed to regenerate invoice PDFs',
       });
     }
   });

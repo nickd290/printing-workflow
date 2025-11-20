@@ -57,6 +57,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
       'Impact CPM ($/M)',
       'Bradford Pay ($)',
       'Bradford CPM ($/M)',
+      'Bradford Margin ($)',
       'Bradford Print Margin CPM ($/M)',
       'Bradford Paper Margin CPM ($/M)',
       'Bradford Total Margin CPM ($/M)',
@@ -78,6 +79,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
     const rows = jobs.map((job) => {
       const customerTotal = Number(job.customerTotal || 0);
       const bradfordTotal = Number(job.bradfordTotal || 0);
+      const bradfordTotalMargin = Number(job.bradfordTotalMargin || 0);
       const jdTotal = Number(job.jdTotal || 0);
       const impactMargin = Number(job.impactMargin || 0);
       const marginPercent = customerTotal > 0 ? (impactMargin / customerTotal) * 100 : 0;
@@ -111,6 +113,7 @@ const exportsRoutes: FastifyPluginAsync = async (server) => {
         customerCPM.toFixed(2),
         bradfordTotal.toFixed(2),
         bradfordTotalCPM.toFixed(2),
+        bradfordTotalMargin.toFixed(2),
         bradfordPrintMarginCPM.toFixed(2),
         bradfordPaperMarginCPM.toFixed(2),
         bradfordTotalMarginCPM.toFixed(2),

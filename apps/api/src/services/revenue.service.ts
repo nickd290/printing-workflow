@@ -131,6 +131,7 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
   const allJobs = await prisma.job.findMany({
     where: {
       deletedAt: null, // Exclude soft-deleted jobs
+      bradfordTotal: { not: null, gt: 0 }, // Only complete jobs
     },
     select: {
       customerTotal: true,
@@ -152,15 +153,7 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
     },
     0
   );
-  const grossProfit = allJobs.reduce(
-    (sum, job) => {
-      if (job.impactMargin) {
-        return sum + parseFloat(job.impactMargin.toString());
-      }
-      return sum;
-    },
-    0
-  );
+  const grossProfit = totalRevenue - totalCosts;
   const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
 
   return {

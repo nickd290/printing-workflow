@@ -5,6 +5,7 @@ import { vendorsAPI, type Vendor } from '@/lib/api-client';
 
 interface JobFormData {
   description: string;
+  quantity?: number;
   paper: string;
   flatSize: string;
   foldedSize: string;
@@ -114,6 +115,26 @@ export function JobFormFields({
           placeholder="e.g., Tri-fold Brochures, Business Cards"
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
         />
+      </div>
+
+      {/* Quantity */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Quantity *
+        </label>
+        <input
+          type="number"
+          min="1"
+          value={data.quantity || ''}
+          onChange={(e) => onChange('quantity', parseInt(e.target.value) || 0)}
+          disabled={disabled}
+          placeholder="e.g., 10000"
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Number of pieces to be printed
+        </p>
       </div>
 
       {/* Routing Options (Admin Only) */}

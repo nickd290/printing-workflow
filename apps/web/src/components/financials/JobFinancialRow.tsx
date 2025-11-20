@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Package, DollarSign, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Package, DollarSign } from 'lucide-react';
 import { JobEditModal } from '@/components/jobs/JobEditModal';
 import { PricingBreakdown } from '@/components/PricingBreakdown';
 
@@ -77,36 +77,13 @@ export function JobFinancialRow({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // Helper to compute payment status
+  // Helper to compute payment status for individual invoices
   const getPaymentStatus = (invoice: Invoice) => {
     if (invoice.paidAt) return { status: 'paid', label: 'Paid', color: 'text-green-600 bg-green-50' };
     if (invoice.dueAt && new Date(invoice.dueAt) < new Date())
       return { status: 'overdue', label: 'Overdue', color: 'text-red-600 bg-red-50' };
     return { status: 'unpaid', label: 'Unpaid', color: 'text-yellow-600 bg-yellow-50' };
   };
-
-  // Compute overall job payment status
-  const getJobPaymentStatus = () => {
-    const invoices = job.invoices || [];
-    if (invoices.length === 0) return { label: 'No Invoices', color: 'text-gray-500', icon: Clock };
-
-    const paidCount = invoices.filter(inv => inv.paidAt).length;
-
-    if (paidCount === invoices.length)
-      return { label: 'All Paid', color: 'text-green-600', icon: CheckCircle };
-    if (paidCount > 0)
-      return { label: 'Partially Paid', color: 'text-yellow-600', icon: Clock };
-
-    const hasOverdue = invoices.some(inv =>
-      inv.dueAt && new Date(inv.dueAt) < new Date() && !inv.paidAt
-    );
-
-    if (hasOverdue) return { label: 'Overdue', color: 'text-red-600', icon: AlertCircle };
-    return { label: 'Unpaid', color: 'text-yellow-600', icon: Clock };
-  };
-
-  const paymentStatus = getJobPaymentStatus();
-  const PaymentIcon = paymentStatus.icon;
 
   // Helper to safely parse number values (handles string|number|null|undefined)
   const parseAmount = (value: number | string | null | undefined): number => {
@@ -219,14 +196,6 @@ export function JobFinancialRow({
           <span className={`text-sm font-semibold ${profitMarginPercent >= 20 ? 'text-green-600' : profitMarginPercent >= 10 ? 'text-yellow-600' : 'text-red-600'}`}>
             {profitMarginPercent.toFixed(1)}%
           </span>
-        </div>
-
-        {/* Payment Status */}
-        <div className="min-w-[130px] flex-shrink-0">
-          <div className={`flex items-center gap-2 ${paymentStatus.color}`}>
-            {PaymentIcon && <PaymentIcon className="h-4 w-4" />}
-            <span className="font-medium text-sm">{paymentStatus.label}</span>
-          </div>
         </div>
 
         {/* Document Counts - Hidden on screens < 1280px */}
@@ -344,9 +313,6 @@ export function JobFinancialRow({
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-gray-900">
                           ${po.vendorAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                        <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                          {po.status}
                         </span>
                       </div>
                     </div>

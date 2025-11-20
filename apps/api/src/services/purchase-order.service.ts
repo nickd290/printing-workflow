@@ -174,8 +174,24 @@ export async function createThirdPartyVendorPO(data: {
     `Bradford Cut: $${data.bradfordCut}, Impact Margin: $${impactMargin}`
   );
 
-  // TODO: Create Bradford payment tracking record (future enhancement)
-  // This would track that Bradford is owed $bradfordCut even though they're not brokering
+  // Create PO #2: Impact → Bradford (Bradford's cut)
+  if (data.bradfordCut > 0) {
+    const bradfordCutPO = await createPurchaseOrder({
+      originCompanyId: 'impact-direct',
+      targetCompanyId: 'bradford',
+      jobId: data.jobId,
+      originalAmount: data.bradfordCut,
+      vendorAmount: data.bradfordCut,
+      marginAmount: 0,
+      poNumber: `IMP-BRD-${data.customerPONumber}`,
+      referencePONumber: data.customerPONumber,
+    });
+
+    console.log(
+      `Bradford cut PO created: Impact → Bradford | PO#: IMP-BRD-${data.customerPONumber} | ` +
+      `Amount: ${data.bradfordCut}`
+    );
+  }
 
   return po;
 }
@@ -722,6 +738,25 @@ export async function uploadBradfordPOPdf(
     `✅ Bradford PO created: ${poNumber} (${bradfordCompany.name} → ${jdCompany.name}) | Ref: ${customerPONumber || 'N/A'} | Amount: $${job.jdTotal}`
   );
 
+  // Create notification for Impact admin
+  await prisma.notification.create({
+    data: {
+      type: 'BRADFORD_PO_CREATED',
+      jobId: job.id,
+      recipient: 'admin@impactdirect.com',
+      subject: `Bradford created JD PO for Job ${job.jobNo}`,
+      body: `Bradford has created a PO to JD Graphic for job ${job.jobNo}. The job is now in production.`,
+    },
+  });
+
+  // Update job status to IN_PRODUCTION
+  await prisma.job.update({
+    where: { id: job.id },
+    data: { status: 'IN_PRODUCTION' },
+  });
+
+  console.log(`✅ Impact notified of Bradford → JD PO creation for job ${job.jobNo}`);
+
   // Send email to JD Graphic with PO PDF
   try {
     const template = emailTemplates.bradfordPOToJD(
@@ -849,7 +884,7 @@ export async function generatePurchaseOrderPdf(purchaseOrderId: string) {
   y -= 20;
 
   // Document Title
-  page.drawText('PURCHASE ORDER', {
+  page.drawText('Purchase Order', {
     x: 50,
     y,
     size: 24,
@@ -891,8 +926,17 @@ export async function generatePurchaseOrderPdf(purchaseOrderId: string) {
 
   y -= 10;
 
+  // Horizontal separator line
+  page.drawLine({
+    start: { x: 50, y },
+    end: { x: width - 50, y },
+    thickness: 0.5,
+    color: rgb(0.7, 0.7, 0.7),
+  });
+  y -= 20;
+
   // Vendor (To) Information
-  page.drawText('VENDOR:', { x: 50, y, size: 12, font: boldFont });
+  page.drawText('To:', { x: 50, y, size: 12, font: boldFont });
   y -= 20;
 
   page.drawText(po.targetCompany.name, { x: 50, y, size: 11, font: boldFont });
@@ -915,9 +959,115 @@ export async function generatePurchaseOrderPdf(purchaseOrderId: string) {
 
   y -= 20;
 
+  // Horizontal separator line
+  page.drawLine({
+    start: { x: 50, y },
+    end: { x: width - 50, y },
+    thickness: 0.5,
+    color: rgb(0.7, 0.7, 0.7),
+  });
+  y -= 20;
+
+  // Shipping Information Section (if shipping details exist)
+  if (po.job && (po.job.vendorShipToName || po.job.vendorShipToAddress || po.job.deliveryDate)) {
+    page.drawText('Ship To:', { x: 50, y, size: 12, font: boldFont });
+    y -= 20;
+
+    if (po.job.vendorShipToName) {
+      page.drawText(po.job.vendorShipToName, { x: 50, y, size: 11, font: boldFont });
+      y -= 15;
+    }
+
+    // Build complete address line
+    const addressParts = [];
+    if (po.job.vendorShipToAddress) addressParts.push(po.job.vendorShipToAddress);
+
+    const cityStateZip = [
+      po.job.vendorShipToCity,
+      po.job.vendorShipToState,
+      po.job.vendorShipToZip
+    ].filter(Boolean).join(', ');
+
+    if (cityStateZip) addressParts.push(cityStateZip);
+
+    addressParts.forEach(line => {
+      page.drawText(line, { x: 50, y, size: 10, font });
+      y -= 15;
+    });
+
+    if (po.job.vendorShipToPhone) {
+      page.drawText(po.job.vendorShipToPhone, { x: 50, y, size: 10, font });
+      y -= 15;
+    }
+
+    // Delivery Date (highlight in red if within 7 days)
+    if (po.job.deliveryDate) {
+      const deliveryDate = new Date(po.job.deliveryDate);
+      const today = new Date();
+      const daysUntilDelivery = Math.ceil((deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const isUrgent = daysUntilDelivery <= 7 && daysUntilDelivery >= 0;
+
+      page.drawText('Required Delivery Date:', {
+        x: 50,
+        y,
+        size: 10,
+        font: boldFont,
+        color: isUrgent ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
+      });
+      y -= 15;
+
+      const formattedDate = deliveryDate.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+
+      page.drawText(formattedDate, {
+        x: 50,
+        y,
+        size: 10,
+        font,
+        color: isUrgent ? rgb(0.8, 0, 0) : rgb(0, 0, 0)
+      });
+      y -= 15;
+
+      if (isUrgent) {
+        page.drawText('⚠ URGENT DELIVERY', {
+          x: 50,
+          y,
+          size: 9,
+          font: boldFont,
+          color: rgb(0.8, 0, 0)
+        });
+        y -= 15;
+      }
+    }
+
+    y -= 20;
+
+    // Horizontal separator line
+    page.drawLine({
+      start: { x: 50, y },
+      end: { x: width - 50, y },
+      thickness: 0.5,
+      color: rgb(0.7, 0.7, 0.7),
+    });
+    y -= 20;
+  } else {
+    // If no shipping info, still add separator before Job Specifications
+    // Horizontal separator line
+    page.drawLine({
+      start: { x: 50, y },
+      end: { x: width - 50, y },
+      thickness: 0.5,
+      color: rgb(0.7, 0.7, 0.7),
+    });
+    y -= 20;
+  }
+
   // Job Details Section (if job is linked)
   if (po.job) {
-    page.drawText('JOB DETAILS:', { x: 50, y, size: 12, font: boldFont });
+    page.drawText('Job Specifications', { x: 50, y, size: 12, font: boldFont });
     y -= 20;
 
     // Draw a box around job details
@@ -950,22 +1100,83 @@ export async function generatePurchaseOrderPdf(purchaseOrderId: string) {
       y -= 18;
     }
 
+    // Production Specifications
     if (po.job.quote) {
-      const quantity = po.job.quote.quantity ? `Quantity: ${po.job.quote.quantity.toLocaleString()}` : '';
-      const size = po.job.quote.size ? `Size: ${po.job.quote.size}` : '';
-      const specs = [quantity, size].filter(Boolean).join(' | ');
-      if (specs) {
-        page.drawText(specs, { x: 60, y: y - 5, size: 10, font });
+      // Quantity
+      if (po.job.quote.quantity) {
+        page.drawText(`Quantity: ${po.job.quote.quantity.toLocaleString()} pieces`, {
+          x: 60,
+          y: y - 5,
+          size: 10,
+          font
+        });
+        y -= 15;
+      }
+
+      // Paper Stock
+      if (po.job.quote.paperType) {
+        page.drawText(`Paper Stock: ${po.job.quote.paperType}`, {
+          x: 60,
+          y: y - 5,
+          size: 10,
+          font
+        });
+        y -= 15;
+      }
+
+      // Dimensions (Flat | Folded)
+      if (po.job.quote.flatSize || po.job.quote.foldedSize) {
+        const flatSize = po.job.quote.flatSize ? `Flat: ${po.job.quote.flatSize}` : '';
+        const foldedSize = po.job.quote.foldedSize ? `Folded: ${po.job.quote.foldedSize}` : '';
+        const dimensions = [flatSize, foldedSize].filter(Boolean).join(' | ');
+        page.drawText(`Dimensions: ${dimensions}`, {
+          x: 60,
+          y: y - 5,
+          size: 10,
+          font
+        });
+        y -= 15;
+      }
+
+      // Colors
+      if (po.job.quote.colors) {
+        page.drawText(`Colors: ${po.job.quote.colors}`, {
+          x: 60,
+          y: y - 5,
+          size: 10,
+          font
+        });
+        y -= 15;
+      }
+
+      // Finishing
+      if (po.job.quote.finishing) {
+        page.drawText(`Finishing: ${po.job.quote.finishing}`, {
+          x: 60,
+          y: y - 5,
+          size: 10,
+          font
+        });
+        y -= 15;
       }
     }
 
-    y -= 30;
+    y -= 15;
   }
 
   y -= 20;
 
+  // Horizontal separator line
+  page.drawLine({
+    start: { x: 50, y },
+    end: { x: width - 50, y },
+    thickness: 0.5,
+    color: rgb(0.7, 0.7, 0.7),
+  });
+  y -= 20;
+
   // Financial Details Section
-  page.drawText('AMOUNT:', { x: 50, y, size: 12, font: boldFont });
+  page.drawText('Pricing', { x: 50, y, size: 12, font: boldFont });
   y -= 25;
 
   // Draw table header
@@ -1024,15 +1235,25 @@ export async function generatePurchaseOrderPdf(purchaseOrderId: string) {
 
   y -= 40;
 
+  // Horizontal separator line
+  page.drawLine({
+    start: { x: 50, y },
+    end: { x: width - 50, y },
+    thickness: 0.5,
+    color: rgb(0.7, 0.7, 0.7),
+  });
+  y -= 20;
+
   // Terms and Conditions
-  page.drawText('TERMS & CONDITIONS:', { x: 50, y, size: 10, font: boldFont });
+  page.drawText('Terms & Conditions', { x: 50, y, size: 10, font: boldFont });
   y -= 15;
 
   const terms = [
-    '• Payment due upon completion of work',
-    '• Any changes to this order must be approved in writing',
-    '• Vendor must notify buyer of any delays or issues immediately',
-    '• Work must meet quality standards as per industry specifications',
+    'Payment terms as specified above. Late deliveries may result in invoice adjustment.',
+    'All work must meet SWOP/G7 color specifications and industry quality standards.',
+    'Changes to specifications require written authorization and may affect pricing and delivery.',
+    'Vendor responsible for notification of any delays, material shortages, or quality issues.',
+    'Packing slips must accompany all shipments with PO number clearly marked.',
   ];
 
   terms.forEach((term) => {

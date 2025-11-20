@@ -358,7 +358,6 @@ export default function FinancialsPage() {
                       <div className="min-w-[110px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase hidden lg:block">JD Pay</div>
                       <div className="min-w-[110px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase">Impact Profit</div>
                       <div className="min-w-[90px] flex-shrink-0 text-right text-xs font-semibold text-gray-700 uppercase">Margin %</div>
-                      <div className="min-w-[130px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase">Status</div>
                       <div className="min-w-[100px] flex-shrink-0 text-xs font-semibold text-gray-700 uppercase hidden xl:block">Docs</div>
                     </div>
 

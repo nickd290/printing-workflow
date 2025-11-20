@@ -397,4 +397,96 @@ export const purchaseOrderRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   });
+
+  // POST /api/purchase-orders/:id/accept - Bradford accepts Impact PO
+  fastify.post('/:id/accept', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { prisma } = fastify;
+
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: { job: true, originCompany: true, targetCompany: true },
+    });
+
+    if (!po) {
+      return reply.status(404).send({ error: 'Purchase order not found' });
+    }
+
+    if (po.targetCompanyId !== 'bradford') {
+      return reply.status(403).send({ error: 'Only Bradford can accept this PO' });
+    }
+
+    if (po.status !== POStatus.PENDING) {
+      return reply.status(400).send({ error: 'PO is not in PENDING status' });
+    }
+
+    const updatedPO = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        status: POStatus.ACCEPTED,
+        acceptedAt: new Date(),
+      },
+    });
+
+    await prisma.notification.create({
+      data: {
+        type: 'PO_ACCEPTED',
+        jobId: po.jobId,
+        recipient: 'admin@impactdirect.com',
+        subject: `Bradford accepted PO for Job ${po.job?.jobNo}`,
+        body: `Bradford has accepted your purchase order for job ${po.job?.jobNo}.`,
+      },
+    });
+
+    console.log(`✅ Bradford accepted PO ${po.poNumber} for job ${po.job?.jobNo}`);
+
+    return updatedPO;
+  });
+
+  // POST /api/purchase-orders/:id/reject - Bradford rejects Impact PO
+  fastify.post('/:id/reject', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { reason } = request.body as { reason?: string };
+    const { prisma } = fastify;
+
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: { job: true },
+    });
+
+    if (!po) {
+      return reply.status(404).send({ error: 'Purchase order not found' });
+    }
+
+    if (po.targetCompanyId !== 'bradford') {
+      return reply.status(403).send({ error: 'Only Bradford can reject this PO' });
+    }
+
+    if (po.status !== POStatus.PENDING) {
+      return reply.status(400).send({ error: 'PO is not in PENDING status' });
+    }
+
+    const updatedPO = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        status: POStatus.REJECTED,
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+      },
+    });
+
+    await prisma.notification.create({
+      data: {
+        type: 'PO_REJECTED',
+        jobId: po.jobId,
+        recipient: 'admin@impactdirect.com',
+        subject: `Bradford rejected PO for Job ${po.job?.jobNo}`,
+        body: `Bradford has rejected your purchase order for job ${po.job?.jobNo}. Reason: ${reason || 'Not provided'}`,
+      },
+    });
+
+    console.log(`❌ Bradford rejected PO ${po.poNumber} for job ${po.job?.jobNo}`);
+
+    return updatedPO;
+  });
 };
