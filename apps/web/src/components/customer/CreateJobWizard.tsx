@@ -35,6 +35,35 @@ interface ParsedPOData {
   quantity?: number;
   requiredArtworkCount?: number;
   requiredDataFileCount?: number;
+
+  // Job type classification
+  jobType?: 'FLAT' | 'FOLDED' | 'BOOKLET_SELF_COVER' | 'BOOKLET_PLUS_COVER';
+
+  // Common conditional fields for all job types
+  bleeds?: string;
+  coverage?: string;
+  stock?: string;
+  coating?: string;
+
+  // Folded piece specific fields
+  foldType?: string;
+
+  // Booklet specific fields
+  totalPages?: number;
+  interiorPages?: number;
+  coverPages?: number;
+  pageSize?: string;
+  bindingType?: string;
+
+  // Plus-cover booklet specific fields (separate text and cover specs)
+  textStock?: string;
+  coverStock?: string;
+  textBleeds?: string;
+  coverBleeds?: string;
+  textCoverage?: string;
+  coverCoverage?: string;
+  textCoating?: string;
+  coverCoating?: string;
 }
 
 interface CreateJobWizardProps {
@@ -172,6 +201,26 @@ export function CreateJobWizard({ customerId, onJobCreated }: CreateJobWizardPro
         requiredArtworkCount: confirmedData.requiredArtworkCount,
         requiredDataFileCount: confirmedData.requiredDataFileCount,
         notes: confirmedData.notes || undefined,
+        // Job type and conditional fields
+        jobType: confirmedData.jobType || undefined,
+        bleeds: confirmedData.bleeds || undefined,
+        coverage: confirmedData.coverage || undefined,
+        stock: confirmedData.stock || undefined,
+        coating: confirmedData.coating || undefined,
+        foldType: confirmedData.foldType || undefined,
+        totalPages: confirmedData.totalPages || undefined,
+        interiorPages: confirmedData.interiorPages || undefined,
+        coverPages: confirmedData.coverPages || undefined,
+        pageSize: confirmedData.pageSize || undefined,
+        bindingType: confirmedData.bindingType || undefined,
+        textStock: confirmedData.textStock || undefined,
+        coverStock: confirmedData.coverStock || undefined,
+        textBleeds: confirmedData.textBleeds || undefined,
+        coverBleeds: confirmedData.coverBleeds || undefined,
+        textCoverage: confirmedData.textCoverage || undefined,
+        coverCoverage: confirmedData.coverCoverage || undefined,
+        textCoating: confirmedData.textCoating || undefined,
+        coverCoating: confirmedData.coverCoating || undefined,
       };
 
       const response = await fetch(`${API_URL}/api/customer/jobs`, {

@@ -1,7 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { FlatPieceFields } from '../job-specs/FlatPieceFields';
+import { FoldedPieceFields } from '../job-specs/FoldedPieceFields';
+import { BookletSelfCoverFields } from '../job-specs/BookletSelfCoverFields';
+import { BookletPlusCoverFields } from '../job-specs/BookletPlusCoverFields';
 
 interface SampleRecipient {
   quantity: number;
@@ -32,6 +36,33 @@ interface ParsedPOData {
   requiredArtworkCount?: number;
   requiredDataFileCount?: number;
   notes?: string;
+
+  // Job type for conditional rendering
+  jobType?: 'FLAT' | 'FOLDED' | 'BOOKLET_SELF_COVER' | 'BOOKLET_PLUS_COVER';
+
+  // Conditional fields for all job types
+  bleeds?: string;
+  coverage?: string;
+  stock?: string;
+  coating?: string;
+
+  // Folded pieces
+  foldType?: string;
+
+  // Booklets
+  totalPages?: number;
+  interiorPages?: number;
+  coverPages?: number;
+  pageSize?: string;
+  textStock?: string;
+  coverStock?: string;
+  bindingType?: string;
+  textBleeds?: string;
+  coverBleeds?: string;
+  textCoverage?: string;
+  coverCoverage?: string;
+  textCoating?: string;
+  coverCoating?: string;
 }
 
 interface POReviewModalProps {
@@ -44,6 +75,13 @@ interface POReviewModalProps {
 
 export function POReviewModal({ isOpen, onClose, parsedData, onConfirm, loading }: POReviewModalProps) {
   const [formData, setFormData] = useState<ParsedPOData>(parsedData);
+
+  // Sync formData whenever modal opens with new parsedData
+  useEffect(() => {
+    if (isOpen && parsedData) {
+      setFormData(parsedData);
+    }
+  }, [isOpen, parsedData]);
 
   if (!isOpen) return null;
 
@@ -155,6 +193,44 @@ export function POReviewModal({ isOpen, onClose, parsedData, onConfirm, loading 
                 />
               </div>
 
+              {/* Job Type Selector - MOVED TO TOP FOR VISIBILITY */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Product Type
+                </label>
+                <select
+                  value={formData.jobType || ''}
+                  onChange={(e) => handleChange('jobType', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select product type...</option>
+                  <option value="FLAT">Flat Piece (Postcards, Flyers)</option>
+                  <option value="FOLDED">Folded Piece (Brochures, Tri-folds)</option>
+                  <option value="BOOKLET_SELF_COVER">Booklet - Self Cover (Same stock)</option>
+                  <option value="BOOKLET_PLUS_COVER">Booklet - Plus Cover (Separate cover stock)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select the product type to show relevant fields
+                </p>
+              </div>
+
+              {/* Conditional Product-Specific Fields - IMMEDIATELY BELOW PRODUCT TYPE */}
+              {formData.jobType === 'FLAT' && (
+                <FlatPieceFields formData={formData} onChange={handleChange} />
+              )}
+
+              {formData.jobType === 'FOLDED' && (
+                <FoldedPieceFields formData={formData} onChange={handleChange} />
+              )}
+
+              {formData.jobType === 'BOOKLET_SELF_COVER' && (
+                <BookletSelfCoverFields formData={formData} onChange={handleChange} />
+              )}
+
+              {formData.jobType === 'BOOKLET_PLUS_COVER' && (
+                <BookletPlusCoverFields formData={formData} onChange={handleChange} />
+              )}
+
               {/* Total - Enhanced UI for price verification */}
               <div className="md:col-span-2">
                 <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4">
@@ -233,34 +309,6 @@ export function POReviewModal({ isOpen, onClose, parsedData, onConfirm, loading 
                 />
               </div>
 
-              {/* Flat Size */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Flat Size
-                </label>
-                <input
-                  type="text"
-                  value={formData.flatSize || ''}
-                  onChange={(e) => handleChange('flatSize', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="8.5 x 11"
-                />
-              </div>
-
-              {/* Folded Size */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Folded Size
-                </label>
-                <input
-                  type="text"
-                  value={formData.foldedSize || ''}
-                  onChange={(e) => handleChange('foldedSize', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="4.25 x 5.5"
-                />
-              </div>
-
               {/* Colors */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -275,19 +323,52 @@ export function POReviewModal({ isOpen, onClose, parsedData, onConfirm, loading 
                 />
               </div>
 
-              {/* Finishing */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Finishing
-                </label>
-                <input
-                  type="text"
-                  value={formData.finishing || ''}
-                  onChange={(e) => handleChange('finishing', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="UV Coating"
-                />
-              </div>
+              {/* Legacy: Show basic fields if no job type selected */}
+              {!formData.jobType && (
+                <>
+                  {/* Flat Size */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Flat Size
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.flatSize || ''}
+                      onChange={(e) => handleChange('flatSize', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="8.5 x 11"
+                    />
+                  </div>
+
+                  {/* Folded Size */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Folded Size
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.foldedSize || ''}
+                      onChange={(e) => handleChange('foldedSize', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="4.25 x 5.5"
+                    />
+                  </div>
+
+                  {/* Finishing */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Finishing
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.finishing || ''}
+                      onChange={(e) => handleChange('finishing', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="UV Coating"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Delivery Schedule Section */}
               <div className="md:col-span-2">

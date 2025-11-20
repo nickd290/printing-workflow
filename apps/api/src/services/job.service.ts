@@ -377,6 +377,7 @@ export async function getJobById(id: string) {
         include: {
           originCompany: true,
           targetCompany: true,
+          targetVendor: true,
         },
       },
       invoices: {
@@ -1243,6 +1244,7 @@ export async function updateJob(
           include: {
             originCompany: true,
             targetCompany: true,
+            targetVendor: true,
           },
         },
         invoices: {

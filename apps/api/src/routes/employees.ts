@@ -1,72 +1,74 @@
 import { FastifyPluginAsync } from 'fastify';
 import {
-  createVendor,
-  getVendorById,
-  listVendors,
-  updateVendor,
-  deleteVendor,
-} from '../services/vendor.service.js';
+  createEmployee,
+  getEmployeeById,
+  listEmployees,
+  updateEmployee,
+  deleteEmployee,
+} from '../services/employee.service.js';
 
-export const vendorRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/vendors - Create vendor
+export const employeeRoutes: FastifyPluginAsync = async (fastify) => {
+  // POST /api/employees - Create employee
   fastify.post('/', async (request, reply) => {
     try {
       const body = request.body as {
+        companyId: string;
         name: string;
-        email?: string;
+        email: string;
         phone?: string;
-        address?: string;
-        vendorCode?: string; // Optional 3-digit code, auto-generated if not provided
+        position?: string;
+        isPrimary?: boolean;
       };
 
-      console.log('➕ Creating vendor with data:', body);
-      const vendor = await createVendor(body);
-      console.log('✅ Vendor created successfully:', { id: vendor.id, name: vendor.name, vendorCode: vendor.vendorCode });
-      return vendor;
+      const employee = await createEmployee(body);
+      return employee;
     } catch (error: any) {
-      console.error('❌ Error creating vendor:', error.message);
       return reply.status(400).send({ error: error.message });
     }
   });
 
-  // GET /api/vendors - List all vendors
+  // GET /api/employees - List all employees
   fastify.get('/', async (request, reply) => {
     try {
-      const { isActive, search } = request.query as {
-        isActive?: string;
+      const { companyId, search, isPrimary } = request.query as {
+        companyId?: string;
         search?: string;
+        isPrimary?: string;
       };
 
       const filters: any = {};
-      if (isActive !== undefined) {
-        filters.isActive = isActive === 'true';
+      if (companyId) {
+        filters.companyId = companyId;
       }
       if (search) {
         filters.search = search;
       }
+      if (isPrimary !== undefined) {
+        filters.isPrimary = isPrimary === 'true';
+      }
 
-      const vendors = await listVendors(filters);
-      return vendors;
+      const employees = await listEmployees(filters);
+      return employees;
     } catch (error: any) {
       return reply.status(500).send({ error: error.message });
     }
   });
 
-  // GET /api/vendors/:id - Get vendor by ID
+  // GET /api/employees/:id - Get employee by ID
   fastify.get('/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-      const vendor = await getVendorById(id);
-      return vendor;
+      const employee = await getEmployeeById(id);
+      return employee;
     } catch (error: any) {
-      if (error.message === 'Vendor not found') {
+      if (error.message === 'Employee not found') {
         return reply.status(404).send({ error: error.message });
       }
       return reply.status(500).send({ error: error.message });
     }
   });
 
-  // PATCH /api/vendors/:id - Update vendor
+  // PATCH /api/employees/:id - Update employee
   fastify.patch('/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
@@ -74,29 +76,28 @@ export const vendorRoutes: FastifyPluginAsync = async (fastify) => {
         name?: string;
         email?: string;
         phone?: string;
-        address?: string;
-        vendorCode?: string; // 3-digit code
-        isActive?: boolean;
+        position?: string;
+        isPrimary?: boolean;
       };
 
-      const vendor = await updateVendor(id, body);
-      return vendor;
+      const employee = await updateEmployee(id, body);
+      return employee;
     } catch (error: any) {
-      if (error.message === 'Vendor not found') {
+      if (error.message === 'Employee not found') {
         return reply.status(404).send({ error: error.message });
       }
       return reply.status(400).send({ error: error.message });
     }
   });
 
-  // DELETE /api/vendors/:id - Delete/deactivate vendor
+  // DELETE /api/employees/:id - Delete employee
   fastify.delete('/:id', async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
-      const vendor = await deleteVendor(id);
-      return { success: true, vendor };
+      const result = await deleteEmployee(id);
+      return result;
     } catch (error: any) {
-      if (error.message === 'Vendor not found') {
+      if (error.message === 'Employee not found') {
         return reply.status(404).send({ error: error.message });
       }
       return reply.status(400).send({ error: error.message });

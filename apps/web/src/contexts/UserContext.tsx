@@ -35,6 +35,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkSession = async () => {
       const token = localStorage.getItem('auth_token');
+
       if (token) {
         try {
           const response = await fetch(`${API_URL}/api/auth/me`, {
@@ -47,12 +48,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
           if (response.ok) {
             const data = await response.json();
             setUser(data.user);
+            console.log('✅ [Auth] Session restored for:', data.user.email);
           } else {
             // Token invalid, clear it
+            console.warn('⚠️ [Auth] Invalid token, clearing session');
             localStorage.removeItem('auth_token');
           }
         } catch (error) {
-          console.error('Failed to check session:', error);
+          console.error('❌ [Auth] Session check failed:', error instanceof Error ? error.message : 'Unknown error');
           localStorage.removeItem('auth_token');
         }
       }

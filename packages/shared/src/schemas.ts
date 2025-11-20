@@ -65,6 +65,93 @@ export const createJobSchema = z.object({
 });
 
 // ============================================================================
+// Job Type-Specific Spec Schemas (for third-party vendors)
+// ============================================================================
+
+// Common fields shared across all job types
+const commonSpecFields = {
+  description: z.string().optional(),
+  paper: z.string().optional(),
+  colors: z.string().optional(),
+  quantity: z.number().int().positive().optional(),
+  deliveryDate: z.string().optional(),
+  orderDate: z.string().optional(),
+  pickupDate: z.string().optional(),
+  poolDate: z.string().optional(),
+  samples: z.string().optional(),
+  sampleInstructions: z.string().optional(),
+  notes: z.string().optional(),
+  rawPOText: z.string().optional(),
+};
+
+// Flat Piece Specs (postcards, flyers, etc.)
+export const flatPieceSpecsSchema = z.object({
+  jobType: z.literal('FLAT'),
+  flatSize: z.string().optional(),
+  bleeds: z.string().optional(),
+  coverage: z.string().optional(), // Ink coverage (4/4, 4/1, etc.)
+  stock: z.string().optional(), // Paper stock
+  coating: z.string().optional(), // UV coating, aqueous, etc.
+  ...commonSpecFields,
+});
+
+// Folded Piece Specs (brochures, tri-folds, etc.)
+export const foldedPieceSpecsSchema = z.object({
+  jobType: z.literal('FOLDED'),
+  flatSize: z.string().optional(), // Before folding
+  foldedSize: z.string().optional(), // After folding
+  foldType: z.string().optional(), // Half fold, tri-fold, gate fold, etc.
+  bleeds: z.string().optional(),
+  finishing: z.string().optional(), // score, fold, score+fold
+  stock: z.string().optional(),
+  coating: z.string().optional(),
+  coverage: z.string().optional(),
+  ...commonSpecFields,
+});
+
+// Booklet (Self Cover) Specs - same stock for cover and interior
+export const bookletSelfCoverSpecsSchema = z.object({
+  jobType: z.literal('BOOKLET_SELF_COVER'),
+  totalPages: z.number().int().positive().optional(), // Total page count
+  pageSize: z.string().optional(), // 8.5 x 11, etc.
+  bindingType: z.enum(['saddle-stitch', 'perfect-bound']).optional(),
+  textStock: z.string().optional(), // Stock for all pages
+  bleeds: z.string().optional(),
+  coverage: z.string().optional(),
+  coating: z.string().optional(),
+  ...commonSpecFields,
+});
+
+// Booklet (Plus Cover) Specs - separate cover and interior stocks
+export const bookletPlusCoverSpecsSchema = z.object({
+  jobType: z.literal('BOOKLET_PLUS_COVER'),
+  interiorPages: z.number().int().positive().optional(), // Interior page count (excluding cover)
+  coverPages: z.literal(4).optional(), // Always 4 (front, inside front, inside back, back)
+  pageSize: z.string().optional(),
+  textStock: z.string().optional(), // Stock for interior pages
+  coverStock: z.string().optional(), // Stock for cover (heavier)
+  bindingType: z.enum(['saddle-stitch', 'perfect-bound']).optional(),
+  textBleeds: z.string().optional(), // Bleeds for text pages
+  coverBleeds: z.string().optional(), // Bleeds for cover
+  textCoverage: z.string().optional(), // Ink coverage for text
+  coverCoverage: z.string().optional(), // Ink coverage for cover
+  textCoating: z.string().optional(),
+  coverCoating: z.string().optional(),
+  ...commonSpecFields,
+});
+
+// Legacy specs for Bradford/JD workflow (no jobType)
+export const legacyJobSpecsSchema = z.record(z.any());
+
+// Discriminated union of all job specs types
+export const jobSpecsSchema = z.discriminatedUnion('jobType', [
+  flatPieceSpecsSchema,
+  foldedPieceSpecsSchema,
+  bookletSelfCoverSpecsSchema,
+  bookletPlusCoverSpecsSchema,
+]).or(legacyJobSpecsSchema); // Allow legacy specs for Bradford/JD flow
+
+// ============================================================================
 // Proof Schemas
 // ============================================================================
 

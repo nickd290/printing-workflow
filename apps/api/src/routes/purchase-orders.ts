@@ -15,6 +15,7 @@ import {
   parseBradfordPO,
   createPOFromParsedPDF,
 } from '../services/pdf-parser.service.js';
+import { generateAndSaveVendorPOPdf } from '../services/vendor-po.service.js';
 
 export const purchaseOrderRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/purchase-orders - Create purchase order
@@ -141,10 +142,26 @@ export const purchaseOrderRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
 
     try {
-      const po = await generatePurchaseOrderPdf(id);
+      // First, check if this is a vendor PO or traditional PO
+      const po = await getPOById(id);
+
+      if (!po) {
+        return reply.status(404).send({ error: 'Purchase order not found' });
+      }
+
+      // Generate appropriate PDF based on PO type
+      let updatedPO;
+      if (po.targetVendorId) {
+        // Third-party vendor PO - generate and save to File model
+        updatedPO = await generateAndSaveVendorPOPdf(id);
+      } else {
+        // Traditional PO (Bradford → JD) - use standard generator
+        updatedPO = await generatePurchaseOrderPdf(id);
+      }
+
       return {
         success: true,
-        purchaseOrder: po,
+        purchaseOrder: updatedPO,
         message: 'PDF generated successfully',
       };
     } catch (error: any) {

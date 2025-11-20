@@ -170,7 +170,10 @@ export function ImpactDirectDashboard({ jobs, loading, onCreateJob, onJobsChange
         actions={
           <div className="flex items-center gap-3">
             <button
-              onClick={onCreateJob}
+              onClick={() => {
+                console.log('🎯 [ImpactDirect] Create New Job button clicked');
+                onCreateJob?.();
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

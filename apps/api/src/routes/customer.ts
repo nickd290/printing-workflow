@@ -5,6 +5,8 @@ import { checkJobReadiness, updateJobReadiness, getJobFileProgress } from '../se
 import { sendNotification, sendJobReadyNotifications } from '../services/notification.service.js';
 import { sendEmail, emailTemplates } from '../lib/email.js';
 import { generateVendorPOPdf } from '../services/vendor-po.service.js';
+import { createFileSharesForJob, getFileSharesForJob } from '../services/file-share.service.js';
+import { generateVendorPONumber } from '../lib/utils.js';
 
 const customerRoutes: FastifyPluginAsync = async (server) => {
   // Customer uploads their PO
@@ -189,6 +191,26 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           poolDate: parsed.poolDate || null,
           sampleInstructions: parsed.sampleInstructions || null,
           sampleRecipients: parsed.sampleRecipients || null,
+          // Job type and conditional fields
+          jobType: parsed.jobType || null,
+          bleeds: parsed.bleeds || null,
+          coverage: parsed.coverage || null,
+          stock: parsed.stock || null,
+          coating: parsed.coating || null,
+          foldType: parsed.foldType || null,
+          totalPages: parsed.totalPages || null,
+          interiorPages: parsed.interiorPages || null,
+          coverPages: parsed.coverPages || null,
+          pageSize: parsed.pageSize || null,
+          bindingType: parsed.bindingType || null,
+          textStock: parsed.textStock || null,
+          coverStock: parsed.coverStock || null,
+          textBleeds: parsed.textBleeds || null,
+          coverBleeds: parsed.coverBleeds || null,
+          textCoverage: parsed.textCoverage || null,
+          coverCoverage: parsed.coverCoverage || null,
+          textCoating: parsed.textCoating || null,
+          coverCoating: parsed.coverCoating || null,
         },
       };
     } catch (error: any) {
@@ -206,6 +228,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
   // TypeScript interface for job creation request body
   interface CreateJobBody {
     customerId: string;
+    employeeId?: string;
     description?: string;
     paper?: string;
     flatSize?: string;
@@ -236,6 +259,39 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
     vendorId?: string;
     vendorAmount?: number;
     bradfordCut?: number;
+    // Job type for third-party vendor jobs
+    jobType?: 'FLAT' | 'FOLDED' | 'BOOKLET_SELF_COVER' | 'BOOKLET_PLUS_COVER';
+    // Vendor shipping/payment fields
+    vendorShipToName?: string;
+    vendorShipToAddress?: string;
+    vendorShipToCity?: string;
+    vendorShipToState?: string;
+    vendorShipToZip?: string;
+    vendorShipToPhone?: string;
+    vendorPaymentTerms?: string;
+    vendorSpecialInstructions?: string;
+    // Job type-specific fields
+    // Flat pieces
+    bleeds?: string;
+    coverage?: string;
+    stock?: string;
+    coating?: string;
+    // Folded pieces
+    foldType?: string;
+    // Booklets
+    totalPages?: number;
+    interiorPages?: number;
+    coverPages?: number;
+    pageSize?: string;
+    textStock?: string;
+    coverStock?: string;
+    bindingType?: 'saddle-stitch' | 'perfect-bound';
+    textBleeds?: string;
+    coverBleeds?: string;
+    textCoverage?: string;
+    coverCoverage?: string;
+    textCoating?: string;
+    coverCoating?: string;
   }
 
   server.post('/jobs', async (request, reply) => {
@@ -246,6 +302,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
       // Extract fields from body
       const {
         customerId,
+        employeeId,
         description,
         paper,
         flatSize,
@@ -269,6 +326,35 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         vendorId,
         vendorAmount,
         bradfordCut,
+        jobType,
+        // Vendor shipping/payment fields
+        vendorShipToName,
+        vendorShipToAddress,
+        vendorShipToCity,
+        vendorShipToState,
+        vendorShipToZip,
+        vendorShipToPhone,
+        vendorPaymentTerms,
+        vendorSpecialInstructions,
+        // Job type-specific fields
+        bleeds,
+        coverage,
+        stock,
+        coating,
+        foldType,
+        totalPages,
+        interiorPages,
+        coverPages,
+        pageSize,
+        textStock,
+        coverStock,
+        bindingType,
+        textBleeds,
+        coverBleeds,
+        textCoverage,
+        coverCoverage,
+        textCoating,
+        coverCoating,
       } = body;
 
       if (!customerId) {
@@ -317,14 +403,11 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
       const { generateJobNumber } = await import('../lib/utils.js');
       const jobNo = await generateJobNumber();
 
-      // Build specs object
-      const specs = {
+      // Build specs object with conditional fields based on jobType
+      const specs: any = {
         description: description || 'New customer order',
         paper,
-        flatSize,
-        foldedSize,
         colors,
-        finishing,
         deliveryDate,
         orderDate,
         pickupDate,
@@ -335,6 +418,63 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         notes,
         quantity: quantity ? parseInt(quantity) : undefined,
       };
+
+      // Add jobType if provided (for third-party vendor jobs)
+      if (jobType) {
+        specs.jobType = jobType;
+
+        // Add job-type-specific fields based on jobType
+        switch (jobType) {
+          case 'FLAT':
+            if (flatSize) specs.flatSize = flatSize;
+            if (bleeds) specs.bleeds = bleeds;
+            if (coverage) specs.coverage = coverage;
+            if (stock) specs.stock = stock;
+            if (coating) specs.coating = coating;
+            break;
+
+          case 'FOLDED':
+            if (flatSize) specs.flatSize = flatSize;
+            if (foldedSize) specs.foldedSize = foldedSize;
+            if (foldType) specs.foldType = foldType;
+            if (bleeds) specs.bleeds = bleeds;
+            if (finishing) specs.finishing = finishing;
+            if (stock) specs.stock = stock;
+            if (coating) specs.coating = coating;
+            if (coverage) specs.coverage = coverage;
+            break;
+
+          case 'BOOKLET_SELF_COVER':
+            if (totalPages) specs.totalPages = totalPages;
+            if (pageSize) specs.pageSize = pageSize;
+            if (bindingType) specs.bindingType = bindingType;
+            if (textStock) specs.textStock = textStock;
+            if (bleeds) specs.bleeds = bleeds;
+            if (coverage) specs.coverage = coverage;
+            if (coating) specs.coating = coating;
+            break;
+
+          case 'BOOKLET_PLUS_COVER':
+            if (interiorPages) specs.interiorPages = interiorPages;
+            if (coverPages) specs.coverPages = coverPages;
+            if (pageSize) specs.pageSize = pageSize;
+            if (textStock) specs.textStock = textStock;
+            if (coverStock) specs.coverStock = coverStock;
+            if (bindingType) specs.bindingType = bindingType;
+            if (textBleeds) specs.textBleeds = textBleeds;
+            if (coverBleeds) specs.coverBleeds = coverBleeds;
+            if (textCoverage) specs.textCoverage = textCoverage;
+            if (coverCoverage) specs.coverCoverage = coverCoverage;
+            if (textCoating) specs.textCoating = textCoating;
+            if (coverCoating) specs.coverCoating = coverCoating;
+            break;
+        }
+      } else {
+        // Legacy: include all fields for Bradford/JD workflow
+        if (flatSize) specs.flatSize = flatSize;
+        if (foldedSize) specs.foldedSize = foldedSize;
+        if (finishing) specs.finishing = finishing;
+      }
 
       // Extract top-level fields for database indexing and display
       const sizeName = flatSize || foldedSize || null;
@@ -347,6 +487,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         data: {
           jobNo,
           customerId,
+          employeeId: employeeId || null,
           status: 'PENDING',
           customerTotal: String(total || 0),
           customerPONumber: poNumber || undefined,
@@ -354,6 +495,21 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           requiredArtworkCount: requiredArtworkCount || null,
           requiredDataFileCount: requiredDataFileCount || null,
           routingType: routingType || 'BRADFORD_JD',
+          // Job type (only for third-party vendor jobs)
+          jobType: jobType || null,
+          // Third-party vendor fields
+          vendorId: vendorId || null,
+          vendorAmount: vendorAmount ? String(vendorAmount) : null,
+          bradfordCut: bradfordCut !== undefined ? String(bradfordCut) : null,
+          // Vendor shipping/payment fields
+          vendorShipToName: vendorShipToName || null,
+          vendorShipToAddress: vendorShipToAddress || null,
+          vendorShipToCity: vendorShipToCity || null,
+          vendorShipToState: vendorShipToState || null,
+          vendorShipToZip: vendorShipToZip || null,
+          vendorShipToPhone: vendorShipToPhone || null,
+          vendorPaymentTerms: vendorPaymentTerms || null,
+          vendorSpecialInstructions: vendorSpecialInstructions || null,
           specs,
           // Add sizeName and quantity as top-level fields for table display
           sizeName: sizeName,
@@ -361,6 +517,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         },
         include: {
           customer: true,
+          vendor: true,
         },
       });
 
@@ -374,15 +531,35 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
           });
         }
 
-        // Create Purchase Order to third-party vendor
-        const poNumber = `PO-${job.jobNo}-${Date.now()}`;
+        // Get vendor to check for vendor code
+        const vendor = await prisma.vendor.findUnique({
+          where: { id: vendorId },
+          select: { vendorCode: true, name: true },
+        });
+
+        if (!vendor) {
+          return reply.code(404).send({ error: 'Vendor not found' });
+        }
+
+        // Generate PO number: use vendor code if available, otherwise fallback
+        let poNumber: string;
+        if (vendor.vendorCode) {
+          // New 6-digit format: XXX-YYY (e.g., 001-001)
+          poNumber = await generateVendorPONumber(vendor.vendorCode);
+          console.log(`✅ Generated vendor PO number: ${poNumber} for vendor ${vendor.name} (code: ${vendor.vendorCode})`);
+        } else {
+          // Fallback for vendors without codes
+          poNumber = `IMP-${job.jobNo}`;
+          console.log(`⚠️ Vendor ${vendor.name} has no vendor code, using fallback PO#: ${poNumber}`);
+        }
 
         const createdPO = await prisma.purchaseOrder.create({
           data: {
             jobId: job.id,
             poNumber,
-            originCompanyId: 'bradford', // Bradford Graphics placing the order
-            targetCompanyId: vendorId, // Third-party vendor
+            originCompanyId: 'impact-direct', // Impact Direct (broker) placing the order with vendor
+            targetVendorId: vendorId, // Third-party vendor
+            targetCompanyId: null, // Not targeting a company, targeting a vendor
             originalAmount: String(total || 0), // Customer's payment
             vendorAmount: String(vendorAmount), // Amount to vendor
             marginAmount: String(bradfordCut), // Bradford's margin/cut
@@ -394,23 +571,16 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
 
         // Send vendor email notification with PO PDF
         try {
-          const vendor = await prisma.company.findUnique({
+          const vendor = await prisma.vendor.findUnique({
             where: { id: vendorId },
             select: {
               name: true,
-              contacts: {
-                where: {
-                  isPrimary: true,
-                },
-                select: {
-                  email: true,
-                },
-              },
+              email: true,
             },
           });
 
-          if (vendor && vendor.contacts.length > 0 && vendor.contacts[0].email) {
-            const vendorEmail = vendor.contacts[0].email;
+          if (vendor && vendor.email) {
+            const vendorEmail = vendor.email;
 
             // Get customer name
             const customer = await prisma.company.findUnique({
@@ -420,6 +590,47 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
 
             // Generate vendor PO PDF
             const { pdfBytes, fileName } = await generateVendorPOPdf(createdPO.id);
+
+            // Check if job already has files and generate share links
+            let files: Array<{ fileName: string; kind: string; shareUrl: string }> = [];
+            try {
+              const existingFiles = await prisma.file.findMany({
+                where: {
+                  jobId: job.id,
+                  kind: {
+                    in: ['ARTWORK', 'DATA_FILE'],
+                  },
+                },
+              });
+
+              if (existingFiles.length > 0) {
+                console.log(`📁 Found ${existingFiles.length} existing files for job ${job.jobNo}, creating share links...`);
+
+                // Create file shares
+                await createFileSharesForJob({
+                  jobId: job.id,
+                  createdFor: 'vendor',
+                  expirationDays: 7,
+                });
+
+                // Get file shares with URLs
+                const fileShares = await getFileSharesForJob(job.id);
+                files = fileShares
+                  .filter(f => f.share && f.shareUrl)
+                  .map(f => ({
+                    fileName: f.fileName,
+                    kind: f.kind,
+                    shareUrl: f.shareUrl!,
+                  }));
+
+                console.log(`✅ Generated ${files.length} file share links for vendor email`);
+              } else {
+                console.log(`📁 No files found for job ${job.jobNo}, vendor will be notified when files are ready`);
+              }
+            } catch (fileError) {
+              console.error('❌ Error generating file shares for vendor email:', fileError);
+              // Continue with email even if file shares fail
+            }
 
             // Extract job details from specs
             const specs = job.specs as any;
@@ -438,13 +649,14 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
               colors: specs?.colors,
               finishing: specs?.finishing,
               notes: specs?.notes,
+              files: files.length > 0 ? files : undefined, // Include files if available
             };
 
             const vendorEmailContent = emailTemplates.vendorJobCreated(vendorEmailData);
 
             await sendEmail({
               to: vendorEmail,
-              cc: 'nick@jdgraphic.com,steve.gustafson@bgeltd.com',
+              cc: 'nick@jdgraphic.com',
               subject: vendorEmailContent.subject,
               html: vendorEmailContent.html,
               attachments: [
@@ -455,7 +667,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
               ],
             });
 
-            console.log(`✅ Vendor job creation email sent to: ${vendorEmail} (CC: nick@jdgraphic.com, steve@bgeltd.com) with PO PDF attached`);
+            console.log(`✅ Vendor job creation email sent to: ${vendorEmail} (CC: nick@jdgraphic.com) with PO PDF attached${files.length > 0 ? ` and ${files.length} file download links` : ''}`);
           } else {
             console.warn(`⚠️ No primary contact email found for vendor ${vendorId}`);
           }
@@ -465,7 +677,7 @@ const customerRoutes: FastifyPluginAsync = async (server) => {
         }
       } else {
         // Default BRADFORD_JD routing: Create PO from Bradford to JD Graphic
-        const poNumber = `PO-${job.jobNo}-${Date.now()}`;
+        const poNumber = `BRA-${job.jobNo}`;
         await prisma.purchaseOrder.create({
           data: {
             jobId: job.id,

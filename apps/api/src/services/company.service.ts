@@ -49,7 +49,7 @@ export async function getCompanyById(id: string) {
   const company = await prisma.company.findUnique({
     where: { id },
     include: {
-      contacts: {
+      employees: {
         orderBy: { isPrimary: 'desc' },
       },
       jobsAsCustomer: {
@@ -105,10 +105,10 @@ export async function listCompanies(filters?: {
         select: {
           jobsAsCustomer: true,
           users: true,
-          contacts: true,
+          employees: true,
         },
       },
-      contacts: {
+      employees: {
         where: { isPrimary: true },
         take: 1,
       },

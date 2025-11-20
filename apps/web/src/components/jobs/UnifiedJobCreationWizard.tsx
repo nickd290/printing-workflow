@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { filesAPI, companiesAPI, type Company } from '@/lib/api-client';
+import { filesAPI, companiesAPI, employeesAPI, type Company, type Employee } from '@/lib/api-client';
 import { JobFormFields } from './JobFormFields';
 
 type EntryMethod = 'upload' | 'manual' | null;
@@ -14,6 +14,7 @@ interface WizardStep {
 
 interface JobFormData {
   customerId?: string;
+  employeeId?: string;
   description: string;
   paper: string;
   flatSize: string;
@@ -76,6 +77,8 @@ export function UnifiedJobCreationWizard({
   });
   const [customers, setCustomers] = useState<Company[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const isCustomer = userRole === 'customer';
@@ -98,6 +101,48 @@ export function UnifiedJobCreationWizard({
       loadCustomers();
     }
   }, [isOpen, isCustomer]);
+
+  // Load employees when customer is selected
+  useEffect(() => {
+    if (formData.customerId) {
+      const loadEmployees = async () => {
+        try {
+          console.log('📞 Loading employees for customer:', formData.customerId);
+          setLoadingEmployees(true);
+          const data = await employeesAPI.list({ companyId: formData.customerId });
+          console.log('✅ Employees loaded:', {
+            count: data?.length || 0,
+            employees: data.map((e) => ({ id: e.id, name: e.name, isPrimary: e.isPrimary }))
+          });
+          setEmployees(data || []);
+
+          // Auto-select primary employee if only one exists or if there's a primary employee
+          if (data && data.length > 0) {
+            const primaryEmployee = data.find((e) => e.isPrimary);
+            if (primaryEmployee || data.length === 1) {
+              const autoSelectId = primaryEmployee?.id || data[0].id;
+              console.log('🎯 Auto-selecting employee:', autoSelectId);
+              setFormData((prev) => ({ ...prev, employeeId: autoSelectId }));
+            }
+          }
+        } catch (error: any) {
+          console.error('❌ Failed to load employees:', {
+            error: error.message || error,
+            customerId: formData.customerId
+          });
+          setEmployees([]);
+        } finally {
+          setLoadingEmployees(false);
+        }
+      };
+      loadEmployees();
+    } else {
+      // Clear employees when no customer is selected
+      setEmployees([]);
+      setFormData((prev) => ({ ...prev, employeeId: undefined }));
+      setLoadingEmployees(false);
+    }
+  }, [formData.customerId]);
 
   // Reset wizard when modal closes
   useEffect(() => {
@@ -126,19 +171,30 @@ export function UnifiedJobCreationWizard({
   }, [isOpen, defaultCustomerId]);
 
   const handleFileUpload = async (file: File) => {
+    console.log('📁 [Wizard] File upload started:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+    });
+
     setUploadedFile(file);
     setParsingFile(true);
 
     try {
+      console.log('🔍 [Wizard] Calling filesAPI.parsePO...');
       const parseResult = await filesAPI.parsePO(file);
+      console.log('📋 [Wizard] Parse result received:', {
+        success: parseResult.success,
+        hasData: !!parseResult.parsed,
+        message: parseResult.message,
+      });
 
       if (!parseResult.success || !parseResult.parsed) {
         throw new Error(parseResult.message || 'Failed to parse file');
       }
 
       // Populate form data with parsed results
-      setFormData((prev) => ({
-        ...prev,
+      const parsedData = {
         description: parseResult.parsed.description || '',
         paper: parseResult.parsed.paper || '',
         flatSize: parseResult.parsed.flatSize || '',
@@ -149,12 +205,22 @@ export function UnifiedJobCreationWizard({
         poNumber: parseResult.parsed.poNumber || '',
         deliveryDate: parseResult.parsed.deliveryDate || '',
         samples: parseResult.parsed.samples || '',
+      };
+
+      console.log('✅ [Wizard] Setting form data:', parsedData);
+      setFormData((prev) => ({
+        ...prev,
+        ...parsedData,
       }));
 
+      console.log('➡️ [Wizard] Moving to step 2');
       // Move to next step
       setCurrentStep(2);
     } catch (error: any) {
-      console.error('Failed to parse file:', error);
+      console.error('❌ [Wizard] File parsing failed:', {
+        error: error.message || error,
+        fileName: file.name,
+      });
       alert(error.message || 'Failed to parse file. Please try manual entry.');
     } finally {
       setParsingFile(false);
@@ -166,12 +232,19 @@ export function UnifiedJobCreationWizard({
   };
 
   const handleNext = () => {
+    console.log('⏭️ [Wizard] Next button clicked:', {
+      currentStep,
+      entryMethod,
+    });
+
     if (currentStep === 1 && entryMethod) {
       if (entryMethod === 'manual') {
+        console.log('✍️ [Wizard] Manual entry selected, moving to step 2');
         setCurrentStep(2);
       }
       // For upload, handleFileUpload will advance the step
     } else if (currentStep === 2) {
+      console.log('👀 [Wizard] Moving to review step (step 3)');
       setCurrentStep(3);
     }
   };
@@ -184,13 +257,27 @@ export function UnifiedJobCreationWizard({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚀 [Wizard] Submit button clicked, form data:', {
+      customerId: formData.customerId,
+      employeeId: formData.employeeId,
+      description: formData.description,
+      routingType: formData.routingType,
+      hasVendorId: !!formData.vendorId,
+      hasVendorAmount: !!formData.vendorAmount,
+    });
+
     setSubmitting(true);
 
     try {
+      console.log('📡 [Wizard] Calling onSubmit callback...');
       await onSubmit(formData);
+      console.log('✅ [Wizard] onSubmit completed successfully');
       onClose();
     } catch (error: any) {
-      console.error('Failed to create job:', error);
+      console.error('❌ [Wizard] Submit failed:', {
+        error: error.message || error,
+        formData,
+      });
       alert(error.message || 'Failed to create job');
     } finally {
       setSubmitting(false);
@@ -437,6 +524,37 @@ export function UnifiedJobCreationWizard({
                 </div>
               )}
 
+              {/* Employee Selection (for admin/production users, shown after customer is selected) */}
+              {!isCustomer && formData.customerId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    Contact Person *
+                  </label>
+                  <select
+                    value={formData.employeeId || ''}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, employeeId: e.target.value }))}
+                    required
+                    disabled={loadingEmployees}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="">Select contact person...</option>
+                    {employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name} {employee.position ? `(${employee.position})` : ''} {employee.isPrimary ? '⭐' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {loadingEmployees && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Loading employees...</p>
+                  )}
+                  {!loadingEmployees && employees.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      No employees found for this customer. Please add an employee first.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Job Form Fields */}
               <JobFormFields
                 data={formData}
@@ -463,6 +581,15 @@ export function UnifiedJobCreationWizard({
                     <div className="text-sm font-medium text-gray-500 dark:text-slate-400">Customer</div>
                     <div className="text-base text-gray-900 dark:text-white">
                       {customers.find((c) => c.id === formData.customerId)?.name || formData.customerId}
+                    </div>
+                  </div>
+                )}
+
+                {!isCustomer && formData.employeeId && (
+                  <div>
+                    <div className="text-sm font-medium text-gray-500 dark:text-slate-400">Contact Person</div>
+                    <div className="text-base text-gray-900 dark:text-white">
+                      {employees.find((e) => e.id === formData.employeeId)?.name || formData.employeeId}
                     </div>
                   </div>
                 )}
@@ -588,7 +715,24 @@ export function UnifiedJobCreationWizard({
             {currentStep < 3 ? (
               <button
                 type="button"
-                onClick={handleNext}
+                onClick={() => {
+                  const isDisabled =
+                    (currentStep === 1 && !entryMethod) ||
+                    (currentStep === 1 && entryMethod === 'upload' && !uploadedFile);
+
+                  console.log('🔘 [Wizard] Next button clicked - button state:', {
+                    currentStep,
+                    entryMethod,
+                    uploadedFile: !!uploadedFile,
+                    isDisabled,
+                  });
+
+                  if (!isDisabled) {
+                    handleNext();
+                  } else {
+                    console.warn('⚠️ [Wizard] Next button is disabled, cannot proceed');
+                  }
+                }}
                 disabled={
                   (currentStep === 1 && !entryMethod) ||
                   (currentStep === 1 && entryMethod === 'upload' && !uploadedFile)
@@ -600,7 +744,40 @@ export function UnifiedJobCreationWizard({
             ) : (
               <button
                 type="button"
-                onClick={handleSubmit}
+                onClick={(e) => {
+                  const isVendorRouting = formData.routingType === 'THIRD_PARTY_VENDOR';
+                  const vendorFieldsComplete = formData.vendorId && formData.vendorAmount && formData.bradfordCut;
+                  const isDisabled = submitting || (isVendorRouting && !vendorFieldsComplete);
+
+                  console.log('🔘 [Wizard] Submit button clicked - button state:', {
+                    submitting,
+                    routingType: formData.routingType,
+                    isVendorRouting,
+                    vendorFieldsComplete,
+                    isDisabled,
+                    formData: {
+                      customerId: formData.customerId,
+                      employeeId: formData.employeeId,
+                      description: formData.description,
+                      vendorId: formData.vendorId,
+                      vendorAmount: formData.vendorAmount,
+                      bradfordCut: formData.bradfordCut,
+                    }
+                  });
+
+                  if (!isDisabled) {
+                    handleSubmit(e as any);
+                  } else {
+                    console.warn('⚠️ [Wizard] Submit button is disabled:', {
+                      reason: submitting ? 'Already submitting' : 'Vendor fields incomplete',
+                      missingFields: isVendorRouting ? {
+                        vendorId: !formData.vendorId,
+                        vendorAmount: !formData.vendorAmount,
+                        bradfordCut: !formData.bradfordCut,
+                      } : null
+                    });
+                  }
+                }}
                 disabled={
                   submitting ||
                   (formData.routingType === 'THIRD_PARTY_VENDOR' &&

@@ -190,20 +190,25 @@ function emailTemplate(content: string, preheader?: string): string {
       background-color: #ffffff;
     }
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 40px 30px;
+      background: #2B3D4F;
+      padding: 30px;
       text-align: center;
+      border-bottom: 3px solid #E67439;
     }
     .header h1 {
       margin: 0;
       color: #ffffff;
-      font-size: 28px;
-      font-weight: 600;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
     .header p {
       margin: 5px 0 0;
-      color: #e0e7ff;
-      font-size: 14px;
+      color: #E67439;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
     .content {
       padding: 40px 30px;
@@ -220,29 +225,30 @@ function emailTemplate(content: string, preheader?: string): string {
       font-size: 16px;
     }
     .info-box {
-      background-color: #f7fafc;
-      border-left: 4px solid #667eea;
+      background-color: #FFF9F5;
+      border-left: 4px solid #E86A2B;
       padding: 15px 20px;
       margin: 20px 0;
       border-radius: 4px;
     }
     .info-box strong {
-      color: #2d3748;
+      color: #2A3D5A;
     }
     .button {
       display: inline-block;
       padding: 14px 28px;
       margin: 20px 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #E86A2B;
       color: #ffffff !important;
       text-decoration: none;
       border-radius: 6px;
-      font-weight: 600;
+      font-weight: 700;
       font-size: 16px;
-      box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+      box-shadow: 0 4px 6px rgba(232, 106, 43, 0.3);
     }
     .button:hover {
-      box-shadow: 0 6px 8px rgba(102, 126, 234, 0.4);
+      background: #D35B1F;
+      box-shadow: 0 6px 8px rgba(232, 106, 43, 0.4);
     }
     .footer {
       background-color: #2d3748;
@@ -255,7 +261,7 @@ function emailTemplate(content: string, preheader?: string): string {
       margin: 5px 0;
     }
     .footer a {
-      color: #667eea;
+      color: #E86A2B;
       text-decoration: none;
     }
     .divider {
@@ -272,16 +278,17 @@ function emailTemplate(content: string, preheader?: string): string {
       <td align="center">
         <div class="email-container">
           <div class="header">
-            <h1>IDP Production</h1>
-            <p>Professional Printing Services</p>
+            <h1>Impact Direct</h1>
+            <p>PRINT-NATIVE AGENCY</p>
           </div>
           <div class="content">
             ${content}
           </div>
           <div class="footer">
-            <p><strong>IDP Production</strong></p>
-            <p>nick@jdgraphic.com</p>
-            <p style="margin-top: 15px; color: #718096;">This email was sent automatically. Please do not reply.</p>
+            <p><strong>Impact Direct</strong></p>
+            <p>Brandon Ferris | brandon@impactdirectprinting.com</p>
+            <p>1550 North Northwest Highway, Suite 108, 60068</p>
+            <p style="margin-top: 15px; color: #718096;">Professional production partner for agencies, printers, and brokers.</p>
           </div>
         </div>
       </td>
@@ -881,58 +888,140 @@ export const emailTemplates = {
     colors?: string;
     finishing?: string;
     notes?: string;
+    files?: Array<{
+      fileName: string;
+      kind: string;
+      shareUrl: string;
+    }>;
   }) => ({
-    subject: `New Purchase Order - Job #${data.jobNo}`,
+    subject: `Purchase Order ${data.poNumber} - ${data.description || `Job #${data.jobNo}`}`,
     html: emailTemplate(
       `
-        <h2>New Purchase Order Received</h2>
-        <p>Bradford Graphics has issued a new purchase order for production.</p>
+        <h2 style="margin: 0 0 24px; color: #2B3D4F; font-size: 24px; font-weight: 600;">Purchase Order ${data.poNumber}</h2>
+        <p style="margin: 0 0 16px; color: #6B7280; font-size: 14px; line-height: 1.6;">Hi ${data.vendorName},</p>
+        <p style="margin: 0 0 32px; color: #6B7280; font-size: 14px; line-height: 1.6;">Please see the attached purchase order for <strong style="color: #2B3D4F;">${data.description || `Job #${data.jobNo}`}</strong>.</p>
 
-        <div class="info-box">
-          <p><strong>PO Number:</strong> ${data.poNumber}</p>
-          <p><strong>Job Number:</strong> ${data.jobNo}</p>
-          <p><strong>Customer:</strong> ${data.customerName}</p>
-          ${data.description ? `<p><strong>Description:</strong> ${data.description}</p>` : ''}
-          ${data.quantity ? `<p><strong>Quantity:</strong> ${data.quantity.toLocaleString()} pieces</p>` : ''}
-          <p><strong>PO Amount:</strong> $${data.vendorAmount.toFixed(2)}</p>
-        </div>
-
-        ${data.deliveryDate ? `
-          <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Delivery Schedule</h3>
-          <div class="info-box" style="background-color: #f0f9ff;">
-            <p><strong>Required Delivery Date:</strong> ${new Date(data.deliveryDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-          </div>
-        ` : ''}
+        <h3 style="margin: 0 0 16px; color: #E67439; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Order Information</h3>
+        <table cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse; border: 1px solid #E5E7EB; margin: 0 0 32px; font-size: 14px;">
+          <tr style="background-color: #F9F9F9;">
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280; width: 35%;">PO Number</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #2B3D4F;">${data.poNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280;">Job Number</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #2B3D4F;">${data.jobNo}</td>
+          </tr>
+          ${data.quantity ? `
+          <tr style="background-color: #F9F9F9;">
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280;">Quantity</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #2B3D4F;">${data.quantity.toLocaleString()} pieces</td>
+          </tr>
+          ` : ''}
+          ${data.deliveryDate ? `
+          <tr${!data.quantity ? ' style="background-color: #F9F9F9;"' : ''}>
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280;">Required Delivery</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #E67439; font-weight: 600;">${new Date(data.deliveryDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
+          </tr>
+          ` : ''}
+          <tr${data.deliveryDate || data.quantity ? '' : ' style="background-color: #F9F9F9;"'}>
+            <td style="padding: 12px; font-weight: 600; color: #6B7280;">PO Amount</td>
+            <td style="padding: 12px; color: #E67439; font-weight: 700; font-size: 16px;">$${parseFloat(data.vendorAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+        </table>
 
         ${data.paper || data.flatSize || data.foldedSize || data.colors || data.finishing ? `
-          <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Specifications</h3>
-          <div class="info-box">
-            ${data.paper ? `<p><strong>Paper:</strong> ${data.paper}</p>` : ''}
-            ${data.flatSize ? `<p><strong>Flat Size:</strong> ${data.flatSize}</p>` : ''}
-            ${data.foldedSize ? `<p><strong>Folded Size:</strong> ${data.foldedSize}</p>` : ''}
-            ${data.colors ? `<p><strong>Colors:</strong> ${data.colors}</p>` : ''}
-            ${data.finishing ? `<p><strong>Finishing:</strong> ${data.finishing}</p>` : ''}
-          </div>
+          <h3 style="margin: 0 0 16px; color: #E67439; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Specifications</h3>
+          <table cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse; border: 1px solid #E5E7EB; margin: 0 0 32px; font-size: 14px;">
+            ${data.paper ? `
+            <tr style="background-color: #F9F9F9;">
+              <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280; width: 35%;">Paper</td>
+              <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #2B3D4F;">${data.paper}</td>
+            </tr>
+            ` : ''}
+            ${data.flatSize ? `
+            <tr${!data.paper ? ' style="background-color: #F9F9F9;"' : ''}>
+              <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280;">Flat Size</td>
+              <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #2B3D4F;">${data.flatSize}</td>
+            </tr>
+            ` : ''}
+            ${data.foldedSize ? `
+            <tr${data.paper && !data.flatSize || !data.paper && data.flatSize ? ' style="background-color: #F9F9F9;"' : ''}>
+              <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #6B7280;">Folded Size</td>
+              <td style="padding: 12px; border-bottom: 1px solid #E5E7EB; color: #2B3D4F;">${data.foldedSize}</td>
+            </tr>
+            ` : ''}
+            ${data.colors ? `
+            <tr>
+              <td style="padding: 12px; ${data.finishing ? 'border-bottom: 1px solid #E5E7EB;' : ''} font-weight: 600; color: #6B7280;">Colors</td>
+              <td style="padding: 12px; ${data.finishing ? 'border-bottom: 1px solid #E5E7EB;' : ''} color: #2B3D4F;">${data.colors}</td>
+            </tr>
+            ` : ''}
+            ${data.finishing ? `
+            <tr${!data.colors ? ' style="background-color: #F9F9F9;"' : ''}>
+              <td style="padding: 12px; font-weight: 600; color: #6B7280;">Finishing</td>
+              <td style="padding: 12px; color: #2B3D4F;">${data.finishing}</td>
+            </tr>
+            ` : ''}
+          </table>
         ` : ''}
 
         ${data.notes ? `
-          <h3 style="margin-top: 25px; color: #1a1a1a; font-size: 18px;">Special Notes & Instructions</h3>
-          <div class="info-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b;">
-            <p style="white-space: pre-wrap; margin: 0; color: #92400e;">${data.notes}</p>
+          <h3 style="margin: 0 0 16px; color: #E67439; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Special Instructions</h3>
+          <div style="background-color: #FFF9F5; border-left: 3px solid #E67439; padding: 16px; margin: 0 0 32px; border-radius: 4px;">
+            <p style="white-space: pre-wrap; margin: 0; color: #2B3D4F; font-size: 14px; line-height: 1.6;">${data.notes}</p>
           </div>
         ` : ''}
 
-        <p style="margin-top: 30px; color: #4a5568;">
-          The purchase order document is attached to this email with complete job specifications and delivery details.
-        </p>
-
         <div class="divider"></div>
 
-        <p style="color: #718096; font-size: 14px;">
-          <strong>Next Steps:</strong> Please review the attached PO and confirm receipt. You'll receive another notification when all files are ready and the job is approved for production.
+        ${data.files && data.files.length > 0 ? `
+          <h3 style="margin-top: 30px; margin-bottom: 15px; color: #2A3D5A; font-size: 18px; font-weight: 700;">Production Files</h3>
+          <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #16a34a;">
+            <p style="color: #16a34a; font-weight: 600; margin-bottom: 15px;">
+              ✓ Production files ready for download
+            </p>
+            ${data.files.map((file, index) => `
+              <div style="margin-bottom: 12px; padding: 10px; background-color: white; border-radius: 4px; border: 1px solid #d1fae5;">
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                  <span style="color: #1a1a1a; font-weight: 600; font-size: 14px;">
+                    ${index + 1}. ${file.fileName}
+                  </span>
+                  <span style="margin-left: auto; font-size: 11px; color: #6b7280; background-color: #f3f4f6; padding: 2px 8px; border-radius: 3px;">
+                    ${file.kind === 'ARTWORK' ? 'Artwork' : 'Data File'}
+                  </span>
+                </div>
+                <a href="${file.shareUrl}" style="color: #2563eb; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 5px;">
+                  → Download File
+                </a>
+              </div>
+            `).join('')}
+            <p style="margin-top: 15px; color: #16a34a; font-size: 12px;">
+              ⏰ Download links expire in 7 days
+            </p>
+          </div>
+        ` : `
+          <div class="info-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; margin-top: 20px;">
+            <p style="margin: 0; color: #92400e; font-weight: 600;">📁 Production Files</p>
+            <p style="margin: 10px 0 0; color: #92400e;">
+              Production files (artwork and data files) are being uploaded by the customer. You will receive a separate email with secure download links once all files are ready.
+            </p>
+          </div>
+        `}
+
+        <p style="margin-top: 30px; font-size: 16px; line-height: 1.6; color: #4a5568;">
+          Please confirm receipt of this purchase order at your earliest convenience.
+        </p>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #4a5568;">
+          If you have any questions, please contact Brandon Ferris at <a href="mailto:brandon@impactdirectprinting.com" style="color: #E86A2B; text-decoration: none;">brandon@impactdirectprinting.com</a>.
+        </p>
+
+        <p style="margin-top: 20px; font-size: 16px; font-weight: 600; color: #2A3D5A;">
+          Best regards,<br>
+          Impact Direct
         </p>
       `,
-      `New PO ${data.poNumber} for job ${data.jobNo}`
+      `Purchase Order ${data.poNumber}`
     ),
   }),
 
@@ -946,6 +1035,11 @@ export const emailTemplates = {
     artworkCount: number;
     dataFileCount: number;
     deliveryDate?: string;
+    files?: Array<{
+      fileName: string;
+      kind: string;
+      shareUrl: string;
+    }>;
   }) => ({
     subject: `Job Ready for Production - Job #${data.jobNo}`,
     html: emailTemplate(
@@ -957,7 +1051,7 @@ export const emailTemplates = {
           <p><strong>Job Number:</strong> ${data.jobNo}</p>
           <p><strong>PO Number:</strong> ${data.poNumber}</p>
           <p><strong>Customer:</strong> ${data.customerName}</p>
-          <p><strong>PO Amount:</strong> $${data.vendorAmount.toFixed(2)}</p>
+          <p><strong>PO Amount:</strong> $${parseFloat(data.vendorAmount).toFixed(2)}</p>
           ${data.deliveryDate ? `<p><strong>Required Delivery:</strong> ${new Date(data.deliveryDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>` : ''}
         </div>
 
@@ -969,9 +1063,36 @@ export const emailTemplates = {
           <p style="margin-top: 10px;"><strong>Proof Status:</strong> Approved by customer ✓</p>
         </div>
 
-        <p style="margin-top: 25px; color: #4a5568;">
-          All production files are available for download. The customer has approved the proof, so you can proceed with production immediately.
-        </p>
+        ${data.files && data.files.length > 0 ? `
+          <h3 style="margin-top: 30px; margin-bottom: 15px; color: #2A3D5A; font-size: 18px; font-weight: 700;">Production Files</h3>
+          <div class="info-box" style="background-color: #f0fdf4; border-left: 4px solid #16a34a;">
+            <p style="color: #16a34a; font-weight: 600; margin-bottom: 15px;">
+              ✓ All files ready for download
+            </p>
+            ${data.files.map((file, index) => `
+              <div style="margin-bottom: 12px; padding: 10px; background-color: white; border-radius: 4px; border: 1px solid #d1fae5;">
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                  <span style="color: #1a1a1a; font-weight: 600; font-size: 14px;">
+                    ${index + 1}. ${file.fileName}
+                  </span>
+                  <span style="margin-left: auto; font-size: 11px; color: #6b7280; background-color: #f3f4f6; padding: 2px 8px; border-radius: 3px;">
+                    ${file.kind === 'ARTWORK' ? 'Artwork' : 'Data File'}
+                  </span>
+                </div>
+                <a href="${file.shareUrl}" style="color: #2563eb; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 5px;">
+                  → Download File
+                </a>
+              </div>
+            `).join('')}
+            <p style="margin-top: 15px; color: #16a34a; font-size: 12px;">
+              ⏰ Download links expire in 7 days
+            </p>
+          </div>
+        ` : `
+          <p style="margin-top: 25px; color: #4a5568;">
+            All production files are available for download. The customer has approved the proof, so you can proceed with production immediately.
+          </p>
+        `}
 
         <div class="divider"></div>
 

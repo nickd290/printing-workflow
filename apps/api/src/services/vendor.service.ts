@@ -1,15 +1,49 @@
 import { prisma } from '@printing-workflow/db';
+import { validateVendorCode } from '../lib/utils.js';
 
 /**
  * Vendor Service
  * Handles CRUD operations for third-party vendors
  */
 
+/**
+ * Get the next available vendor code (3-digit sequential)
+ * @returns Next available vendor code (e.g., "001", "002", etc.)
+ */
+export async function getNextAvailableVendorCode(): Promise<string> {
+  const latestVendor = await prisma.vendor.findFirst({
+    where: {
+      vendorCode: {
+        not: null,
+      },
+    },
+    orderBy: {
+      vendorCode: 'desc',
+    },
+    select: {
+      vendorCode: true,
+    },
+  });
+
+  let nextCode = 1;
+  if (latestVendor && latestVendor.vendorCode) {
+    nextCode = parseInt(latestVendor.vendorCode, 10) + 1;
+  }
+
+  // Enforce 999 limit
+  if (nextCode > 999) {
+    throw new Error('Maximum vendor code limit (999) reached');
+  }
+
+  return nextCode.toString().padStart(3, '0');
+}
+
 export async function createVendor(data: {
   name: string;
   email?: string;
   phone?: string;
   address?: string;
+  vendorCode?: string;
 }) {
   // Validate required fields
   if (!data.name || data.name.trim().length === 0) {
@@ -21,12 +55,35 @@ export async function createVendor(data: {
     throw new Error('Invalid email format');
   }
 
+  // Handle vendor code: validate if provided, otherwise auto-generate
+  let vendorCode: string | undefined;
+  if (data.vendorCode) {
+    // Validate format (must be exactly 3 digits)
+    if (!validateVendorCode(data.vendorCode)) {
+      throw new Error('Vendor code must be exactly 3 digits (e.g., "001")');
+    }
+
+    // Check for uniqueness
+    const existing = await prisma.vendor.findUnique({
+      where: { vendorCode: data.vendorCode },
+    });
+    if (existing) {
+      throw new Error(`Vendor code "${data.vendorCode}" is already in use`);
+    }
+
+    vendorCode = data.vendorCode;
+  } else {
+    // Auto-generate next available code
+    vendorCode = await getNextAvailableVendorCode();
+  }
+
   const vendor = await prisma.vendor.create({
     data: {
       name: data.name.trim(),
       email: data.email?.trim(),
       phone: data.phone?.trim(),
       address: data.address?.trim(),
+      vendorCode,
       isActive: true,
     },
   });
@@ -95,6 +152,7 @@ export async function updateVendor(
     email?: string;
     phone?: string;
     address?: string;
+    vendorCode?: string;
     isActive?: boolean;
   }
 ) {
@@ -114,6 +172,23 @@ export async function updateVendor(
     throw new Error('Vendor name cannot be empty');
   }
 
+  // Validate vendor code if provided
+  if (data.vendorCode !== undefined) {
+    if (!validateVendorCode(data.vendorCode)) {
+      throw new Error('Vendor code must be exactly 3 digits (e.g., "001")');
+    }
+
+    // Check for uniqueness (ignore if it's the same as current)
+    if (data.vendorCode !== existing.vendorCode) {
+      const duplicate = await prisma.vendor.findUnique({
+        where: { vendorCode: data.vendorCode },
+      });
+      if (duplicate) {
+        throw new Error(`Vendor code "${data.vendorCode}" is already in use`);
+      }
+    }
+  }
+
   const vendor = await prisma.vendor.update({
     where: { id },
     data: {
@@ -121,6 +196,7 @@ export async function updateVendor(
       email: data.email?.trim(),
       phone: data.phone?.trim(),
       address: data.address?.trim(),
+      vendorCode: data.vendorCode,
       isActive: data.isActive,
     },
   });

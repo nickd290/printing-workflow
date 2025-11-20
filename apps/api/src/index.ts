@@ -9,7 +9,7 @@ import fs from 'fs';
 console.log('========================================');
 console.log('🔵 API Server Starting...');
 console.log('========================================');
-// Running on port 3001 (default API port)
+// Running on port 3001 (default API port) - Prisma client refreshed
 console.log('Timestamp:', new Date().toISOString());
 console.log('Node Version:', process.version);
 console.log('Environment:', env.NODE_ENV);
@@ -40,6 +40,7 @@ import reportsRoutes from './routes/reports.js';
 import reconciliationRoutes from './routes/reconciliation.js';
 import { vendorRoutes } from './routes/vendors.js';
 import { companyRoutes } from './routes/companies.js';
+import { employeeRoutes } from './routes/employees.js';
 
 const fastify = Fastify({
   logger: {
@@ -98,6 +99,7 @@ await fastify.register(reportsRoutes, { prefix: '/api/reports' });
 await fastify.register(reconciliationRoutes, { prefix: '/api/reconciliation' });
 await fastify.register(vendorRoutes, { prefix: '/api/vendors' });
 await fastify.register(companyRoutes, { prefix: '/api/companies' });
+await fastify.register(employeeRoutes, { prefix: '/api/employees' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

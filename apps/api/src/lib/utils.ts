@@ -63,6 +63,56 @@ export async function generateInvoiceNumber(): Promise<string> {
 }
 
 /**
+ * Validate vendor code format (must be exactly 3 digits)
+ */
+export function validateVendorCode(code: string): boolean {
+  return /^\d{3}$/.test(code);
+}
+
+/**
+ * Generate vendor PO number in format XXX-YYY (e.g., 001-001, 001-002)
+ * @param vendorCode - 3-digit vendor code (e.g., "001")
+ * @returns PO number in format XXX-YYY
+ */
+export async function generateVendorPONumber(vendorCode: string): Promise<string> {
+  // Validate vendorCode is 3 digits
+  if (!validateVendorCode(vendorCode)) {
+    throw new Error('Vendor code must be exactly 3 digits');
+  }
+
+  const prefix = `${vendorCode}-`;
+
+  // Find highest PO number for this vendor (never resets, keeps incrementing)
+  const latestPO = await prisma.purchaseOrder.findFirst({
+    where: {
+      poNumber: {
+        startsWith: prefix,
+      },
+    },
+    orderBy: {
+      poNumber: 'desc',
+    },
+  });
+
+  let nextNumber = 1;
+  if (latestPO && latestPO.poNumber) {
+    // Extract number from XXX-YYY
+    const parts = latestPO.poNumber.split('-');
+    const currentNumber = parseInt(parts[1], 10);
+    nextNumber = currentNumber + 1;
+
+    // Enforce 999 limit (3 digits max)
+    if (nextNumber > 999) {
+      throw new Error(`Vendor ${vendorCode} has reached maximum PO count (999)`);
+    }
+  }
+
+  // Pad with zeros to 3 digits
+  const paddedNumber = nextNumber.toString().padStart(3, '0');
+  return `${prefix}${paddedNumber}`;
+}
+
+/**
  * Calculate amounts for auto-PO creation
  */
 export function calculatePOAmounts(customerTotal: number) {

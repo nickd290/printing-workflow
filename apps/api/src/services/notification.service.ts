@@ -98,62 +98,74 @@ export async function sendJobReadyNotifications(job: {
     const purchaseOrder = await prisma.purchaseOrder.findFirst({
       where: {
         jobId: job.id,
-        targetCompanyId: {
-          not: 'jd-graphic', // Exclude JD Graphic (that's BRADFORD_JD routing)
+        targetVendorId: {
+          not: null, // Has a vendor (third-party routing)
         },
       },
       include: {
-        targetCompany: {
+        targetVendor: {
           select: {
             name: true,
-            contacts: {
-              where: {
-                isPrimary: true,
-              },
-              select: {
-                email: true,
-              },
-            },
+            email: true,
           },
         },
       },
     });
 
-    if (purchaseOrder && purchaseOrder.targetCompany.contacts.length > 0) {
-      const vendorEmail = purchaseOrder.targetCompany.contacts[0].email;
+    if (purchaseOrder && purchaseOrder.targetVendor && purchaseOrder.targetVendor.email) {
+      const vendorEmail = purchaseOrder.targetVendor.email;
 
-      if (vendorEmail) {
-        const vendorTemplate = emailTemplates.vendorJobReady({
-          jobNo: job.jobNo,
-          customerName: job.customer.name,
-          vendorName: purchaseOrder.targetCompany.name,
-          poNumber: purchaseOrder.poNumber,
-          vendorAmount: parseFloat(purchaseOrder.vendorAmount || '0'),
-          artworkCount,
-          dataFileCount,
-          deliveryDate: deliveryDateStr,
-        });
+      // Generate file share links for all job files
+      const { createFileSharesForJob, getFileSharesForJob } = await import('../services/file-share.service.js');
 
-        await queueEmail({
-          to: vendorEmail,
+      // Create file shares if they don't exist yet
+      await createFileSharesForJob({
+        jobId: job.id,
+        createdFor: 'vendor',
+        expirationDays: 7,
+      });
+
+      // Get file shares with URLs
+      const fileShares = await getFileSharesForJob(job.id);
+      const files = fileShares
+        .filter(f => f.share && f.shareUrl) // Only files with active shares
+        .map(f => ({
+          fileName: f.fileName,
+          kind: f.kind,
+          shareUrl: f.shareUrl!,
+        }));
+
+      const vendorTemplate = emailTemplates.vendorJobReady({
+        jobNo: job.jobNo,
+        customerName: job.customer.name,
+        vendorName: purchaseOrder.targetVendor.name,
+        poNumber: purchaseOrder.poNumber,
+        vendorAmount: parseFloat(purchaseOrder.vendorAmount || '0'),
+        artworkCount,
+        dataFileCount,
+        deliveryDate: deliveryDateStr,
+        files, // Include file download links
+      });
+
+      await queueEmail({
+        to: vendorEmail,
+        subject: vendorTemplate.subject,
+        html: vendorTemplate.html,
+      });
+
+      // Log vendor notification
+      await prisma.notification.create({
+        data: {
+          jobId: job.id,
+          recipient: vendorEmail,
           subject: vendorTemplate.subject,
-          html: vendorTemplate.html,
-        });
+          body: vendorTemplate.html,
+          type: 'VENDOR_JOB_READY',
+          sentAt: new Date(),
+        },
+      });
 
-        // Log vendor notification
-        await prisma.notification.create({
-          data: {
-            jobId: job.id,
-            recipient: vendorEmail,
-            subject: vendorTemplate.subject,
-            body: vendorTemplate.html,
-            type: 'VENDOR_JOB_READY',
-            sentAt: new Date(),
-          },
-        });
-
-        console.log(`✓ Sent vendor job ready notification to: ${vendorEmail} for job ${job.jobNo}`);
-      }
+      console.log(`✓ Sent vendor job ready notification to: ${vendorEmail} for job ${job.jobNo} with ${files.length} file links`);
     }
   } catch (vendorNotificationError) {
     console.error('❌ Failed to send vendor job ready notification:', vendorNotificationError);

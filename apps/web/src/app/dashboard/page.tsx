@@ -53,11 +53,6 @@ export default function DashboardPage() {
     samples: '',
   });
 
-  // Debug logging for form data changes
-  useEffect(() => {
-    console.log('🔄 Form data updated:', formData);
-  }, [formData]);
-
   // Redirect customers to their dedicated portal
   useEffect(() => {
     if (user && isCustomer) {
@@ -158,7 +153,7 @@ export default function DashboardPage() {
       setAllJobs(result.jobs);
       setError(null);
     } catch (err) {
-      console.error('Failed to load jobs:', err);
+      console.error('❌ [Dashboard] Failed to load jobs:', err);
       setError('Failed to load jobs. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -305,8 +300,16 @@ export default function DashboardPage() {
   };
 
   const handleWizardSubmit = async (data: any) => {
+    console.log('📤 [Dashboard] Submitting job data:', {
+      customerId: data.customerId || user?.companyId,
+      description: data.description,
+      routingType: data.routingType,
+      hasVendorId: !!data.vendorId,
+      hasVendorAmount: !!data.vendorAmount,
+    });
+
     try {
-      await jobsAPI.createCustomerJob({
+      const result = await jobsAPI.createCustomerJob({
         customerId: data.customerId || user?.companyId || '',
         description: data.description,
         paper: data.paper,
@@ -322,16 +325,21 @@ export default function DashboardPage() {
         requiredDataFileCount: data.requiredDataFileCount,
         // Routing fields (admin only)
         routingType: data.routingType,
-        vendorId: data.vendorId,
-        vendorAmount: data.vendorAmount,
-        bradfordCut: data.bradfordCut,
+        vendorId: data.vendorId || undefined,          // Convert empty string to undefined
+        vendorAmount: data.vendorAmount || undefined,  // Convert empty string to undefined
+        bradfordCut: data.bradfordCut || undefined,    // Convert empty string to undefined
       });
 
+      console.log('✅ [Dashboard] Job created successfully:', result);
       toast.success('Order created successfully!');
       await loadJobs();
       setError(null);
     } catch (err: any) {
-      console.error('Failed to create job:', err);
+      console.error('❌ [Dashboard] Job creation failed:', {
+        error: err.message || err,
+        status: err.status,
+        data: err.data,
+      });
       const errorMessage = err.message || 'Failed to create job. Please try again.';
       toast.error(errorMessage);
       throw err; // Re-throw so the wizard can handle it
@@ -391,7 +399,10 @@ export default function DashboardPage() {
           <ImpactDirectDashboard
             jobs={allJobs}
             loading={loading}
-            onCreateJob={() => setShowNewJobModal(true)}
+            onCreateJob={() => {
+              console.log('📋 [Dashboard] Opening job creation modal');
+              setShowNewJobModal(true);
+            }}
             onJobsChanged={loadJobs}
           />
         ) : (

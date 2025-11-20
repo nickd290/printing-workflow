@@ -21,6 +21,15 @@ interface JobFormData {
   vendorId?: string;
   vendorAmount?: string;
   bradfordCut?: string;
+  // Vendor shipping/payment fields
+  vendorShipToName?: string;
+  vendorShipToAddress?: string;
+  vendorShipToCity?: string;
+  vendorShipToState?: string;
+  vendorShipToZip?: string;
+  vendorShipToPhone?: string;
+  vendorPaymentTerms?: string;
+  vendorSpecialInstructions?: string;
 }
 
 interface JobFormFieldsProps {
@@ -58,6 +67,34 @@ export function JobFormFields({
       loadVendors();
     }
   }, [showRoutingOptions]);
+
+  // Auto-populate vendor shipping address when vendor is selected
+  useEffect(() => {
+    if (data.vendorId && vendors.length > 0) {
+      const selectedVendor = vendors.find(v => v.id === data.vendorId);
+      if (selectedVendor) {
+        // Auto-populate shipping address from vendor structured address
+        if (selectedVendor.streetAddress) {
+          onChange('vendorShipToAddress', selectedVendor.streetAddress);
+        }
+        if (selectedVendor.city) {
+          onChange('vendorShipToCity', selectedVendor.city);
+        }
+        if (selectedVendor.state) {
+          onChange('vendorShipToState', selectedVendor.state);
+        }
+        if (selectedVendor.zip) {
+          onChange('vendorShipToZip', selectedVendor.zip);
+        }
+        // Auto-populate vendor name as ship-to name
+        onChange('vendorShipToName', selectedVendor.name);
+        // Auto-populate vendor phone if available
+        if (selectedVendor.phone) {
+          onChange('vendorShipToPhone', selectedVendor.phone);
+        }
+      }
+    }
+  }, [data.vendorId, vendors, onChange]);
 
   const routingType = data.routingType || 'BRADFORD_JD';
   const isThirdPartyVendor = routingType === 'THIRD_PARTY_VENDOR';
@@ -223,6 +260,136 @@ export function JobFormFields({
                   </div>
                 </div>
               )}
+
+              {/* Payment Terms */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">
+                  Payment Terms
+                </label>
+                <select
+                  value={data.vendorPaymentTerms || 'Net 30 Days'}
+                  onChange={(e) => onChange('vendorPaymentTerms', e.target.value)}
+                  disabled={disabled}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                >
+                  <option value="Net 30 Days">Net 30 Days</option>
+                  <option value="Net 60 Days">Net 60 Days</option>
+                  <option value="Payment upon delivery">Payment upon delivery</option>
+                  <option value="50% deposit, 50% on completion">50% deposit, 50% on completion</option>
+                </select>
+              </div>
+
+              {/* Shipping Address Section */}
+              <div className="border-t border-blue-200 pt-4 mt-4">
+                <div className="text-sm font-semibold text-gray-900 mb-3">
+                  Shipping Address (where vendor ships completed job)
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Ship To Name
+                  </label>
+                  <input
+                    type="text"
+                    value={data.vendorShipToName || ''}
+                    onChange={(e) => onChange('vendorShipToName', e.target.value)}
+                    disabled={disabled}
+                    placeholder="e.g., Bradford Graphics Warehouse"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Street Address
+                  </label>
+                  <input
+                    type="text"
+                    value={data.vendorShipToAddress || ''}
+                    onChange={(e) => onChange('vendorShipToAddress', e.target.value)}
+                    disabled={disabled}
+                    placeholder="e.g., 1101 Arthur Ave"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={data.vendorShipToCity || ''}
+                      onChange={(e) => onChange('vendorShipToCity', e.target.value)}
+                      disabled={disabled}
+                      placeholder="Elk Grove"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      value={data.vendorShipToState || ''}
+                      onChange={(e) => onChange('vendorShipToState', e.target.value)}
+                      disabled={disabled}
+                      placeholder="IL"
+                      maxLength={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
+                      Zip Code
+                    </label>
+                    <input
+                      type="text"
+                      value={data.vendorShipToZip || ''}
+                      onChange={(e) => onChange('vendorShipToZip', e.target.value)}
+                      disabled={disabled}
+                      placeholder="60007"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={data.vendorShipToPhone || ''}
+                    onChange={(e) => onChange('vendorShipToPhone', e.target.value)}
+                    disabled={disabled}
+                    placeholder="(847) 385-1876"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  />
+                </div>
+              </div>
+
+              {/* Special Instructions for Vendor */}
+              <div className="border-t border-blue-200 pt-4 mt-4">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
+                  Special Instructions for Vendor
+                </label>
+                <textarea
+                  value={data.vendorSpecialInstructions || ''}
+                  onChange={(e) => onChange('vendorSpecialInstructions', e.target.value)}
+                  disabled={disabled}
+                  rows={6}
+                  placeholder="Enter any special instructions, notes, or requirements for the vendor..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-600 font-mono text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-600">
+                  These instructions will appear on the PO sent to the vendor
+                </p>
+              </div>
             </div>
           )}
         </div>

@@ -214,6 +214,7 @@ export default function JobsPage() {
     try {
       await jobsAPI.createCustomerJob({
         customerId: data.customerId || user?.companyId || '',
+        employeeId: data.employeeId,
         description: data.description,
         paper: data.paper,
         flatSize: data.flatSize,

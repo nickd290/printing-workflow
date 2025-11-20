@@ -1310,7 +1310,7 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                       return (
                         <tr key={po.id} className={isEditing ? 'bg-blue-50' : ''}>
                           <td className="px-4 py-4 text-sm text-gray-900">
-                            {po.originCompany.name} → {po.targetCompany.name}
+                            {po.originCompany.name} → {po.targetCompany?.name || po.targetVendor?.name || 'Unknown'}
                           </td>
                           <td className="px-4 py-4 text-sm font-medium text-gray-900">
                             {isEditing ? (

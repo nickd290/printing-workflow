@@ -60,20 +60,27 @@ model Account {
 // ============================================================================
 
 model Vendor {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  // Structured address fields for auto-population (replacing single address field)
+  streetAddress String?  // e.g., "1823 Test St"
+  city          String?  // e.g., "Elk Grove Village"
+  state         String?  // e.g., "IL"
+  zip           String?  // e.g., "60007"
+  country       String?  @default("USA")
+  vendorCode    String?  @unique  // 3-digit code for PO numbering (e.g., "001")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   jobs              Job[]
   purchaseOrders    PurchaseOrder[]
 
   @@index([name])
   @@index([isActive])
+  @@index([vendorCode])
 }
 
 model Company {
@@ -87,7 +94,7 @@ model Company {
   updatedAt DateTime @updatedAt
 
   users                 User[]
-  contacts              Contact[]
+  employees             Employee[]
   quoteRequestsAsCustomer QuoteRequest[] @relation("CustomerQuoteRequests")
   jobsAsCustomer        Job[] @relation("CustomerJobs")
 
@@ -104,16 +111,19 @@ model Company {
   shipmentRecipients    ShipmentRecipient[]
 }
 
-model Contact {
+model Employee {
   id        String   @id @default(cuid())
   companyId String
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name      String
   email     String
   phone     String?
+  position  String?  // Job title/position (optional)
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  jobs      Job[]    // Jobs where this employee placed the order
 
   @@index([companyId])
 }
@@ -179,6 +189,13 @@ enum RoutingType {
   THIRD_PARTY_VENDOR  // New flow: Impact → Third-Party Vendor (Bradford gets cut)
 }
 
+enum JobType {
+  FLAT                  // Flat pieces (postcards, flyers)
+  FOLDED                // Folded pieces (brochures, tri-folds)
+  BOOKLET_SELF_COVER    // Booklets with self-cover (same stock)
+  BOOKLET_PLUS_COVER    // Booklets with separate cover stock
+}
+
 enum JobStatus {
   PENDING
   IN_PRODUCTION
@@ -198,12 +215,29 @@ model Job {
   customerId String
   customer   Company   @relation("CustomerJobs", fields: [customerId], references: [id])
 
+  // Employee who placed the order
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
   // Vendor Routing (new)
   routingType    RoutingType  @default(BRADFORD_JD)
+  jobType        JobType?     // Product type for third-party vendor jobs (null for Bradford/JD flow)
   vendorId       String?
   vendor         Vendor?      @relation(fields: [vendorId], references: [id])
   vendorAmount   Decimal?     // Manual vendor quote (for third-party vendors)
   bradfordCut    Decimal?     // Bradford's portion for third-party jobs
+
+  // Vendor shipping/delivery information (where vendor ships completed job)
+  vendorShipToName    String?  // Recipient name (e.g., "Bradford Graphics Warehouse")
+  vendorShipToAddress String?  // Street address
+  vendorShipToCity    String?  // City
+  vendorShipToState   String?  // State
+  vendorShipToZip     String?  // Zip code
+  vendorShipToPhone   String?  // Contact phone number
+
+  // Vendor-specific instructions and payment
+  vendorSpecialInstructions String? @db.Text // Large text field for vendor notes
+  vendorPaymentTerms        String? // e.g., "Net 30 Days", "Net 60 Days", "Payment upon delivery"
 
   status     JobStatus @default(PENDING)
 
@@ -294,6 +328,7 @@ model Job {
   @@index([jobNo])
   @@index([vendorId])
   @@index([routingType])
+  @@index([jobType])
   @@index([deletedAt])
 }
 
@@ -348,9 +383,35 @@ model File {
   proofs           Proof[]
   invoices         Invoice[]
   purchaseOrders   PurchaseOrder[] @relation("PurchaseOrderPDF")
+  fileShares       FileShare[]     // File sharing links for vendors/external access
 
   @@index([jobId])
   @@index([kind])
+}
+
+// ============================================================================
+// File Sharing (for vendors and external access)
+// ============================================================================
+
+model FileShare {
+  id          String   @id @default(cuid())
+  fileId      String
+  file        File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  shareToken  String   @unique  // UUID for public access (like proof sharing)
+  expiresAt   DateTime             // Link expiration (7 days default)
+
+  accessedAt  DateTime?            // Track when file was downloaded
+  accessCount Int      @default(0) // How many times downloaded
+
+  createdFor  String?              // Context: "vendor", "customer", "proof", etc.
+  createdBy   String?              // User ID who created the share
+
+  createdAt   DateTime @default(now())
+
+  @@index([shareToken])
+  @@index([fileId])
+  @@index([expiresAt])
 }
 
 // ============================================================================

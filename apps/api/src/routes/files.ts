@@ -10,9 +10,13 @@ import {
   deleteFile,
 } from '../services/file.service.js';
 import { parseCustomerPO } from '../services/pdf-parser.service.js';
+import {
+  getFileByShareToken,
+  trackFileDownload,
+} from '../services/file-share.service.js';
 
 export const fileRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/files/parse-po - Parse customer PO
+  // POST /api/files/parse-po - Parse customer PO (supports PDF and images)
   fastify.post('/parse-po', async (request, reply) => {
     const data = await request.file();
 
@@ -22,8 +26,20 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
 
     const buffer = await data.toBuffer();
 
+    // Validate file size (10MB max)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (buffer.length > maxSize) {
+      return reply.status(400).send({
+        success: false,
+        error: 'File too large',
+        message: 'Maximum file size is 10MB. Please upload a smaller file.'
+      });
+    }
+
+    console.log('📄 Parsing PO file:', data.filename, '(', buffer.length, 'bytes )');
+
     try {
-      const parsed = await parseCustomerPO(buffer);
+      const parsed = await parseCustomerPO(buffer, data.filename);
       console.log('✅ Parsed customer PO successfully:');
       console.log('  - description:', parsed.description);
       console.log('  - paper:', parsed.paper);
@@ -38,6 +54,41 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
       return { success: true, parsed };
     } catch (error: any) {
       console.error('❌ Error parsing PO:', error);
+
+      // Provide helpful error messages based on error type
+      if (error.message.includes('Unsupported file format')) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Unsupported file format',
+          message: 'Please upload a PDF or image file (PNG, JPG).'
+        });
+      }
+
+      if (error.message.includes('OpenAI API key')) {
+        return reply.status(500).send({
+          success: false,
+          error: 'OCR service unavailable',
+          message: 'Image OCR requires OpenAI API configuration. Please contact support.'
+        });
+      }
+
+      if (error.message.includes('OCR returned empty text')) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Unreadable file',
+          message: 'Could not extract text from the image. The image may be blank, corrupted, or of poor quality. Please try a clearer image or PDF.'
+        });
+      }
+
+      if (error.message.includes('Failed to extract text')) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Extraction failed',
+          message: 'Could not extract text from the file. Please ensure the file is a valid PDF or image.'
+        });
+      }
+
+      // Generic error
       return reply.status(400).send({
         success: false,
         error: 'Failed to parse PO',
@@ -127,6 +178,57 @@ export const fileRoutes: FastifyPluginAsync = async (fastify) => {
       if (error.message === 'File not found') {
         return reply.status(404).send({ error: 'File not found' });
       }
+      return reply.status(500).send({ error: 'Failed to download file' });
+    }
+  });
+
+  // GET /api/files/share/:shareToken/download - Public file download via share token
+  // This endpoint is PUBLIC - no authentication required
+  fastify.get('/share/:shareToken/download', async (request, reply) => {
+    const { shareToken } = request.params as { shareToken: string };
+
+    try {
+      // Validate token and check expiration
+      const fileShare = await getFileByShareToken(shareToken);
+
+      if (!fileShare || !fileShare.file) {
+        return reply.status(404).send({
+          error: 'File not found or link has expired',
+        });
+      }
+
+      // Get file buffer
+      const { buffer, fileName, mimeType } = await getFileBuffer(fileShare.file.id);
+
+      // Track download
+      await trackFileDownload(shareToken);
+
+      // Set headers
+      reply.header('Content-Type', mimeType);
+      reply.header('Content-Disposition', `attachment; filename="${fileName}"`);
+      reply.header('Content-Length', buffer.length.toString());
+
+      console.log(`✅ Public file download: ${fileName} via share token ${shareToken}`);
+
+      return reply.send(buffer);
+    } catch (error: any) {
+      console.error('❌ Error downloading file via share token:', error);
+
+      if (error.message === 'Share link not found') {
+        return reply.status(404).send({ error: 'Share link not found' });
+      }
+
+      if (error.message === 'Share link has expired') {
+        return reply.status(410).send({
+          error: 'Share link has expired',
+          message: 'This download link has expired. Please contact the sender for a new link.',
+        });
+      }
+
+      if (error.message === 'File not found') {
+        return reply.status(404).send({ error: 'File not found' });
+      }
+
       return reply.status(500).send({ error: 'Failed to download file' });
     }
   });

@@ -54,11 +54,12 @@ export interface BradfordMetrics {
 }
 
 export async function getRevenueMetrics(): Promise<RevenueMetrics> {
-  // Get all purchase orders
+  // Get all purchase orders (including vendor POs)
   const allPOs = await prisma.purchaseOrder.findMany({
     include: {
       originCompany: true,
       targetCompany: true,
+      targetVendor: true,  // Include third-party vendor POs
     },
   });
 
@@ -86,6 +87,13 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
     (po) =>
       po.originCompanyId === COMPANY_IDS.BRADFORD &&
       po.targetCompanyId === COMPANY_IDS.JD_GRAPHIC
+  );
+
+  // Third-party vendor POs (Impact → Vendor, not Company)
+  const impactToVendorPOs = allPOs.filter(
+    (po) =>
+      po.originCompanyId === COMPANY_IDS.IMPACT_DIRECT &&
+      po.targetVendorId != null  // Has vendor target, not company
   );
 
   // Calculate invoice metrics
@@ -169,6 +177,13 @@ export async function getRevenueMetrics(): Promise<RevenueMetrics> {
         bradfordToJD: {
           count: bradfordToJDPOs.length,
           total: bradfordToJDPOs.reduce(
+            (sum, po) => sum + parseFloat(po.vendorAmount.toString()),
+            0
+          ),
+        },
+        impactToVendor: {
+          count: impactToVendorPOs.length,
+          total: impactToVendorPOs.reduce(
             (sum, po) => sum + parseFloat(po.vendorAmount.toString()),
             0
           ),
@@ -358,6 +373,12 @@ export interface POFlowMetrics {
       marginAmount: number;
       byStatus: Record<POStatus, number>;
     };
+    impactToVendor: {
+      count: number;
+      totalAmount: number;
+      marginAmount: number;
+      byStatus: Record<POStatus, number>;
+    };
   };
   summary: {
     totalPOs: number;
@@ -369,11 +390,12 @@ export interface POFlowMetrics {
 }
 
 export async function getPOFlowMetrics(): Promise<POFlowMetrics> {
-  // Get all purchase orders with relationships
+  // Get all purchase orders with relationships (including vendor POs)
   const allPOs = await prisma.purchaseOrder.findMany({
     include: {
       originCompany: true,
       targetCompany: true,
+      targetVendor: true,  // Include third-party vendor POs
       job: true,
     },
   });
@@ -444,6 +466,26 @@ export async function getPOFlowMetrics(): Promise<POFlowMetrics> {
     bradfordToJDByStatus[po.status] = (bradfordToJDByStatus[po.status] || 0) + 1;
   });
 
+  // Stage 2B: Impact Direct → Third-Party Vendor (alternative to Bradford route)
+  const impactToVendorPOs = allPOs.filter(
+    (po) =>
+      po.originCompanyId === COMPANY_IDS.IMPACT_DIRECT &&
+      po.targetVendorId != null  // Has vendor target
+  );
+
+  const impactToVendorTotal = impactToVendorPOs.reduce((sum, po) => {
+    return sum + parseFloat(po.vendorAmount?.toString() || '0');
+  }, 0);
+
+  const impactToVendorMargin = impactToVendorPOs.reduce((sum, po) => {
+    return sum + parseFloat(po.marginAmount?.toString() || '0');
+  }, 0);
+
+  const impactToVendorByStatus: Record<string, number> = {};
+  impactToVendorPOs.forEach((po) => {
+    impactToVendorByStatus[po.status] = (impactToVendorByStatus[po.status] || 0) + 1;
+  });
+
   return {
     stages: {
       customerToImpact: {
@@ -462,6 +504,12 @@ export async function getPOFlowMetrics(): Promise<POFlowMetrics> {
         totalAmount: bradfordToJDTotal,
         marginAmount: bradfordToJDMargin,
         byStatus: bradfordToJDByStatus as Record<POStatus, number>,
+      },
+      impactToVendor: {
+        count: impactToVendorPOs.length,
+        totalAmount: impactToVendorTotal,
+        marginAmount: impactToVendorMargin,
+        byStatus: impactToVendorByStatus as Record<POStatus, number>,
       },
     },
     summary: {

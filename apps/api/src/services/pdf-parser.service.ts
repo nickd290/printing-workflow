@@ -1,5 +1,6 @@
 import { CUSTOMER_CODE_TO_ID, COMPANY_IDS } from '@printing-workflow/shared';
 import { parseTextWithAI } from '../lib/openai.js';
+import { getOpenAIClient } from '../lib/openai.js';
 
 export interface ParsedBradfordPO {
   customerCode: string; // JJSG or BALSG
@@ -152,6 +153,67 @@ export interface ParsedCustomerPO {
   poolDate?: string;               // ALG pool date (often the final delivery date)
   sampleInstructions?: string;     // Full sample distribution instructions
   sampleRecipients?: SampleRecipient[]; // Structured sample distribution data
+
+  // Job type classification
+  jobType?: 'FLAT' | 'FOLDED' | 'BOOKLET_SELF_COVER' | 'BOOKLET_PLUS_COVER';
+
+  // Conditional fields for all job types
+  bleeds?: string;        // Bleed specifications (e.g., "Yes, 4 sides", "0.125 inch")
+  coverage?: string;      // Ink coverage (e.g., "4/4", "4c/4c Process")
+  stock?: string;         // Paper stock (for flat/folded pieces)
+  coating?: string;       // Coating/finish (e.g., "UV coating", "Aqueous", "Matte")
+
+  // Folded piece specific fields
+  foldType?: string;      // Type of fold (e.g., "Tri-fold", "Half fold", "Gate fold")
+
+  // Booklet specific fields
+  totalPages?: number;        // Total page count (for self-cover booklets)
+  interiorPages?: number;     // Interior page count (for plus-cover booklets)
+  coverPages?: number;        // Cover page count (usually 4 for plus-cover)
+  pageSize?: string;          // Page dimensions (e.g., "8.5 x 11", "5.5 x 8.5")
+  bindingType?: string;       // Binding type (e.g., "Saddle Stitch", "Perfect Bound")
+
+  // Plus-cover booklet specific fields (separate text and cover specs)
+  textStock?: string;         // Interior/text paper stock
+  coverStock?: string;        // Cover paper stock
+  textBleeds?: string;        // Text bleeds
+  coverBleeds?: string;       // Cover bleeds
+  textCoverage?: string;      // Text ink coverage
+  coverCoverage?: string;     // Cover ink coverage
+  textCoating?: string;       // Text coating
+  coverCoating?: string;      // Cover coating
+
+  // ========== NEW FIELDS FOR COMPREHENSIVE PO EXTRACTION ==========
+  // Quantity Details
+  noUnders?: boolean;              // "NO UNDERS" flag - exact quantity required
+  allowOvers?: boolean;            // Allow overruns
+  versions?: number;               // Number of versions (e.g., 1, 2, 3)
+
+  // Page/Layout Details
+  pageOrientation?: string;        // "UPRIGHT" | "LANDSCAPE" | "PORTRAIT"
+  changesPerVersion?: string;      // Text/ink color changes between versions
+
+  // Production Details
+  artworkMethod?: string;          // "File Sharing" | "FTP" | "Email" | "Hard Drive"
+  proofsMethod?: string;           // "PDF" | "Hard Copy" | "Digital" | "No Proof"
+  previousJobNumber?: string;      // For reprints/reorders
+
+  // Packing/Shipping
+  packingInstructions?: string;    // "Cartons on Skids" | "Shrink Wrapped"
+  shippingComments?: string;       // Detailed mailing house instructions
+  proofComments?: string;          // Where to send proofs
+
+  // Production Schedule
+  artworkDueDate?: string;         // Artwork deadline (YYYY-MM-DD)
+  proofsDueDate?: string;          // Proofs deadline
+  stockDueDate?: string;           // Stock/material deadline
+
+  // Coverage/Stock Details
+  inkCoverageLevel?: string;       // "Light" | "Medium" | "Heavy"
+  lotBreakdown?: string;           // If job has multiple lots/runs
+  textWeight?: string;             // Numeric weight (e.g., "70#")
+  coverWeight?: string;            // Numeric weight (e.g., "80#")
+
   rawText: string;
 }
 
@@ -397,9 +459,99 @@ Return ONLY the JSON object with these exact field names.`;
 }
 
 /**
+ * Detect file type based on magic numbers (file signatures)
+ */
+function detectFileType(buffer: Buffer): 'pdf' | 'image' | 'unknown' {
+  // Check for PDF signature: %PDF
+  if (buffer.length >= 4) {
+    const pdfSignature = buffer.toString('utf-8', 0, 4);
+    if (pdfSignature === '%PDF') {
+      return 'pdf';
+    }
+  }
+
+  // Check for PNG signature: 89 50 4E 47 (‰PNG)
+  if (buffer.length >= 4 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4E &&
+      buffer[3] === 0x47) {
+    return 'image';
+  }
+
+  // Check for JPEG signature: FF D8 FF
+  if (buffer.length >= 3 &&
+      buffer[0] === 0xFF &&
+      buffer[1] === 0xD8 &&
+      buffer[2] === 0xFF) {
+    return 'image';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Extract text from image using OpenAI GPT-4o Vision OCR
+ */
+async function extractTextFromImage(buffer: Buffer): Promise<string> {
+  console.log('🖼️  Starting OCR with GPT-4o Vision');
+
+  const client = getOpenAIClient();
+
+  if (!client) {
+    throw new Error('OpenAI API key required for image OCR. Please set OPENAI_API_KEY environment variable.');
+  }
+
+  // Convert buffer to base64
+  const base64Image = buffer.toString('base64');
+  console.log('📸 Image converted to base64, size:', base64Image.length, 'characters');
+
+  try {
+    // Use GPT-4o vision to extract text
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Extract all text from this image. Preserve the layout and structure as much as possible. Return only the extracted text with no additional commentary.'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+                detail: 'high' // High resolution for better OCR accuracy
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 4000
+    });
+
+    const extractedText = response.choices[0]?.message?.content || '';
+    console.log('✅ OCR completed successfully');
+    console.log('📝 Extracted text length:', extractedText.length);
+    console.log('📝 First 300 chars:', extractedText.substring(0, 300));
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      throw new Error('OCR returned empty text. The image may be blank or unreadable.');
+    }
+
+    return extractedText;
+  } catch (error: any) {
+    console.error('❌ OCR failed:', error.message);
+    throw new Error(`Failed to extract text from image: ${error.message}`);
+  }
+}
+
+/**
  * Parse a Customer PO (from JJSA or Ballantine) to extract job details
  *
  * Uses OpenAI GPT-4o to intelligently extract structured data from the PO text.
+ * Supports both PDF files and images (PNG, JPG) via OCR.
  * Falls back to regex-based parsing if OpenAI is not available.
  *
  * Optionally accepts a filename to extract initial data before PDF parsing.
@@ -412,6 +564,15 @@ export async function parseCustomerPO(buffer: Buffer, filename?: string): Promis
   console.log('🔄 parseCustomerPO called');
   console.log('  - Buffer size:', buffer.length);
   console.log('  - Filename:', filename || '(no filename provided)');
+
+  // Detect file type first
+  const fileType = detectFileType(buffer);
+  console.log('📋 Detected file type:', fileType);
+
+  // Validate file type
+  if (fileType === 'unknown') {
+    throw new Error('Unsupported file format. Please upload a PDF or image file (PNG, JPG).');
+  }
 
   // Parse filename first if provided
   let filenameData: ParsedFilenameData = {};
@@ -426,25 +587,29 @@ export async function parseCustomerPO(buffer: Buffer, filename?: string): Promis
     }
   }
 
-  // Try to parse as PDF first, fall back to plain text
+  // Extract text based on file type
   let text: string;
 
   try {
-    // Use pdf-parse v2 API (class-based)
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
-    text = result.text;
-    await parser.destroy(); // Clean up resources
-    console.log('📄 PDF parsed successfully, extracted text length:', text.length);
-    console.log('📄 First 500 chars:', text.substring(0, 500));
+    if (fileType === 'image') {
+      console.log('🖼️  Image file detected - using OCR');
+      text = await extractTextFromImage(buffer);
+      console.log('✅ OCR completed, extracted text length:', text.length);
+      console.log('📄 First 500 chars:', text.substring(0, 500));
+    } else {
+      // PDF file
+      console.log('📄 PDF file detected - using pdf-parse');
+      const { PDFParse } = await import('pdf-parse');
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      text = result.text;
+      await parser.destroy(); // Clean up resources
+      console.log('✅ PDF parsed successfully, extracted text length:', text.length);
+      console.log('📄 First 500 chars:', text.substring(0, 500));
+    }
   } catch (error: any) {
-    // If PDF parsing fails, try as plain text
-    console.error('❌ PDF parsing error:', error.message);
-    console.log('Trying as plain text...');
-    text = buffer.toString('utf-8');
-    console.log('📄 Plain text length:', text.length);
-    console.log('📄 First 500 chars:', text.substring(0, 500));
+    console.error('❌ File parsing error:', error.message);
+    throw new Error(`Failed to extract text from ${fileType === 'image' ? 'image' : 'PDF'}: ${error.message}`);
   }
 
   // Check if we got PDF binary data instead of text
@@ -493,10 +658,24 @@ export async function parseCustomerPO(buffer: Buffer, filename?: string): Promis
 
 IMPORTANT: If the text appears to be PDF binary data, corrupted, or unreadable, return all fields as null.
 
-Extract the following information from the PO text:
+STEP 1: CLASSIFY THE JOB TYPE
+First, determine which type of printing job this is by analyzing the specifications:
+
+- FLAT: Single-sided or double-sided flat pieces with NO folding (postcards, flyers, business cards, door hangers, rack cards). No fold specifications mentioned.
+- FOLDED: Pieces that will be folded after printing (brochures, tri-folds, bi-folds, gate folds). Look for fold types, folded size different from flat size, or fold instructions.
+- BOOKLET_SELF_COVER: Multi-page booklets where the cover uses the SAME paper stock as interior pages (self-cover). Look for total page count only, no separate cover specifications.
+- BOOKLET_PLUS_COVER: Multi-page booklets where the cover uses DIFFERENT/HEAVIER paper stock than interior pages (plus cover). Look for separate interior and cover page counts, or different paper stocks mentioned for text vs cover.
+
+Key indicators:
+- If you see "Interior Pages" and "Cover Pages" mentioned separately → BOOKLET_PLUS_COVER
+- If you see only "Total Pages" or "Page Count" with one stock → BOOKLET_SELF_COVER
+- If you see folding instructions (tri-fold, bi-fold, gate fold) → FOLDED
+- If no folding or pages mentioned → FLAT
+
+STEP 2: EXTRACT COMMON FIELDS
 
 - description: Description of the printing job (e.g., "Tri-fold Brochures", "Business Cards", "The Old Mill Fall 2025 Postcards")
-- paper: Paper type specification (e.g., "100lb Gloss Text", "80lb Cover", "14pt C2S", "93# Coated Matte", "100# Gloss cover #3")
+- paper: Paper type specification (e.g., "100lb Gloss Text", "80lb Cover", "14pt C2S", "93# Coated Matte", "100# Gloss cover #3"). For booklets, this may be the text/interior stock.
 - flatSize: Flat/unfolded dimensions (e.g., "8.5 x 11", "17 x 11", "5 x 7"). Look for "Flat size:", "Overall Size:", or similar labels.
 - foldedSize: Final/folded size (e.g., "8.5 x 3.67", "5.5 x 8.5"). Look for "Finished size:", "Folded Size:", or similar. Set to null if same as flat size or not applicable.
 - colors: Color specification using standard notation (e.g., "4/4" = full color both sides, "4/2" = full color front/2 color back, "4/0" = full color one side, "1/1" = black both sides). Look for "Ink:", "Colors:", or "4/4 process".
@@ -538,6 +717,75 @@ Extract the following information from the PO text:
     {"quantity": 5, "recipientName": "Janie Maples", "address": "3448 Butler Street", "city": "Pigeon Forge", "state": "TN", "zip": "37863"}
   ]
 
+STEP 3: EXTRACT JOB-TYPE-SPECIFIC FIELDS (based on classified jobType)
+
+Common conditional fields (extract for ALL job types):
+- jobType: The classified job type from STEP 1 (FLAT, FOLDED, BOOKLET_SELF_COVER, or BOOKLET_PLUS_COVER)
+- bleeds: Bleed specifications (e.g., "Yes, 4 sides", "0.125 inch", "No bleeds"). Look for "Bleeds:", "Bleed:", or bleed measurements.
+- coverage: Ink coverage using standard notation (e.g., "4/4", "4c/4c Process", "4/1"). May be same as colors field. Look for "Coverage:", "Ink Coverage:", or similar.
+- coating: Coating or finish (e.g., "UV coating", "Aqueous", "Matte finish", "Spot UV", "None"). Look for "Coating:", "Finish:", "Varnish:", or coating specifications.
+
+For FLAT pieces only:
+- stock: Paper stock (e.g., "100lb Gloss Cover", "14pt C2S"). May be same as paper field.
+
+For FOLDED pieces only:
+- stock: Paper stock (e.g., "100lb Gloss Text", "80# Dull Cover"). May be same as paper field.
+- foldType: Type of fold (e.g., "Tri-fold", "Half fold", "Bi-fold", "Gate fold", "Z-fold"). Look for fold descriptions.
+
+For BOOKLET_SELF_COVER only:
+- totalPages: Total number of pages (e.g., 8, 12, 16, 24). Must be divisible by 4. Look for "Total Pages:", "Page Count:", or similar.
+- pageSize: Page dimensions (e.g., "8.5 x 11", "5.5 x 8.5"). May be same as flatSize or foldedSize.
+- textStock: Paper stock for entire booklet (e.g., "70# Dull Text", "80lb Text"). May be same as paper field.
+- bindingType: Binding method (e.g., "Saddle Stitch", "Perfect Bound", "Spiral"). Look for "Binding:", "Bind:", or binding specifications.
+
+For BOOKLET_PLUS_COVER only:
+- interiorPages: Number of interior/text pages (e.g., 24, 48). Must be divisible by 4. Look for "Interior Pages:", "Text Pages:", "Inside Pages:".
+- coverPages: Number of cover pages (usually 4). Look for "Cover Pages:" - if not specified, default to 4.
+- pageSize: Page dimensions (e.g., "5-7/8 x 10-1/2", "8.5 x 11"). Apply to both interior and cover.
+- textStock: Interior/text paper stock (e.g., "70# Dull Text", "60lb Offset"). Look for "Text Stock:", "Interior Stock:", "Inside Pages Stock:".
+- coverStock: Cover paper stock (e.g., "80# Dull Cover #3", "100lb Cover"). Look for "Cover Stock:", "Outside Pages Stock:".
+- bindingType: Binding method (e.g., "Saddle Stitch", "Perfect Bound"). Look for "Binding:", "Bind:", or binding specifications.
+- textBleeds: Bleeds for interior pages (e.g., "Yes, 4 sides", "0.125 inch"). Look for "Text Bleeds:", "Interior Bleeds:".
+- coverBleeds: Bleeds for cover (e.g., "Yes, 4 sides", "0.125 inch"). Look for "Cover Bleeds:", "Outside Bleeds:".
+- textCoverage: Ink coverage for interior (e.g., "4c/4c Process", "4/4"). Look for "Text Coverage:", "Interior Ink:".
+- coverCoverage: Ink coverage for cover (e.g., "4c/4c Process", "4/4"). Look for "Cover Coverage:", "Outside Ink:".
+- textCoating: Coating for interior (e.g., "None", "Aqueous"). Look for "Text Coating:", "Interior Finish:".
+- coverCoating: Coating for cover (e.g., "UV", "Aqueous", "Spot UV"). Look for "Cover Coating:", "Outside Finish:".
+
+STEP 4: EXTRACT ADDITIONAL COMPREHENSIVE FIELDS (ALL OPTIONAL)
+
+These fields provide comprehensive details for vendor POs. Extract if found, otherwise set to null:
+
+Quantity Details:
+- noUnders: Boolean - Look for "**NO UNDERS**", "NO UNDERS ALLOWED", "EXACT QUANTITY" - indicates exact quantity required with no underruns (true/false)
+- allowOvers: Boolean - Look for "OVERS ALLOWED", "ALLOW OVERRUNS" - indicates overruns are acceptable (true/false)
+- versions: Number - Look for "X version(s)", "X different versions", quantity breakdowns (e.g., "1", "2", "3")
+
+Page/Layout Details:
+- pageOrientation: Look for "UPRIGHT", "LANDSCAPE", "PORTRAIT" - page orientation for booklets
+- changesPerVersion: Look for version change descriptions (e.g., "Text changes per version", "Color variations")
+
+Production Details:
+- artworkMethod: Look for "File Sharing", "FTP", "Email", "Hard Drive", "Dropbox", "WeTransfer" - how artwork will be delivered
+- proofsMethod: Look for "PDF", "Hard Copy", "Digital", "Email Proof", "No Proof Required" - proof delivery method
+- previousJobNumber: Look for "Previous Job #", "Reprint of Job #", "Original Job:" - reference to previous/original job
+
+Packing/Shipping:
+- packingInstructions: Look for "Cartons on Skids", "Shrink Wrapped", "Palletized", "Band in 50s", packing specifications
+- shippingComments: Detailed shipping instructions, mailing house addresses, special delivery notes (capture full text)
+- proofComments: Look for proof delivery instructions, "Send proofs to:", proof recipient contact info
+
+Production Schedule:
+- artworkDueDate: Look for "Artwork Due:", "Files Due:", "Art Deadline:" - convert to YYYY-MM-DD
+- proofsDueDate: Look for "Proofs Due:", "Proof Deadline:", "Proof Date:" - convert to YYYY-MM-DD
+- stockDueDate: Look for "Stock Due:", "Paper Delivery:", "Material Due:" - convert to YYYY-MM-DD
+
+Coverage/Stock Details:
+- inkCoverageLevel: Look for "Light Coverage", "Medium Coverage", "Heavy Coverage" - ink coverage description
+- lotBreakdown: If job has multiple lots/runs, capture breakdown (e.g., "2 lots of 100,000 each")
+- textWeight: Extract numeric paper weight for text/interior (e.g., "70#", "60lb" → "70#")
+- coverWeight: Extract numeric paper weight for cover (e.g., "80#", "100lb" → "80#")
+
 Important parsing rules:
 - If any field cannot be found, set it to null
 - For colors, use standard X/Y notation (front/back)
@@ -547,6 +795,7 @@ Important parsing rules:
 - For total price: calculate from $/M notation if needed, otherwise look for total amounts
 - For PO numbers: extract just the number portion (e.g., "43729" from "Purchase Order NO: 43729")
 - For sample instructions: capture the complete text including all addresses and shipping details
+- For boolean fields (noUnders, allowOvers): only set to true if explicitly stated, otherwise null or false
 - Return ONLY the JSON object with these exact field names`;
 
     const schema = {
@@ -585,8 +834,60 @@ Important parsing rules:
             additionalProperties: false,
           },
         },
+        // Job type classification
+        jobType: {
+          type: ['string', 'null'],
+          enum: ['FLAT', 'FOLDED', 'BOOKLET_SELF_COVER', 'BOOKLET_PLUS_COVER', null]
+        },
+        // Common conditional fields
+        bleeds: { type: ['string', 'null'] },
+        coverage: { type: ['string', 'null'] },
+        stock: { type: ['string', 'null'] },
+        coating: { type: ['string', 'null'] },
+        // Folded piece fields
+        foldType: { type: ['string', 'null'] },
+        // Booklet fields
+        totalPages: { type: ['number', 'null'] },
+        interiorPages: { type: ['number', 'null'] },
+        coverPages: { type: ['number', 'null'] },
+        pageSize: { type: ['string', 'null'] },
+        bindingType: { type: ['string', 'null'] },
+        // Plus-cover booklet fields
+        textStock: { type: ['string', 'null'] },
+        coverStock: { type: ['string', 'null'] },
+        textBleeds: { type: ['string', 'null'] },
+        coverBleeds: { type: ['string', 'null'] },
+        textCoverage: { type: ['string', 'null'] },
+        coverCoverage: { type: ['string', 'null'] },
+        textCoating: { type: ['string', 'null'] },
+        coverCoating: { type: ['string', 'null'] },
+        // ========== COMPREHENSIVE PO FIELDS (ALL OPTIONAL) ==========
+        // Quantity Details
+        noUnders: { type: ['boolean', 'null'] },
+        allowOvers: { type: ['boolean', 'null'] },
+        versions: { type: ['number', 'null'] },
+        // Page/Layout Details
+        pageOrientation: { type: ['string', 'null'] },
+        changesPerVersion: { type: ['string', 'null'] },
+        // Production Details
+        artworkMethod: { type: ['string', 'null'] },
+        proofsMethod: { type: ['string', 'null'] },
+        previousJobNumber: { type: ['string', 'null'] },
+        // Packing/Shipping
+        packingInstructions: { type: ['string', 'null'] },
+        shippingComments: { type: ['string', 'null'] },
+        proofComments: { type: ['string', 'null'] },
+        // Production Schedule
+        artworkDueDate: { type: ['string', 'null'] },
+        proofsDueDate: { type: ['string', 'null'] },
+        stockDueDate: { type: ['string', 'null'] },
+        // Coverage/Stock Details
+        inkCoverageLevel: { type: ['string', 'null'] },
+        lotBreakdown: { type: ['string', 'null'] },
+        textWeight: { type: ['string', 'null'] },
+        coverWeight: { type: ['string', 'null'] },
       },
-      required: ['description', 'paper', 'flatSize', 'foldedSize', 'colors', 'finishing', 'total', 'poNumber', 'quantity', 'deliveryDate', 'samples', 'requiredArtworkCount', 'requiredDataFileCount', 'orderDate', 'pickupDate', 'poolDate', 'sampleInstructions', 'sampleRecipients'],
+      required: ['description', 'paper', 'flatSize', 'foldedSize', 'colors', 'finishing', 'total', 'poNumber', 'quantity', 'deliveryDate', 'samples', 'requiredArtworkCount', 'requiredDataFileCount', 'orderDate', 'pickupDate', 'poolDate', 'sampleInstructions', 'sampleRecipients', 'jobType', 'bleeds', 'coverage', 'stock', 'coating', 'foldType', 'totalPages', 'interiorPages', 'coverPages', 'pageSize', 'bindingType', 'textStock', 'coverStock', 'textBleeds', 'coverBleeds', 'textCoverage', 'coverCoverage', 'textCoating', 'coverCoating', 'noUnders', 'allowOvers', 'versions', 'pageOrientation', 'changesPerVersion', 'artworkMethod', 'proofsMethod', 'previousJobNumber', 'packingInstructions', 'shippingComments', 'proofComments', 'artworkDueDate', 'proofsDueDate', 'stockDueDate', 'inkCoverageLevel', 'lotBreakdown', 'textWeight', 'coverWeight'],
       additionalProperties: false,
     };
 
@@ -609,6 +910,45 @@ Important parsing rules:
       poolDate: string | null;
       sampleInstructions: string | null;
       sampleRecipients: SampleRecipient[] | null;
+      // Job type and conditional fields
+      jobType: 'FLAT' | 'FOLDED' | 'BOOKLET_SELF_COVER' | 'BOOKLET_PLUS_COVER' | null;
+      bleeds: string | null;
+      coverage: string | null;
+      stock: string | null;
+      coating: string | null;
+      foldType: string | null;
+      totalPages: number | null;
+      interiorPages: number | null;
+      coverPages: number | null;
+      pageSize: string | null;
+      bindingType: string | null;
+      textStock: string | null;
+      coverStock: string | null;
+      textBleeds: string | null;
+      coverBleeds: string | null;
+      textCoverage: string | null;
+      coverCoverage: string | null;
+      textCoating: string | null;
+      coverCoating: string | null;
+      // ========== COMPREHENSIVE PO FIELDS ==========
+      noUnders: boolean | null;
+      allowOvers: boolean | null;
+      versions: number | null;
+      pageOrientation: string | null;
+      changesPerVersion: string | null;
+      artworkMethod: string | null;
+      proofsMethod: string | null;
+      previousJobNumber: string | null;
+      packingInstructions: string | null;
+      shippingComments: string | null;
+      proofComments: string | null;
+      artworkDueDate: string | null;
+      proofsDueDate: string | null;
+      stockDueDate: string | null;
+      inkCoverageLevel: string | null;
+      lotBreakdown: string | null;
+      textWeight: string | null;
+      coverWeight: string | null;
     }>(text, prompt, schema);
 
     console.log('🤖 OpenAI returned:', JSON.stringify(parsed, null, 2));
@@ -657,6 +997,26 @@ Important parsing rules:
       poolDate: parsed.poolDate || undefined,
       sampleInstructions: parsed.sampleInstructions || undefined,
       sampleRecipients: parsed.sampleRecipients || undefined,
+      // Job type and conditional fields
+      jobType: parsed.jobType || undefined,
+      bleeds: parsed.bleeds || undefined,
+      coverage: parsed.coverage || undefined,
+      stock: parsed.stock || undefined,
+      coating: parsed.coating || undefined,
+      foldType: parsed.foldType || undefined,
+      totalPages: parsed.totalPages || undefined,
+      interiorPages: parsed.interiorPages || undefined,
+      coverPages: parsed.coverPages || undefined,
+      pageSize: parsed.pageSize || undefined,
+      bindingType: parsed.bindingType || undefined,
+      textStock: parsed.textStock || undefined,
+      coverStock: parsed.coverStock || undefined,
+      textBleeds: parsed.textBleeds || undefined,
+      coverBleeds: parsed.coverBleeds || undefined,
+      textCoverage: parsed.textCoverage || undefined,
+      coverCoverage: parsed.coverCoverage || undefined,
+      textCoating: parsed.textCoating || undefined,
+      coverCoating: parsed.coverCoating || undefined,
       rawText: text,
     };
 

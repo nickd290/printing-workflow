@@ -1,5 +1,5 @@
 import { prisma, POStatus } from '@printing-workflow/db';
-import { calculatePOAmounts } from '../lib/utils.js';
+import { calculatePOAmounts, generateVendorPONumber } from '../lib/utils.js';
 import { generateBradfordPOPdf } from './bradford-po.service.js';
 import { queueEmail } from '../lib/queue.js';
 import { emailTemplates } from '../lib/email.js';
@@ -130,6 +130,7 @@ export async function createThirdPartyVendorPO(data: {
 
   const vendor = await prisma.vendor.findUnique({
     where: { id: data.vendorId },
+    select: { id: true, name: true, vendorCode: true },
   });
 
   if (!vendor) {
@@ -146,8 +147,15 @@ export async function createThirdPartyVendorPO(data: {
     );
   }
 
-  // Create PO: Impact Direct → Third-Party Vendor
-  const poNumber = `IMP-${data.customerPONumber}`;
+  // Generate PO number: Use vendor code if available, otherwise fallback to old format
+  let poNumber: string;
+  if (vendor.vendorCode) {
+    // New format: XXX-YYY (e.g., 001-001)
+    poNumber = await generateVendorPONumber(vendor.vendorCode);
+  } else {
+    // Fallback for vendors without vendor codes (old format)
+    poNumber = `IMP-${data.customerPONumber}`;
+  }
 
   const po = await createPurchaseOrder({
     originCompanyId: 'impact-direct', // Impact Direct

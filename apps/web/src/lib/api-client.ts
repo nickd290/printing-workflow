@@ -168,6 +168,7 @@ export interface CreateDirectJobBody {
 
 export interface CreateCustomerJobBody {
   customerId: string;
+  employeeId?: string;
   description?: string;
   paper?: string;
   flatSize?: string;
@@ -208,13 +209,31 @@ export const jobsAPI = {
   },
 
   createCustomerJob: async (data: CreateCustomerJobBody) => {
+    console.log('🌐 [API] Creating customer job - Request:', {
+      url: `${API_URL}/api/customer/jobs`,
+      method: 'POST',
+      customerId: data.customerId,
+      description: data.description,
+      routingType: data.routingType,
+      hasVendorId: !!data.vendorId,
+    });
+
     const response = await fetch(`${API_URL}/api/customer/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    return handleResponse(response);
+
+    console.log('📨 [API] Response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+    });
+
+    const result = await handleResponse(response);
+    console.log('✅ [API] Response parsed successfully:', result);
+    return result;
   },
 
   updateStatus: async (jobId: string, status: string) => {
@@ -1023,7 +1042,12 @@ export interface Vendor {
   name: string;
   email?: string;
   phone?: string;
-  address?: string;
+  // Structured address fields (replaces single 'address' field)
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1036,14 +1060,24 @@ export interface CreateVendorBody {
   name: string;
   email?: string;
   phone?: string;
-  address?: string;
+  // Structured address fields
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
 }
 
 export interface UpdateVendorBody {
   name?: string;
   email?: string;
   phone?: string;
-  address?: string;
+  // Structured address fields
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
   isActive?: boolean;
 }
 
@@ -1108,7 +1142,25 @@ export interface Company {
   _count?: {
     users: number;
     jobs: number;
+    employees?: number;
+    jobsAsCustomer?: number;
   };
+}
+
+export interface CreateCompanyBody {
+  name: string;
+  type: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface UpdateCompanyBody {
+  name?: string;
+  type?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
 }
 
 export const companiesAPI = {
@@ -1125,6 +1177,120 @@ export const companiesAPI = {
       credentials: 'include',
     });
     return handleResponse<Company>(response);
+  },
+
+  create: async (data: CreateCompanyBody) => {
+    const response = await fetch(`${API_URL}/api/companies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Company>(response);
+  },
+
+  update: async (id: string, data: UpdateCompanyBody) => {
+    const response = await fetch(`${API_URL}/api/companies/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Company>(response);
+  },
+
+  delete: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/companies/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return handleResponse<{ success: boolean }>(response);
+  },
+};
+
+// ============================================================================
+// Employees API (formerly Contacts)
+// ============================================================================
+
+export interface Employee {
+  id: string;
+  companyId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  position?: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+  company?: {
+    id: string;
+    name: string;
+    type: string;
+  };
+  _count?: {
+    jobs: number;
+  };
+}
+
+export interface CreateEmployeeBody {
+  companyId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  position?: string;
+  isPrimary?: boolean;
+}
+
+export interface UpdateEmployeeBody {
+  name?: string;
+  email?: string;
+  phone?: string;
+  position?: string;
+  isPrimary?: boolean;
+}
+
+export const employeesAPI = {
+  list: async (filters?: { companyId?: string; search?: string; isPrimary?: boolean }) => {
+    const query = new URLSearchParams(filters as any).toString();
+    const response = await fetch(`${API_URL}/api/employees?${query}`, {
+      credentials: 'include',
+    });
+    return handleResponse<Employee[]>(response);
+  },
+
+  getById: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/employees/${id}`, {
+      credentials: 'include',
+    });
+    return handleResponse<Employee>(response);
+  },
+
+  create: async (data: CreateEmployeeBody) => {
+    const response = await fetch(`${API_URL}/api/employees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Employee>(response);
+  },
+
+  update: async (id: string, data: UpdateEmployeeBody) => {
+    const response = await fetch(`${API_URL}/api/employees/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Employee>(response);
+  },
+
+  delete: async (id: string) => {
+    const response = await fetch(`${API_URL}/api/employees/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return handleResponse<{ success: boolean; message: string }>(response);
   },
 };
 
