@@ -280,8 +280,6 @@ model Job {
   paperType             String?
   paperWeightTotal      Decimal?  // Total lbs for this job
   paperWeightPer1000    Decimal?  // Lbs per thousand pieces
-  jdSuppliesPaper       Boolean   @default(false) // True if JD supplies paper (no Bradford markup, 10/10 split)
-  bradfordWaivesPaperMargin Boolean @default(false) // True if Bradford waives paper margin (50/50 split of total margin)
 
   // Production & Delivery
   deliveryDate   DateTime?
@@ -292,11 +290,6 @@ model Job {
   // Customer PO tracking
   customerPONumber String?
   customerPOFile   String? // Path to uploaded PO file
-
-  // Approval workflow for custom pricing
-  requiresApproval Boolean  @default(false) // True if custom price is below cost
-  approvedBy       String?  // User ID who approved
-  approvedAt       DateTime? // When it was approved
 
   // File requirements and production readiness
   requiredArtworkCount  Int?      // Number of artwork files required (from AI or manual)
@@ -816,4 +809,43 @@ model PricingRule {
 
   @@index([sizeName])
   @@index([isActive])
+}
+
+// ============================================================================
+// Job Parse Tracking (Async AI Parsing)
+// ============================================================================
+
+enum ParseStatus {
+  PENDING      // Waiting to be parsed
+  PARSING      // Currently being parsed by AI
+  COMPLETED    // Successfully parsed and job updated
+  FAILED       // Parsing failed
+}
+
+model JobParseTask {
+  id          String      @id @default(cuid())
+  jobId       String      @unique  // Associated job
+
+  // File to parse
+  filePath    String      // Path to uploaded PO file
+  fileType    String      // "PDF" or "IMAGE"
+
+  // Parse status
+  status      ParseStatus @default(PENDING)
+  progress    String?     // Human-readable progress message
+
+  // Results
+  parsedData  Json?       // Extracted data from AI parsing
+  errorMessage String?    // Error if parsing failed
+
+  // Timing
+  startedAt   DateTime?   // When parsing started
+  completedAt DateTime?   // When parsing finished (success or fail)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([jobId])
+  @@index([status])
+  @@index([createdAt])
 }

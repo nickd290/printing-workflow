@@ -1,5 +1,5 @@
 import { prisma, JobStatus, RoutingType } from '@printing-workflow/db';
-import { calculateJobPricing, calculateCustomPricing, calculateDynamicPricing, calculateFromCustomerTotal, PRODUCT_SIZES, COMPANY_IDS } from '@printing-workflow/shared';
+import { calculateJobPricing, calculateCustomPricing, calculateSimplePricing, recalculatePricing, PRODUCT_SIZES, COMPANY_IDS } from '@printing-workflow/shared';
 import { generateJobNumber } from '../lib/utils.js';
 import { queueAutoPOCreation } from '../lib/queue.js';
 import { createThirdPartyVendorPO } from './purchase-order.service.js';
@@ -848,7 +848,7 @@ export async function updateJob(
     include: {
       customer: {
         include: {
-          contacts: {
+          employees: {
             where: { isPrimary: true },
           },
         },
@@ -935,26 +935,6 @@ export async function updateJob(
     updateData.specs = newSpecs;
   }
 
-  // JD Supplies Paper (margin calculation flag)
-  if (updates.jdSuppliesPaper !== undefined && updates.jdSuppliesPaper !== currentJob.jdSuppliesPaper) {
-    changes.push({
-      field: 'jdSuppliesPaper',
-      oldValue: currentJob.jdSuppliesPaper ? 'Yes' : 'No',
-      newValue: updates.jdSuppliesPaper ? 'Yes' : 'No',
-    });
-    updateData.jdSuppliesPaper = updates.jdSuppliesPaper;
-  }
-
-  // Bradford Waives Paper Margin (margin calculation flag)
-  if (updates.bradfordWaivesPaperMargin !== undefined && updates.bradfordWaivesPaperMargin !== currentJob.bradfordWaivesPaperMargin) {
-    changes.push({
-      field: 'bradfordWaivesPaperMargin',
-      oldValue: currentJob.bradfordWaivesPaperMargin ? 'Yes (50/50 split)' : 'No (Bradford keeps paper markup)',
-      newValue: updates.bradfordWaivesPaperMargin ? 'Yes (50/50 split)' : 'No (Bradford keeps paper markup)',
-    });
-    updateData.bradfordWaivesPaperMargin = updates.bradfordWaivesPaperMargin;
-  }
-
   // Customer Total
   if (updates.customerTotal !== undefined) {
     const newValue = typeof updates.customerTotal === 'string'
@@ -972,109 +952,117 @@ export async function updateJob(
     }
   }
 
-  // Paper Charged CPM
-  if (updates.paperChargedCPM !== undefined) {
-    const newValue = typeof updates.paperChargedCPM === 'string'
-      ? parseFloat(updates.paperChargedCPM)
-      : updates.paperChargedCPM;
-    const oldValue = currentJob.paperChargedCPM ? parseFloat(currentJob.paperChargedCPM.toString()) : 0;
+  // Bradford Total
+  if (updates.bradfordTotal !== undefined) {
+    const newValue = typeof updates.bradfordTotal === 'string'
+      ? parseFloat(updates.bradfordTotal)
+      : updates.bradfordTotal;
+    const oldValue = currentJob.bradfordTotal ? parseFloat(currentJob.bradfordTotal.toString()) : 0;
 
     if (newValue !== oldValue) {
       changes.push({
-        field: 'paperChargedCPM',
-        oldValue: `$${oldValue.toFixed(2)}/M`,
-        newValue: `$${newValue.toFixed(2)}/M`,
+        field: 'bradfordTotal',
+        oldValue: `$${oldValue.toFixed(2)}`,
+        newValue: `$${newValue.toFixed(2)}`,
       });
-      updateData.paperChargedCPM = newValue;
+      updateData.bradfordTotal = newValue;
+    }
+  }
+
+  // JD Total
+  if (updates.jdTotal !== undefined) {
+    const newValue = typeof updates.jdTotal === 'string'
+      ? parseFloat(updates.jdTotal)
+      : updates.jdTotal;
+    const oldValue = currentJob.jdTotal ? parseFloat(currentJob.jdTotal.toString()) : 0;
+
+    if (newValue !== oldValue) {
+      changes.push({
+        field: 'jdTotal',
+        oldValue: `$${oldValue.toFixed(2)}`,
+        newValue: `$${newValue.toFixed(2)}`,
+      });
+      updateData.jdTotal = newValue;
+    }
+  }
+
+  // Paper Cost Total
+  if (updates.paperCostTotal !== undefined) {
+    const newValue = typeof updates.paperCostTotal === 'string'
+      ? parseFloat(updates.paperCostTotal)
+      : updates.paperCostTotal;
+    const oldValue = currentJob.paperCostTotal ? parseFloat(currentJob.paperCostTotal.toString()) : 0;
+
+    if (newValue !== oldValue) {
+      changes.push({
+        field: 'paperCostTotal',
+        oldValue: `$${oldValue.toFixed(2)}`,
+        newValue: `$${newValue.toFixed(2)}`,
+      });
+      updateData.paperCostTotal = newValue;
+    }
+  }
+
+  // Paper Charged Total
+  if (updates.paperChargedTotal !== undefined) {
+    const newValue = typeof updates.paperChargedTotal === 'string'
+      ? parseFloat(updates.paperChargedTotal)
+      : updates.paperChargedTotal;
+    const oldValue = currentJob.paperChargedTotal ? parseFloat(currentJob.paperChargedTotal.toString()) : 0;
+
+    if (newValue !== oldValue) {
+      changes.push({
+        field: 'paperChargedTotal',
+        oldValue: `$${oldValue.toFixed(2)}`,
+        newValue: `$${newValue.toFixed(2)}`,
+      });
+      updateData.paperChargedTotal = newValue;
     }
   }
 
   // ===================================================================================
-  // PRICING RECALCULATION - SIMPLE RULE
+  // SIMPLIFIED PRICING RECALCULATION
   // ===================================================================================
-  // The pricing system follows a simple rule:
-  // 1. Start with customer price (from pricing rule OR manual override)
-  // 2. Apply 2 adjustable flags:
-  //    - jdSuppliesPaper: If true, 10/10/80 split, no paper markup
-  //    - bradfordWaivesPaperMargin: If true, 50/50 total margin, paper at cost
-  // 3. Calculate all other fields using basic math
-  //
-  // When any pricing field or flag changes, we recalculate all derived fields
-  // while preserving the user's manual edits (see "MANUAL OVERRIDE PROTECTION" below)
+  // When any pricing field changes, recalculate using simple 50/50 split:
+  // - Impact Margin = (customerTotal - bradfordTotal) / 2
+  // - Bradford Print Margin = (customerTotal - bradfordTotal) / 2
+  // - Bradford Paper Margin = paperChargedTotal - paperCostTotal
+  // - All CPMs calculated from totals
   // ===================================================================================
 
-  const pricingFieldsChanged = updateData.customerTotal !== undefined ||
-                               updateData.paperChargedCPM !== undefined ||
-                               updateData.paperChargedTotal !== undefined ||
-                               updateData.jdSuppliesPaper !== undefined ||
-                               updateData.bradfordWaivesPaperMargin !== undefined;
+  const pricingFieldsChanged =
+    updateData.customerTotal !== undefined ||
+    updateData.bradfordTotal !== undefined ||
+    updateData.jdTotal !== undefined ||
+    updateData.paperCostTotal !== undefined ||
+    updateData.paperChargedTotal !== undefined;
 
-  // Detect if ONLY margin flags changed (not other pricing fields)
-  // When margin flags change, skip the standard pricing recalculation and use the special margin logic instead
-  const marginFlagsChanged = (updateData.jdSuppliesPaper !== undefined ||
-                             updateData.bradfordWaivesPaperMargin !== undefined);
-
-  // Run pricing recalculation when any pricing field changes (including margin flags)
-  // The calculator properly handles all margin modes based on the flags passed to it
   if (pricingFieldsChanged && currentJob.sizeName && currentJob.quantity) {
     try {
-      const { calculateDynamicPricing } = await import('@printing-workflow/shared/pricing-calculator');
+      // Get current pricing values (use updated value if changed, otherwise use current)
+      const currentPricing = {
+        sizeName: currentJob.sizeName,
+        quantity: updateData.quantity ?? currentJob.quantity,
+        customerTotal: currentJob.customerTotal ? Number(currentJob.customerTotal) : 0,
+        bradfordTotal: currentJob.bradfordTotal ? Number(currentJob.bradfordTotal) : 0,
+        jdTotal: currentJob.jdTotal ? Number(currentJob.jdTotal) : 0,
+        paperCostTotal: currentJob.paperCostTotal ? Number(currentJob.paperCostTotal) : 0,
+        paperChargedTotal: currentJob.paperChargedTotal ? Number(currentJob.paperChargedTotal) : 0,
+      };
 
-      // Prepare overrides based on what was changed
-      const overrides: any = {};
+      // Prepare updates (only include fields that were actually changed)
+      const pricingUpdates: any = {};
+      if (updateData.customerTotal !== undefined) pricingUpdates.customerTotal = Number(updateData.customerTotal);
+      if (updateData.bradfordTotal !== undefined) pricingUpdates.bradfordTotal = Number(updateData.bradfordTotal);
+      if (updateData.jdTotal !== undefined) pricingUpdates.jdTotal = Number(updateData.jdTotal);
+      if (updateData.paperCostTotal !== undefined) pricingUpdates.paperCostTotal = Number(updateData.paperCostTotal);
+      if (updateData.paperChargedTotal !== undefined) pricingUpdates.paperChargedTotal = Number(updateData.paperChargedTotal);
+      if (updateData.quantity !== undefined) pricingUpdates.quantity = Number(updateData.quantity);
 
-      // ==========================================
-      // MANUAL OVERRIDE PROTECTION
-      // ==========================================
-      // When a user manually edits pricing fields (like customerTotal or paperChargedCPM),
-      // we need to recalculate all derived fields while preserving their manual edits.
-      //
-      // Example: User changes customerTotal → we recalculate margins, but keep their customerTotal
-      // This prevents the calculator from overwriting the user's intentional manual changes.
-      //
-      // Track user's manual values to preserve them after recalculation
-      const userCustomerTotal = updateData.customerTotal;
-      const userPaperChargedCPM = updateData.paperChargedCPM;
-      const userPaperChargedTotal = updateData.paperChargedTotal;
+      // Recalculate all pricing fields using simplified calculator
+      const recalculatedPricing = recalculatePricing(pricingUpdates, currentPricing as any);
 
-      // If customerTotal changed, calculate customerCPM from it
-      if (updateData.customerTotal !== undefined) {
-        const newCustomerTotal = typeof updateData.customerTotal === 'string'
-          ? parseFloat(updateData.customerTotal)
-          : updateData.customerTotal;
-        const quantityInThousands = currentJob.quantity / 1000;
-        overrides.customerCPM = newCustomerTotal / quantityInThousands;
-      }
-
-      // If paperChargedCPM changed, use it directly
-      if (updateData.paperChargedCPM !== undefined) {
-        overrides.paperChargedCPM = typeof updateData.paperChargedCPM === 'string'
-          ? parseFloat(updateData.paperChargedCPM)
-          : updateData.paperChargedCPM;
-      }
-
-      // If paperChargedTotal changed, calculate paperChargedCPM from it
-      if (updateData.paperChargedTotal !== undefined) {
-        const newPaperChargedTotal = typeof updateData.paperChargedTotal === 'string'
-          ? parseFloat(updateData.paperChargedTotal)
-          : updateData.paperChargedTotal;
-        const quantityInThousands = currentJob.quantity / 1000;
-        overrides.paperChargedCPM = newPaperChargedTotal / quantityInThousands;
-      }
-
-      // Recalculate all pricing fields
-      const jdSuppliesPaper = updateData.jdSuppliesPaper ?? currentJob.jdSuppliesPaper ?? false;
-      const bradfordWaivesPaperMargin = updateData.bradfordWaivesPaperMargin ?? currentJob.bradfordWaivesPaperMargin ?? false;
-      const recalculatedPricing = await calculateDynamicPricing(
-        prisma,
-        currentJob.sizeName,
-        currentJob.quantity,
-        overrides,
-        jdSuppliesPaper,
-        bradfordWaivesPaperMargin
-      );
-
-      // Update all derived pricing fields
+      // Update all pricing fields
       updateData.customerCPM = recalculatedPricing.customerCPM;
       updateData.impactMarginCPM = recalculatedPricing.impactMarginCPM;
       updateData.bradfordTotalCPM = recalculatedPricing.bradfordTotalCPM;
@@ -1083,21 +1071,9 @@ export async function updateJob(
       updateData.bradfordTotalMarginCPM = recalculatedPricing.bradfordTotalMarginCPM;
       updateData.printCPM = recalculatedPricing.printCPM;
       updateData.paperCostCPM = recalculatedPricing.paperCostCPM;
+      updateData.paperChargedCPM = recalculatedPricing.paperChargedCPM;
 
-      // Preserve user's manual paperChargedCPM if they set it
-      if (userPaperChargedCPM !== undefined) {
-        updateData.paperChargedCPM = userPaperChargedCPM;
-      } else {
-        updateData.paperChargedCPM = recalculatedPricing.paperChargedCPM;
-      }
-
-      // Update totals
-      // Preserve user's manual customerTotal if they set it
-      if (userCustomerTotal !== undefined) {
-        updateData.customerTotal = userCustomerTotal;
-      } else {
-        updateData.customerTotal = recalculatedPricing.customerTotal;
-      }
+      updateData.customerTotal = recalculatedPricing.customerTotal;
       updateData.impactMargin = recalculatedPricing.impactMargin;
       updateData.bradfordTotal = recalculatedPricing.bradfordTotal;
       updateData.bradfordPrintMargin = recalculatedPricing.bradfordPrintMargin;
@@ -1105,114 +1081,24 @@ export async function updateJob(
       updateData.bradfordTotalMargin = recalculatedPricing.bradfordTotalMargin;
       updateData.jdTotal = recalculatedPricing.jdTotal;
       updateData.paperCostTotal = recalculatedPricing.paperCostTotal;
-
-      // Preserve user's manual paperChargedTotal if they set it
-      if (userPaperChargedTotal !== undefined) {
-        updateData.paperChargedTotal = userPaperChargedTotal;
-      } else {
-        updateData.paperChargedTotal = recalculatedPricing.paperChargedTotal;
-      }
-
-      updateData.paperWeightTotal = recalculatedPricing.paperWeightTotal;
+      updateData.paperChargedTotal = recalculatedPricing.paperChargedTotal;
 
       // Track the recalculation in activity log
       changes.push({
         field: 'pricing',
         oldValue: 'N/A',
-        newValue: 'All pricing fields recalculated based on updated values',
+        newValue: 'Pricing recalculated with 50/50 margin split',
       });
 
-      console.log(`[Job ${jobId}] Pricing recalculated - Bradford Total: $${recalculatedPricing.bradfordTotal.toFixed(2)}, Customer Total: $${recalculatedPricing.customerTotal.toFixed(2)}`);
+      console.log(`[Job ${jobId}] Pricing recalculated - Customer: $${recalculatedPricing.customerTotal.toFixed(2)}, Bradford: $${recalculatedPricing.bradfordTotal.toFixed(2)}, Impact Margin: $${recalculatedPricing.impactMargin.toFixed(2)}`);
     } catch (error) {
       console.error(`[Job ${jobId}] Failed to recalculate pricing:`, error);
       // Continue with the update even if recalculation fails
     }
   }
 
-  // AUTOMATIC CPM RECALCULATION FROM TOTALS
-  // If any total amount changed or quantity changed, recalculate corresponding CPM values
-  const totalFieldsChanged =
-    updateData.customerTotal !== undefined ||
-    updateData.jdTotal !== undefined ||
-    updateData.paperChargedTotal !== undefined ||
-    updateData.paperCostTotal !== undefined ||
-    updateData.impactMargin !== undefined ||
-    updateData.bradfordTotal !== undefined ||
-    updateData.bradfordPrintMargin !== undefined ||
-    updateData.bradfordPaperMargin !== undefined ||
-    updateData.bradfordTotalMargin !== undefined ||
-    updateData.quantity !== undefined;
-
-  if (totalFieldsChanged && currentJob.quantity && currentJob.quantity > 0) {
-    const currentQuantity = updateData.quantity ?? currentJob.quantity;
-    const quantityInThousands = currentQuantity / 1000;
-
-    // Recalculate each CPM from its corresponding total
-    if (updateData.customerTotal !== undefined) {
-      updateData.customerCPM = updateData.customerTotal / quantityInThousands;
-    }
-    if (updateData.jdTotal !== undefined) {
-      updateData.printCPM = updateData.jdTotal / quantityInThousands;
-    }
-    if (updateData.paperChargedTotal !== undefined) {
-      updateData.paperChargedCPM = updateData.paperChargedTotal / quantityInThousands;
-    }
-    if (updateData.paperCostTotal !== undefined) {
-      updateData.paperCostCPM = updateData.paperCostTotal / quantityInThousands;
-    }
-    if (updateData.impactMargin !== undefined) {
-      updateData.impactMarginCPM = updateData.impactMargin / quantityInThousands;
-    }
-    if (updateData.bradfordTotal !== undefined) {
-      updateData.bradfordTotalCPM = updateData.bradfordTotal / quantityInThousands;
-    }
-    if (updateData.bradfordPrintMargin !== undefined) {
-      updateData.bradfordPrintMarginCPM = updateData.bradfordPrintMargin / quantityInThousands;
-    }
-    if (updateData.bradfordPaperMargin !== undefined) {
-      updateData.bradfordPaperMarginCPM = updateData.bradfordPaperMargin / quantityInThousands;
-    }
-    if (updateData.bradfordTotalMargin !== undefined) {
-      updateData.bradfordTotalMarginCPM = updateData.bradfordTotalMargin / quantityInThousands;
-    }
-
-    // If quantity changed, recalculate ALL CPMs from current totals
-    if (updateData.quantity !== undefined && updateData.quantity > 0) {
-      const newQuantityInThousands = updateData.quantity / 1000;
-
-      updateData.customerCPM = (updateData.customerTotal ?? currentJob.customerTotal) / newQuantityInThousands;
-      if (currentJob.jdTotal) {
-        updateData.printCPM = (updateData.jdTotal ?? currentJob.jdTotal) / newQuantityInThousands;
-      }
-      if (currentJob.paperChargedTotal) {
-        updateData.paperChargedCPM = (updateData.paperChargedTotal ?? currentJob.paperChargedTotal) / newQuantityInThousands;
-      }
-      if (currentJob.paperCostTotal) {
-        updateData.paperCostCPM = (updateData.paperCostTotal ?? currentJob.paperCostTotal) / newQuantityInThousands;
-      }
-      if (currentJob.impactMargin) {
-        updateData.impactMarginCPM = (updateData.impactMargin ?? currentJob.impactMargin) / newQuantityInThousands;
-      }
-      if (currentJob.bradfordTotal) {
-        updateData.bradfordTotalCPM = (updateData.bradfordTotal ?? currentJob.bradfordTotal) / newQuantityInThousands;
-      }
-      if (currentJob.bradfordPrintMargin) {
-        updateData.bradfordPrintMarginCPM = (updateData.bradfordPrintMargin ?? currentJob.bradfordPrintMargin) / newQuantityInThousands;
-      }
-      if (currentJob.bradfordPaperMargin) {
-        updateData.bradfordPaperMarginCPM = (updateData.bradfordPaperMargin ?? currentJob.bradfordPaperMargin) / newQuantityInThousands;
-      }
-      if (currentJob.bradfordTotalMargin) {
-        updateData.bradfordTotalMarginCPM = (updateData.bradfordTotalMargin ?? currentJob.bradfordTotalMargin) / newQuantityInThousands;
-      }
-    }
-
-    console.log(`[Job ${jobId}] CPM values automatically recalculated from updated totals`);
-  }
-
-  // NOTE: Margin recalculation is now handled by calculateDynamicPricing() above
-  // All 3 margin modes (Normal, JD Supplies Paper, Bradford Waives) are correctly
-  // implemented in pricing-calculator.ts. No need for duplicate logic here.
+  // NOTE: CPM recalculation is now handled by recalculatePricing() above.
+  // The simplified calculator automatically calculates all CPMs from totals.
 
   // If no changes, return current job
   if (changes.length === 0) {
@@ -1228,7 +1114,7 @@ export async function updateJob(
       include: {
         customer: {
           include: {
-            contacts: {
+            employees: {
               where: { isPrimary: true },
             },
           },
@@ -1304,7 +1190,7 @@ async function sendJobUpdateEmail(
     .join('\n');
 
   // Get customer email
-  const customerEmail = job.customer?.contacts?.[0]?.email || job.customer?.email;
+  const customerEmail = job.customer?.employees?.[0]?.email || job.customer?.email;
 
   // Email to nick@jdgraphic.com (primary recipient)
   const nickEmail = 'nick@jdgraphic.com';
