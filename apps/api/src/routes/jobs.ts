@@ -173,9 +173,9 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
   // PATCH /api/jobs/:id/status - Update job status
   fastify.patch('/:id/status', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { status } = request.body as { status: JobStatus };
+    const { status, skipNotification } = request.body as { status: JobStatus; skipNotification?: boolean };
 
-    const job = await updateJobStatus(id, status);
+    const job = await updateJobStatus(id, status, skipNotification);
 
     // Auto-generate invoices when job is completed
     if (status === JobStatus.COMPLETED) {
@@ -296,14 +296,21 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /api/jobs - List jobs with role-based filtering
   fastify.get('/', async (request, reply) => {
-    const { customerId, status, companyId, userRole } = request.query as {
+    const { customerId, status, companyId, userRole, dueWithin30Days } = request.query as {
       customerId?: string;
       status?: JobStatus;
       companyId?: string;
       userRole?: string;
+      dueWithin30Days?: string;
     };
 
-    const jobs = await listJobs({ customerId, status, companyId, userRole });
+    const jobs = await listJobs({
+      customerId,
+      status,
+      companyId,
+      userRole,
+      dueWithin30Days: dueWithin30Days === 'true',
+    });
     return { jobs };
   });
 
@@ -348,11 +355,16 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
       // User context for activity tracking
       changedBy?: string;
       changedByRole?: string;
+      // Notification control
+      skipNotification?: boolean;
+      // Job readiness override
+      isReadyForProduction?: boolean;
     };
 
     // Extract user context (from auth middleware or request body)
     const changedBy = body.changedBy || 'Unknown User';
     const changedByRole = body.changedByRole || 'CUSTOMER';
+    const skipNotification = body.skipNotification || false;
 
     // Build updates object (exclude context fields)
     const updates: any = {};
@@ -395,9 +407,13 @@ export const jobRoutes: FastifyPluginAsync = async (fastify) => {
     if (body.jdSuppliesPaper !== undefined) updates.jdSuppliesPaper = body.jdSuppliesPaper;
     if (body.bradfordWaivesPaperMargin !== undefined) updates.bradfordWaivesPaperMargin = body.bradfordWaivesPaperMargin;
 
+    // Job readiness override
+    if (body.isReadyForProduction !== undefined) updates.isReadyForProduction = body.isReadyForProduction;
+
     const job = await updateJob(id, updates, {
       changedBy,
       changedByRole,
+      skipNotification,
     });
 
     return { job };

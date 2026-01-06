@@ -28,6 +28,7 @@ interface Job {
   invoices?: Invoice[];
   shipments?: Shipment[];
   sampleShipments?: SampleShipment[];
+  isReadyForProduction?: boolean;
 }
 
 interface FileItem {
@@ -366,6 +367,29 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
     } catch (err) {
       console.error('Failed to update status:', err);
       toast.error('Failed to update job status');
+    }
+  };
+
+  const handleToggleReadiness = async () => {
+    const newValue = !job?.isReadyForProduction;
+    try {
+      const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isReadyForProduction: newValue,
+          changedBy: 'Admin User',
+          changedByRole: 'ADMIN',
+          skipNotification: true,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update readiness');
+      await loadJob();
+      toast.success(newValue ? 'Job marked as ready for production' : 'Job marked as not ready');
+    } catch (err) {
+      console.error('Failed to update readiness:', err);
+      toast.error('Failed to update job readiness');
     }
   };
 
@@ -997,6 +1021,39 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
                 </div>
               </div>
             </div>
+
+            {/* Job Readiness Override */}
+            {isAdmin && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h2 className="text-lg font-semibold text-slate-900">Job Readiness</h2>
+                </div>
+                <div className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-700">Ready for Production</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {job.isReadyForProduction
+                          ? 'Manually marked as ready'
+                          : 'Not ready (override available)'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleToggleReadiness}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 ${
+                        job.isReadyForProduction ? 'bg-emerald-500' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          job.isReadyForProduction ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Specifications */}
             {job.specs && Object.keys(job.specs).length > 0 && (
