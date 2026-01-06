@@ -342,11 +342,7 @@ export async function createDirectJob(data: {
   return job;
 }
 
-export async function updateJobStatus(jobId: string, status: JobStatus, skipNotification?: boolean) {
-  if (skipNotification) {
-    console.log(`🔇 Skipping notifications for status change to ${status} on job ${jobId}`);
-  }
-
+export async function updateJobStatus(jobId: string, status: JobStatus) {
   return prisma.job.update({
     where: { id: jobId },
     data: {
@@ -432,7 +428,6 @@ export async function listJobs(filters?: {
   status?: JobStatus;
   companyId?: string; // For filtering by company (Bradford, JD Graphic)
   userRole?: string; // CUSTOMER, BROKER_ADMIN, BRADFORD_ADMIN, MANAGER
-  dueWithin30Days?: boolean; // Filter to jobs due within 30 days or past due
 }) {
   // Build where clause based on filters and role
   let whereClause: any = {
@@ -447,18 +442,6 @@ export async function listJobs(filters?: {
   // Filter by status
   if (filters?.status) {
     whereClause.status = filters.status;
-  }
-
-  // Filter to jobs due within 30 days or past due (includes jobs with no delivery date)
-  if (filters?.dueWithin30Days) {
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-    whereClause.OR = [
-      { deliveryDate: { lte: thirtyDaysFromNow } }, // Due within 30 days OR past due
-      { deliveryDate: null }, // Include jobs with no delivery date
-    ];
-    // Exclude completed jobs from the 30-day view
-    whereClause.status = { not: JobStatus.COMPLETED };
   }
 
   // Role-based filtering for companies (Bradford, JD Graphic)
@@ -844,16 +827,11 @@ interface JobUpdateData {
   bradfordPrintMarginCPM?: number | string;
   bradfordPaperMarginCPM?: number | string;
   bradfordTotalMarginCPM?: number | string;
-  // Paper usage fields
-  paperType?: string;
-  paperWeightTotal?: number | string;
-  paperWeightPer1000?: number | string;
 }
 
 interface UpdateContext {
   changedBy: string;       // User email or ID
   changedByRole: string;   // CUSTOMER, BROKER_ADMIN, BRADFORD_ADMIN
-  skipNotification?: boolean; // Skip sending email notification for this update
 }
 
 /**
@@ -864,7 +842,7 @@ export async function updateJob(
   updates: JobUpdateData,
   context: UpdateContext
 ) {
-  // Get current job state with purchase orders to check if it's a Bradford job
+  // Get current job state
   const currentJob = await prisma.job.findUnique({
     where: { id: jobId },
     include: {
@@ -875,40 +853,11 @@ export async function updateJob(
           },
         },
       },
-      purchaseOrders: {
-        select: {
-          originCompanyId: true,
-          targetCompanyId: true,
-        },
-      },
     },
   });
 
   if (!currentJob) {
     throw new Error(`Job not found: ${jobId}`);
-  }
-
-  // Check if this is a Bradford job (has PO with Bradford as origin or target)
-  const isBradfordJob = currentJob.purchaseOrders.some(
-    (po) =>
-      po.targetCompanyId === COMPANY_IDS.BRADFORD ||
-      po.originCompanyId === COMPANY_IDS.BRADFORD
-  );
-
-  // Validate paper usage for Bradford jobs
-  if (isBradfordJob) {
-    // If updating paper fields, validate they are not empty
-    if (updates.paperType !== undefined || updates.paperWeightTotal !== undefined) {
-      const finalPaperType = updates.paperType ?? currentJob.paperType;
-      const finalPaperWeight = updates.paperWeightTotal ?? currentJob.paperWeightTotal;
-
-      if (!finalPaperType || finalPaperType.trim() === '') {
-        throw new Error('Paper type is required for Bradford jobs');
-      }
-      if (!finalPaperWeight || Number(finalPaperWeight) <= 0) {
-        throw new Error('Paper weight total is required for Bradford jobs and must be greater than 0');
-      }
-    }
   }
 
   // Track changes for activity log
@@ -965,50 +914,6 @@ export async function updateJob(
       newValue: updates.customerPONumber,
     });
     updateData.customerPONumber = updates.customerPONumber;
-  }
-
-  // Paper Type
-  if (updates.paperType !== undefined && updates.paperType !== currentJob.paperType) {
-    changes.push({
-      field: 'paperType',
-      oldValue: currentJob.paperType || 'None',
-      newValue: updates.paperType,
-    });
-    updateData.paperType = updates.paperType;
-  }
-
-  // Paper Weight Total
-  if (updates.paperWeightTotal !== undefined) {
-    const newValue = typeof updates.paperWeightTotal === 'string'
-      ? parseFloat(updates.paperWeightTotal)
-      : updates.paperWeightTotal;
-    const oldValue = currentJob.paperWeightTotal ? parseFloat(currentJob.paperWeightTotal.toString()) : 0;
-
-    if (newValue !== oldValue) {
-      changes.push({
-        field: 'paperWeightTotal',
-        oldValue: oldValue ? `${oldValue.toFixed(2)} lbs` : 'None',
-        newValue: `${newValue.toFixed(2)} lbs`,
-      });
-      updateData.paperWeightTotal = newValue;
-    }
-  }
-
-  // Paper Weight Per 1000
-  if (updates.paperWeightPer1000 !== undefined) {
-    const newValue = typeof updates.paperWeightPer1000 === 'string'
-      ? parseFloat(updates.paperWeightPer1000)
-      : updates.paperWeightPer1000;
-    const oldValue = currentJob.paperWeightPer1000 ? parseFloat(currentJob.paperWeightPer1000.toString()) : 0;
-
-    if (newValue !== oldValue) {
-      changes.push({
-        field: 'paperWeightPer1000',
-        oldValue: oldValue ? `${oldValue.toFixed(2)} lbs/1000` : 'None',
-        newValue: `${newValue.toFixed(2)} lbs/1000`,
-      });
-      updateData.paperWeightPer1000 = newValue;
-    }
   }
 
   // Specs (Job specifications as JSON)
@@ -1257,14 +1162,10 @@ export async function updateJob(
     return job;
   });
 
-  // Send email notifications (non-blocking) - skip if requested
-  if (context.skipNotification) {
-    console.log(`🔇 Skipping notifications for job update on ${updatedJob.jobNo}`);
-  } else {
-    sendJobUpdateEmail(updatedJob, changes, context).catch((error) => {
-      console.error('Failed to send job update email:', error);
-    });
-  }
+  // Send email notifications (non-blocking)
+  sendJobUpdateEmail(updatedJob, changes, context).catch((error) => {
+    console.error('Failed to send job update email:', error);
+  });
 
   return updatedJob;
 }

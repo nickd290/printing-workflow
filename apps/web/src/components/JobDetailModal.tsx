@@ -40,7 +40,6 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
     customerTotal: '',
     paperChargedCPM: '',
   });
-  const [skipNotification, setSkipNotification] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // PO Edit state
@@ -143,8 +142,6 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
           // User context for activity tracking
           changedBy: user?.email || 'Unknown User',
           changedByRole: user?.role || 'CUSTOMER',
-          // Skip notification if checkbox is checked
-          skipNotification,
         }),
       });
 
@@ -153,13 +150,12 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
         await fetch(`${API_URL}/api/jobs/${job.id}/status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: editFormData.status, skipNotification }),
+          body: JSON.stringify({ status: editFormData.status }),
         });
       }
 
-      toast.success(skipNotification ? 'Job updated successfully!' : 'Job updated successfully! Notification emails sent.');
+      toast.success('Job updated successfully! Notification emails sent.');
       setIsEditingJob(false);
-      setSkipNotification(false); // Reset checkbox
       await loadJob();
     } catch (err) {
       console.error('Failed to save job:', err);
@@ -171,7 +167,6 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
 
   const handleCancelEdit = () => {
     setIsEditingJob(false);
-    setSkipNotification(false); // Reset checkbox
     // Reset form to current job data
     if (job) {
       setEditFormData({
@@ -850,16 +845,6 @@ export function JobDetailModal({ jobId, onClose }: JobDetailModalProps) {
                         <option value="COMPLETED">COMPLETED</option>
                         <option value="CANCELLED">CANCELLED</option>
                       </select>
-                      {/* Skip notification checkbox */}
-                      <label className="flex items-center gap-2 mt-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={skipNotification}
-                          onChange={(e) => setSkipNotification(e.target.checked)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-600">Skip notification emails for this update</span>
-                      </label>
                     </div>
 
                     {/* Editable: Customer PO Number */}

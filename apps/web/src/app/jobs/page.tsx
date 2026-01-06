@@ -79,9 +79,7 @@ export default function JobsPage() {
       setLoading(true);
 
       // Build filter params based on user role
-      const params: any = {
-        dueWithin30Days: true, // Show only jobs due within 30 days or past due
-      };
+      const params: any = {};
 
       if (isCustomer) {
         // Customers see only their own jobs

@@ -255,12 +255,8 @@ export const jobsAPI = {
     return handleResponse(response);
   },
 
-  list: async (params?: { customerId?: string; status?: string; companyId?: string; userRole?: string; dueWithin30Days?: boolean }) => {
-    const queryParams = { ...params };
-    if (queryParams.dueWithin30Days !== undefined) {
-      (queryParams as any).dueWithin30Days = queryParams.dueWithin30Days.toString();
-    }
-    const query = new URLSearchParams(queryParams as any).toString();
+  list: async (params?: { customerId?: string; status?: string; companyId?: string; userRole?: string }) => {
+    const query = new URLSearchParams(params as any).toString();
     const response = await fetch(`${API_URL}/api/jobs?${query}`);
     return handleResponse<{ jobs: any[] }>(response);
   },
