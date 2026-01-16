@@ -10,18 +10,100 @@ import { JobEditModal } from '@/components/jobs/JobEditModal';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Types
+interface JobSpecs {
+  // Basic Print Specs
+  size?: string;
+  quantity?: number;
+  paper?: string;
+  paperType?: string;
+  colors?: string;
+  sides?: string;
+  finishing?: string[];
+
+  // Print Production
+  folds?: string;
+  perforations?: string;
+  dieCut?: string;
+  bleed?: string;
+  proofType?: string;
+
+  // Booklet-specific
+  coverType?: 'SELF_COVER' | 'PLUS_COVER';
+  coverPaperType?: string;
+  pageCount?: number;
+  bindingType?: string;
+
+  // Mailing
+  mailing?: {
+    mailFormat?: 'SELF_MAILER' | 'POSTCARD' | 'ENVELOPE' | 'LETTER';
+    mailClass?: string;
+    listCount?: number;
+    inkjetRequired?: boolean;
+    tabbing?: boolean;
+  };
+  versions?: string;
+  components?: string;
+  matchType?: '2-WAY' | '3-WAY';
+
+  // Shipping
+  shipToName?: string;
+  shipToAddress?: string;
+  shipToCity?: string;
+  shipToState?: string;
+  shipToZip?: string;
+  shipVia?: string;
+
+  // Instructions
+  specialInstructions?: string;
+  artworkInstructions?: string;
+  packingInstructions?: string;
+  labelingInstructions?: string;
+
+  // Any other specs
+  [key: string]: any;
+}
+
 interface Job {
   id: string;
   jobNo: string;
   customer: { id: string; name: string; email: string };
   customerTotal: number;
   status: string;
-  specs: any;
+  specs: JobSpecs;
   deliveryDate?: string;
+  mailDate?: string;
+  inHomesDate?: string;
   packingSlipNotes?: string;
   customerPONumber?: string;
   customerPOFile?: string;
   createdAt: string;
+  completedAt?: string;
+
+  // Production Info
+  routingType?: 'BRADFORD_JD' | 'THIRD_PARTY_VENDOR';
+  jobType?: 'FLAT' | 'FOLDED' | 'BOOKLET_SELF_COVER' | 'BOOKLET_PLUS_COVER';
+  sizeName?: string;
+  quantity?: number;
+  paperType?: string;
+
+  // Vendor Info
+  vendor?: { id: string; name: string };
+  vendorAmount?: number;
+  vendorShipToName?: string;
+  vendorShipToAddress?: string;
+  vendorShipToCity?: string;
+  vendorShipToState?: string;
+  vendorShipToZip?: string;
+  vendorSpecialInstructions?: string;
+
+  // Paper/Pricing
+  paperWeightTotal?: number;
+  paperCostTotal?: number;
+  bradfordTotal?: number;
+  jdTotal?: number;
+  impactMargin?: number;
+
+  // Relations
   files?: FileItem[];
   proofs?: Proof[];
   purchaseOrders?: PurchaseOrder[];
@@ -76,6 +158,8 @@ interface Invoice {
   amount: number;
   status: string;
   createdAt: string;
+  issuedAt?: string;
+  paidAt?: string;
 }
 
 interface Shipment {
@@ -998,21 +1082,398 @@ export default function JobDetailPage({ jobId }: JobDetailPageProps) {
               </div>
             </div>
 
-            {/* Specifications */}
-            {job.specs && Object.keys(job.specs).length > 0 && (
+            {/* Production Info Badge */}
+            {(job.routingType || job.jobType || job.vendor) && (
+              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-sm border border-indigo-200 overflow-hidden">
+                <div className="border-b border-indigo-200 bg-white/50 px-6 py-3">
+                  <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    Production Info
+                  </h2>
+                </div>
+                <div className="p-4 space-y-2">
+                  {job.routingType && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">Pathway</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        job.routingType === 'BRADFORD_JD'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {job.routingType === 'BRADFORD_JD' ? 'Bradford → JD' : '3rd Party Vendor'}
+                      </span>
+                    </div>
+                  )}
+                  {job.jobType && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">Job Type</span>
+                      <span className="text-xs font-medium text-slate-900">
+                        {job.jobType.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                  )}
+                  {job.vendor && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">Vendor</span>
+                      <span className="text-xs font-medium text-slate-900">{job.vendor.name}</span>
+                    </div>
+                  )}
+                  {job.paperType && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">Paper</span>
+                      <span className="text-xs font-medium text-slate-900">{job.paperType}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Comprehensive Specifications */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="border-b border-slate-200 px-6 py-4">
+                <h2 className="text-lg font-semibold text-slate-900">Job Specifications</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {/* Basic Print Specs */}
+                {(job.specs?.size || job.sizeName || job.quantity || job.specs?.quantity || job.specs?.paper || job.specs?.colors || job.specs?.sides) && (
+                  <div className="p-4">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Print Basics</h3>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {(job.specs?.size || job.sizeName) && (
+                        <>
+                          <dt className="text-xs text-slate-500">Size</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs?.size || job.sizeName}</dd>
+                        </>
+                      )}
+                      {(job.specs?.quantity || job.quantity) && (
+                        <>
+                          <dt className="text-xs text-slate-500">Quantity</dt>
+                          <dd className="text-sm font-medium text-slate-900">{(job.specs?.quantity || job.quantity)?.toLocaleString()}</dd>
+                        </>
+                      )}
+                      {job.specs?.paper && (
+                        <>
+                          <dt className="text-xs text-slate-500">Paper</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.paper}</dd>
+                        </>
+                      )}
+                      {job.specs?.colors && (
+                        <>
+                          <dt className="text-xs text-slate-500">Colors</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.colors}</dd>
+                        </>
+                      )}
+                      {job.specs?.sides && (
+                        <>
+                          <dt className="text-xs text-slate-500">Sides</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.sides}</dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
+                )}
+
+                {/* Print Production Details */}
+                {(job.specs?.folds || job.specs?.perforations || job.specs?.dieCut || job.specs?.bleed || job.specs?.proofType || job.specs?.finishing) && (
+                  <div className="p-4">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Production Details</h3>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {job.specs?.folds && (
+                        <>
+                          <dt className="text-xs text-slate-500">Folds</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.folds}</dd>
+                        </>
+                      )}
+                      {job.specs?.perforations && (
+                        <>
+                          <dt className="text-xs text-slate-500">Perforations</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.perforations}</dd>
+                        </>
+                      )}
+                      {job.specs?.dieCut && (
+                        <>
+                          <dt className="text-xs text-slate-500">Die Cut</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.dieCut}</dd>
+                        </>
+                      )}
+                      {job.specs?.bleed && (
+                        <>
+                          <dt className="text-xs text-slate-500">Bleed</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.bleed}</dd>
+                        </>
+                      )}
+                      {job.specs?.proofType && (
+                        <>
+                          <dt className="text-xs text-slate-500">Proof Type</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.proofType}</dd>
+                        </>
+                      )}
+                      {job.specs?.finishing && (
+                        <>
+                          <dt className="text-xs text-slate-500">Finishing</dt>
+                          <dd className="text-sm font-medium text-slate-900">
+                            {Array.isArray(job.specs.finishing) ? job.specs.finishing.join(', ') : job.specs.finishing}
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
+                )}
+
+                {/* Booklet Specs */}
+                {(job.specs?.coverType || job.specs?.coverPaperType || job.specs?.pageCount || job.specs?.bindingType) && (
+                  <div className="p-4 bg-amber-50/50">
+                    <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Booklet Details</h3>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {job.specs?.coverType && (
+                        <>
+                          <dt className="text-xs text-slate-500">Cover Type</dt>
+                          <dd className="text-sm font-medium text-slate-900">
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              job.specs.coverType === 'SELF_COVER'
+                                ? 'bg-slate-100 text-slate-700'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {job.specs.coverType === 'SELF_COVER' ? 'Self Cover' : 'Plus Cover'}
+                            </span>
+                          </dd>
+                        </>
+                      )}
+                      {job.specs?.coverPaperType && (
+                        <>
+                          <dt className="text-xs text-slate-500">Cover Paper</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.coverPaperType}</dd>
+                        </>
+                      )}
+                      {job.specs?.pageCount && (
+                        <>
+                          <dt className="text-xs text-slate-500">Page Count</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.pageCount}</dd>
+                        </>
+                      )}
+                      {job.specs?.bindingType && (
+                        <>
+                          <dt className="text-xs text-slate-500">Binding</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.bindingType}</dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
+                )}
+
+                {/* Mailing Specs */}
+                {(job.specs?.mailing || job.specs?.versions || job.specs?.components || job.specs?.matchType) && (
+                  <div className="p-4 bg-blue-50/50">
+                    <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-3">Mailing Details</h3>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {job.specs?.mailing?.mailFormat && (
+                        <>
+                          <dt className="text-xs text-slate-500">Mail Format</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.mailing.mailFormat.replace(/_/g, ' ')}</dd>
+                        </>
+                      )}
+                      {job.specs?.mailing?.mailClass && (
+                        <>
+                          <dt className="text-xs text-slate-500">Mail Class</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.mailing.mailClass}</dd>
+                        </>
+                      )}
+                      {job.specs?.mailing?.listCount && (
+                        <>
+                          <dt className="text-xs text-slate-500">List Count</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.mailing.listCount.toLocaleString()}</dd>
+                        </>
+                      )}
+                      {job.specs?.matchType && (
+                        <>
+                          <dt className="text-xs text-slate-500">Match Type</dt>
+                          <dd className="text-sm font-medium text-slate-900">
+                            <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-semibold">
+                              {job.specs.matchType}
+                            </span>
+                          </dd>
+                        </>
+                      )}
+                      {job.specs?.versions && (
+                        <>
+                          <dt className="text-xs text-slate-500">Versions</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.versions}</dd>
+                        </>
+                      )}
+                      {job.specs?.components && (
+                        <>
+                          <dt className="text-xs text-slate-500">Components</dt>
+                          <dd className="text-sm font-medium text-slate-900">{job.specs.components}</dd>
+                        </>
+                      )}
+                      {job.specs?.mailing?.inkjetRequired && (
+                        <>
+                          <dt className="text-xs text-slate-500">Inkjet</dt>
+                          <dd className="text-sm font-medium text-emerald-600">Required</dd>
+                        </>
+                      )}
+                      {job.specs?.mailing?.tabbing && (
+                        <>
+                          <dt className="text-xs text-slate-500">Tabbing</dt>
+                          <dd className="text-sm font-medium text-emerald-600">Yes</dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
+                )}
+
+                {/* Other Specs (catch-all for any unlisted fields) */}
+                {job.specs && (() => {
+                  const knownKeys = [
+                    'size', 'quantity', 'paper', 'paperType', 'colors', 'sides', 'finishing',
+                    'folds', 'perforations', 'dieCut', 'bleed', 'proofType',
+                    'coverType', 'coverPaperType', 'pageCount', 'bindingType',
+                    'mailing', 'versions', 'components', 'matchType',
+                    'shipToName', 'shipToAddress', 'shipToCity', 'shipToState', 'shipToZip', 'shipVia',
+                    'specialInstructions', 'artworkInstructions', 'packingInstructions', 'labelingInstructions'
+                  ];
+                  const otherSpecs = Object.entries(job.specs).filter(
+                    ([key]) => !knownKeys.includes(key) && typeof job.specs[key] !== 'object'
+                  );
+                  if (otherSpecs.length === 0) return null;
+                  return (
+                    <div className="p-4">
+                      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Additional Specs</h3>
+                      <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        {otherSpecs.map(([key, value]) => (
+                          <div key={key} className="contents">
+                            <dt className="text-xs text-slate-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</dt>
+                            <dd className="text-sm font-medium text-slate-900">{String(value)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  );
+                })()}
+
+                {/* Empty state if no specs */}
+                {(!job.specs || Object.keys(job.specs).length === 0) && !job.sizeName && !job.quantity && (
+                  <div className="p-6 text-center">
+                    <p className="text-sm text-slate-500">No specifications provided</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Shipping & Instructions */}
+            {(job.specs?.shipToName || job.specs?.shipToAddress || job.specs?.shipVia ||
+              job.specs?.specialInstructions || job.specs?.artworkInstructions ||
+              job.specs?.packingInstructions || job.specs?.labelingInstructions ||
+              job.vendorShipToName || job.vendorSpecialInstructions) && (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="border-b border-slate-200 px-6 py-4">
-                  <h2 className="text-lg font-semibold text-slate-900">Specifications</h2>
+                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20" />
+                    </svg>
+                    Shipping & Instructions
+                  </h2>
                 </div>
-                <div className="p-6">
-                  <dl className="space-y-3">
-                    {Object.entries(job.specs).map(([key, value]) => (
-                      <div key={key} className="flex justify-between items-start">
-                        <dt className="text-xs text-slate-500 capitalize flex-1">{key.replace(/([A-Z])/g, ' $1').trim()}</dt>
-                        <dd className="text-sm font-medium text-slate-900 text-right">{String(value)}</dd>
+                <div className="p-4 space-y-4">
+                  {/* Ship To Address */}
+                  {(job.specs?.shipToName || job.specs?.shipToAddress || job.vendorShipToName) && (
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Ship To</p>
+                      <p className="text-sm font-medium text-slate-900">
+                        {job.specs?.shipToName || job.vendorShipToName}
+                      </p>
+                      {(job.specs?.shipToAddress || job.vendorShipToAddress) && (
+                        <p className="text-sm text-slate-600">
+                          {job.specs?.shipToAddress || job.vendorShipToAddress}
+                        </p>
+                      )}
+                      {(job.specs?.shipToCity || job.vendorShipToCity) && (
+                        <p className="text-sm text-slate-600">
+                          {job.specs?.shipToCity || job.vendorShipToCity}
+                          {(job.specs?.shipToState || job.vendorShipToState) && `, ${job.specs?.shipToState || job.vendorShipToState}`}
+                          {(job.specs?.shipToZip || job.vendorShipToZip) && ` ${job.specs?.shipToZip || job.vendorShipToZip}`}
+                        </p>
+                      )}
+                      {job.specs?.shipVia && (
+                        <p className="text-xs text-slate-500 mt-2">
+                          <span className="font-medium">Ship Via:</span> {job.specs.shipVia}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Instructions */}
+                  {job.specs?.specialInstructions && (
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <p className="text-xs font-semibold text-amber-700 uppercase mb-1">Special Instructions</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.specs.specialInstructions}</p>
+                    </div>
+                  )}
+                  {job.vendorSpecialInstructions && (
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <p className="text-xs font-semibold text-amber-700 uppercase mb-1">Vendor Instructions</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.vendorSpecialInstructions}</p>
+                    </div>
+                  )}
+                  {job.specs?.artworkInstructions && (
+                    <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                      <p className="text-xs font-semibold text-purple-700 uppercase mb-1">Artwork Instructions</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.specs.artworkInstructions}</p>
+                    </div>
+                  )}
+                  {job.specs?.packingInstructions && (
+                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                      <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Packing Instructions</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.specs.packingInstructions}</p>
+                    </div>
+                  )}
+                  {job.specs?.labelingInstructions && (
+                    <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                      <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Labeling Instructions</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{job.specs.labelingInstructions}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Tracking */}
+            {(job.invoices && job.invoices.length > 0) && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Payment Status
+                  </h2>
+                </div>
+                <div className="p-4 space-y-3">
+                  {job.invoices?.map((invoice) => {
+                    const isPaid = !!invoice.paidAt;
+                    return (
+                      <div key={invoice.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{invoice.invoiceNo}</p>
+                          <p className="text-xs text-slate-500">
+                            {invoice.fromCompany.name} → {invoice.toCompany.name}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-slate-900">${Number(invoice.amount).toLocaleString()}</p>
+                          {isPaid ? (
+                            <p className="text-xs text-emerald-600 font-medium">
+                              Paid {new Date(invoice.paidAt!).toLocaleDateString()}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-amber-600 font-medium">Unpaid</p>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </dl>
+                    );
+                  })}
                 </div>
               </div>
             )}
